@@ -7,7 +7,7 @@ Two layers live here and the distinction matters:
 | Folder | What it is | Status |
 |---|---|---|
 | `product/` | **The product.** A multi-tenant owner-communication platform for any business that sits between horses and the people who own them. This is the project going forward. | Active |
-| `docs/` | **The design-partner brief.** The original Laurel Oak Bloodstock scoping — outline, data model, ownership model, decisions, competitive review. Laurel Oak is the first customer and the source of most requirements, so these stay as the worked example. | Reference — do not edit; superseded where `product/` says so |
+| This level (`project-outline.md`, `data-model.md`, `ownership-model.md`, `decisions.md`, `competitive-landscape.md`, `project-context.md`) | **The design-partner brief.** The original Laurel Oak Bloodstock scoping — outline, data model, ownership model, decisions, competitive review. Laurel Oak is the first customer and the source of most requirements, so these stay as the worked example. | Reference — do not edit; superseded where `product/` says so |
 
 `laurel-oak-handover.md` at the root is the note to hand back to the Laurel Oak project: it has been superseded by `product/` but its docs stay as the reference for the first customer.
 

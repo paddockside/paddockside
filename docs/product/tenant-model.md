@@ -43,7 +43,7 @@ Nothing in a tenant's configuration is code. If a prospect needs something that 
 
 ## 3. What gains a tenant dimension in the data model
 
-The conceptual model in `../docs/data-model.md` holds. The changes are additive:
+The conceptual model in `../data-model.md` holds. The changes are additive:
 
 - **Every aggregate carries `TenantId`** — Horse, Party, Event, StreamItem, InboundMessage, MediaAsset, the ownership entities, reference-data mirrors and source systems. Enforced by a global query filter, never by remembering to add a `WHERE`.
 - **Reference horses may be shared.** A sire or dam that exists only for pedigree could be a product-level record referenced by many tenants. Start tenant-scoped (simpler, no leakage risk) and revisit if pedigree data becomes a shared asset.
@@ -59,7 +59,7 @@ The promise "tailored to lots easily" is delivered by the onboarding flow, not b
 
 1. Choose a segment pack. This sets vocabulary, event types, step templates and defaults.
 2. Confirm or rename the audience labels.
-3. Set the ownership policy answers (the six questions in `../docs/ownership-model.md` §5, presented as toggles with the Laurel Oak defaults pre-selected).
+3. Set the ownership policy answers (the six questions in `../ownership-model.md` §5, presented as toggles with the Laurel Oak defaults pre-selected).
 4. Connect channels: sending domain verification, inbound subdomain, SMS number.
 5. Turn on integrations and jurisdictions.
 6. Import horses and parties from a spreadsheet template; per-horse addresses are issued automatically.

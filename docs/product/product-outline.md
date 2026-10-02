@@ -1,6 +1,6 @@
 # Product Outline
 
-_Draft v0.1 — 4 Sep 2026. Generalised from the Laurel Oak brief in `../docs/project-outline.md`, which stays as the worked example._
+_Draft v0.1 — 4 Sep 2026. Generalised from the Laurel Oak brief in `../project-outline.md`, which stays as the worked example._
 
 ## 1. What it is
 

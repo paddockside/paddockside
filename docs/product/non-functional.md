@@ -80,7 +80,7 @@ This is *our* billing, not the tenant's billing of their owners (which stays out
 ## 8. Change, testing and release
 
 - Trunk-based development, feature flags for anything client-visible, weekly releases, no releases on the day before or of a major race meeting for any tenant with a runner (the calendar is in the reference data, so this is a check, not a memory).
-- Automated: unit tests on the ownership access rule and the scope rule with the scenarios from `../docs/ownership-model.md` §4 as fixtures; the tenant-isolation suite (§2); a contract test per source adapter against recorded responses; an end-to-end test that sends a message, replies from an external mailbox, and asserts the reply lands on the right event. That last test is the product; it runs before every release.
+- Automated: unit tests on the ownership access rule and the scope rule with the scenarios from `../ownership-model.md` §4 as fixtures; the tenant-isolation suite (§2); a contract test per source adapter against recorded responses; an end-to-end test that sends a message, replies from an external mailbox, and asserts the reply lands on the right event. That last test is the product; it runs before every release.
 - Schema migrations are additive and reversible within one release; a destructive migration waits a release.
 - A design-system deliverable (P8, and the Laurel Oak requirement for documented styles) is part of the definition of done for any new screen.
 

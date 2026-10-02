@@ -2,7 +2,7 @@
 
 _Draft v0.3 — 2 Sep 2026. Conceptual model, not schema. Entity names are in CAPS for readability; the point is the shape and the relationships, not the eventual table names._
 
-Companion to `claude/project-outline.md`. **Ownership and access are specified in `claude/ownership-model.md`**; settled questions and their reasoning are logged in `claude/decisions.md`.
+Companion to `project-outline.md`. **Ownership and access are specified in `ownership-model.md`**; settled questions and their reasoning are logged in `decisions.md`.
 
 ---
 
@@ -73,7 +73,7 @@ People email from three addresses and text from a number that appears in none of
 ### MANAGEMENT_PERIOD, MANAGED_INTEREST, HOLDING_ENTITY, REGISTERED_OWNERSHIP
 Ownership is two separate ledgers — what the industry registers, and what Laurel Oak manages — and it carries the access rules for the whole system.
 
-**See `claude/ownership-model.md`.** In summary: a horse has management periods; inside a period, parties hold managed interests; managed interests sit behind holding entities that correspond to lines in the official registered ownership record; and some registered lines map to nothing internal by design.
+**See `ownership-model.md`.** In summary: a horse has management periods; inside a period, parties hold managed interests; managed interests sit behind holding entities that correspond to lines in the official registered ownership record; and some registered lines map to nothing internal by design.
 
 ### PARTY_ROLE
 Non-ownership working relationships, date-bounded: trainer, manager, vet, farrier, agistment, agent, vendor, purchaser.
@@ -228,13 +228,13 @@ Relenta history lands here, not in the live stream: searchable, optionally linke
 
 ## 5. Access and visibility
 
-Specified in `claude/ownership-model.md` §3. In one line: **a party sees a horse's stream if they hold a live managed interest in the current management period, the item's scope admits them, and the item is not restricted to parties they are not among.**
+Specified in `ownership-model.md` §3. In one line: **a party sees a horse's stream if they hold a live managed interest in the current management period, the item's scope admits them, and the item is not restricted to parties they are not among.**
 
 ---
 
 ## 6. Still open
 
-1. Ownership questions — `claude/ownership-model.md` §5, including whether the lockout on an exiting owner is absolute.
+1. Ownership questions — `ownership-model.md` §5, including whether the lockout on an exiting owner is absolute.
 2. Dormancy threshold — how many days of silence before an open event is treated as dormant. Likely per event type.
 3. Media retention in practice — originals kept indefinitely, or archived to cold storage after a period.
 4. What MiStable holds that must survive, now including its media library.

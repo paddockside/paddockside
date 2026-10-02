@@ -1,6 +1,6 @@
 # Messaging Channels — end to end
 
-_Draft v0.1 — 4 Sep 2026. The mechanics behind the attribution model in `../docs/project-outline.md` §6 and the pipeline in `../docs/data-model.md` §3. Those documents say *what* happens; this one says how each channel actually behaves, what can go wrong, and what the tenant and the recipient can control._
+_Draft v0.1 — 4 Sep 2026. The mechanics behind the attribution model in `../project-outline.md` §6 and the pipeline in `../data-model.md` §3. Those documents say *what* happens; this one says how each channel actually behaves, what can go wrong, and what the tenant and the recipient can control._
 
 ## 1. Principles that do not vary by channel
 

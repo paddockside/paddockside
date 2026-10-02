@@ -68,7 +68,7 @@ Part of what replaces MiStable. Owners expect a gallery of their horse, not just
 
 ## Still awaiting decision
 
-Ownership questions in `claude/ownership-model.md` §5, most importantly:
+Ownership questions in `ownership-model.md` §5, most importantly:
 
 - **Is the lockout absolute?** An exiting owner loses access to the years they paid for. Defaulted to yes, per your words.
 - Lessor visibility; foal ownership seeded from the dam; units vs percentages; who can action an interest change.

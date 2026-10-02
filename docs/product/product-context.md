@@ -4,7 +4,7 @@ _Started 4 Sep 2026. Running notes so any session (or person) can pick this up c
 
 ## What changed on 4 Sep 2026
 
-The Laurel Oak Bloodstock brief in `../docs/` was scoped for one client. The decision is to build it as a **product** instead: the same platform, sold to many businesses, with the Laurel Oak-specific choices turned into per-customer settings. Laurel Oak becomes the first customer and design partner rather than the whole scope.
+The Laurel Oak Bloodstock brief (the files one level up, beside `../README.md`) was scoped for one client. The decision is to build it as a **product** instead: the same platform, sold to many businesses, with the Laurel Oak-specific choices turned into per-customer settings. Laurel Oak becomes the first customer and design partner rather than the whole scope.
 
 Why this is a reasonable bet, in one paragraph: the two incumbents (miStable, Prism) are outbound broadcast tools built around the trainer or around billing. Nothing on the market captures the *inbound* side — an owner's reply on the wrong email chain, a trainer's text, a race club's email — and files it against the right horse and the right event. Every syndicator, bloodstock agent, racing manager and stud with clients has the identical problem. The attribution engine, the per-horse inbox and the two-way event stream are the product; everything else is configuration.
 
@@ -24,9 +24,9 @@ Why this is a reasonable bet, in one paragraph: the two incumbents (miStable, Pr
 - `design-system.md` — two areas (product look with logo-only tenant branding; themed public site), token architecture, component inventory, themes and bespoke service, documentation deliverable, direction process.
 - `event-page-mockup-notes.md` — decisions and spec items from the event page mockups (owners tickets, share ledger, structured prompts, outlier handling).
 - `build-plan.md` — v1 scope for Laurel Oak, solution shape, six sprints to go-live, kickoff checklist.
-- `decisions.md` — product-level decisions log (P-numbers). Laurel Oak's D-numbers in `../docs/decisions.md` are carried forward as *defaults* unless a P-decision says otherwise.
+- `decisions.md` — product-level decisions log (P-numbers). Laurel Oak's D-numbers in `../decisions.md` are carried forward as *defaults* unless a P-decision says otherwise.
 
-The Laurel Oak documents remain the detailed worked example. The data model (`../docs/data-model.md`) and ownership model (`../docs/ownership-model.md`) are still correct in shape; `tenant-model.md` §3 lists the columns and behaviours that gain a tenant dimension.
+The Laurel Oak documents remain the detailed worked example. The data model (`../data-model.md`) and ownership model (`../ownership-model.md`) are still correct in shape; `tenant-model.md` §3 lists the columns and behaviours that gain a tenant dimension.
 
 ## Where things stand
 
@@ -55,6 +55,6 @@ Blazor front end (WASM, .NET 9); Tailwind with a bespoke token set rather than B
 - Pricing band boundaries and whether to charge per managed horse or per tenant tier (P10).
 - Which first-party inbound email service to build on for per-tenant subdomains and per-horse addresses (P11).
 - SMS provider for Australian numbers (P12).
-- Whether the read-only statements module ships in v1 or v1.1 (`../docs/competitive-landscape.md` §5.1).
+- Whether the read-only statements module ships in v1 or v1.1 (`../competitive-landscape.md` §5.1).
 - PWA versus native app for the owner side — unchanged from the Laurel Oak brief.
-- Laurel Oak's own open items (`../docs/project-context.md`) still need answers; they become the first tenant's configuration values.
+- Laurel Oak's own open items (`../project-context.md`) still need answers; they become the first tenant's configuration values.

@@ -158,7 +158,7 @@ Emails and PDFs belong to the **main system** look, carrying the tenant logo onl
 
 ## 7. The documentation deliverable
 
-This is a product requirement (David's "someone might inherit it" rule, `../docs/project-context.md`), not a nice-to-have. It lives in the repo and is published as a static site from the same tokens:
+This is a product requirement (David's "someone might inherit it" rule, `../project-context.md`), not a nice-to-have. It lives in the repo and is published as a static site from the same tokens:
 
 1. **Principles** — §2.1 and §4.1, with the reasoning.
 2. **Tokens** — every token, its value in light and dark, what it is for, and what it must not be used for; generated from `tokens.json` so it cannot drift.
@@ -172,7 +172,7 @@ Written alongside the components, not after. A component without its page is not
 
 ## 8. Choosing the visual direction for the main system
 
-Process, per the Laurel Oak approach (`../docs/project-context.md` "Approach agreed"), now for the product:
+Process, per the Laurel Oak approach (`../project-context.md` "Approach agreed"), now for the product:
 
 1. David supplies reference sites and screen grabs, plus anti-references, with a note on *which layer* he responds to in each: typography, colour, density, photography, motion, layout.
 2. From those, extract the underlying decisions (not the surface) and build **two or three distinct directions** as real HTML mockups of the same two screens — the owner's event stream on a phone and the staff pending queue on a desktop — side by side, in light and dark.

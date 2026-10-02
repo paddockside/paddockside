@@ -1,6 +1,6 @@
 # Laurel Oak Bloodstock — Ownership Model
 
-_Draft v0.1 — 2 Sep 2026. Full spec of ownership, transfers and access. Extends `claude/data-model.md` and **supersedes its §5 visibility rule**._
+_Draft v0.1 — 2 Sep 2026. Full spec of ownership, transfers and access. Extends `data-model.md` and **supersedes its §5 visibility rule**._
 
 ---
 

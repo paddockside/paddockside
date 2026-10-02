@@ -76,7 +76,7 @@ The link is a bearer credential, so: scoped to one supplier at one tenant, revoc
 
 ### C.1 Purpose
 
-Payments and statement generation stay out (D2). What owners lose when leaving miStable is *seeing* their statement where they see everything else (`../docs/competitive-landscape.md` §5.1). This module puts a document the tenant produced elsewhere into the stream, addressed to the right owner, with delivery tracking — nothing more.
+Payments and statement generation stay out (D2). What owners lose when leaving miStable is *seeing* their statement where they see everything else (`../competitive-landscape.md` §5.1). This module puts a document the tenant produced elsewhere into the stream, addressed to the right owner, with delivery tracking — nothing more.
 
 ### C.2 How it works
 

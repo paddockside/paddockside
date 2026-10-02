@@ -1,6 +1,6 @@
 # Integrations and Fact Ingestion
 
-_Draft v0.1 — 4 Sep 2026. How facts from outside systems get into the stream: the adapter model, the v1 sources, reference-data mirroring, identity matching between systems, supersession, and what happens when a feed is wrong or absent. Extends `../docs/data-model.md` SOURCE_SYSTEM / FACT_RECORD and D6, D13._
+_Draft v0.1 — 4 Sep 2026. How facts from outside systems get into the stream: the adapter model, the v1 sources, reference-data mirroring, identity matching between systems, supersession, and what happens when a feed is wrong or absent. Extends `../data-model.md` SOURCE_SYSTEM / FACT_RECORD and D6, D13._
 
 ## 1. Principles
 

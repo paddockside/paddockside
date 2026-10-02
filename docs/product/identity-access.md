@@ -1,6 +1,6 @@
 # Identity, Access and Roles
 
-_Draft v0.1 — 4 Sep 2026. Who can sign in, how, and what they can do once they have. Complements `../docs/ownership-model.md` §3 (which decides *which horses* a person can see) — this document decides *who the person is* and *what actions* they may take._
+_Draft v0.1 — 4 Sep 2026. Who can sign in, how, and what they can do once they have. Complements `../ownership-model.md` §3 (which decides *which horses* a person can see) — this document decides *who the person is* and *what actions* they may take._
 
 ## 1. The shape in one paragraph
 
@@ -25,7 +25,7 @@ Audience classes (Staff / Client / Supplier / Partner) are fixed in `tenant-mode
 
 **Memberships are tenant-scoped.** `MEMBERSHIP (PersonId, TenantId, Role, Status, InvitedBy, AcceptedAt)`. A person with several memberships sees a tenant switcher; a person with one never sees it. The active tenant is part of the session, not the URL, so a bookmarked link cannot leak another tenant's context — links carry a tenant-scoped resource id, and the server checks the person holds a membership there.
 
-**A person is not a party.** `PARTY` (the ownership and contact record in `../docs/data-model.md`) stays tenant-scoped: it is what the tenant knows about someone — their postal address, their syndicate units, the nickname the staff use. A `PARTY` may be linked to zero or one `PERSON`. Linking happens when an invitation is accepted, by matching the verified email or mobile to a `PARTY_CONTACT`. Unlinked parties are normal: most trainers, most partners, and any owner who has never signed in.
+**A person is not a party.** `PARTY` (the ownership and contact record in `../data-model.md`) stays tenant-scoped: it is what the tenant knows about someone — their postal address, their syndicate units, the nickname the staff use. A `PARTY` may be linked to zero or one `PERSON`. Linking happens when an invitation is accepted, by matching the verified email or mobile to a `PARTY_CONTACT`. Unlinked parties are normal: most trainers, most partners, and any owner who has never signed in.
 
 **Contact verification.** A person's email and mobile are verified once, at product level. A tenant cannot edit a person's login email; they can edit the party's contact details, and if those no longer match the person, the link is flagged for the tenant admin rather than silently broken.
 
@@ -91,7 +91,7 @@ Where the tenant has enabled "two-person confirmation" for ownership changes (`t
 
 ### 5.4 Permission model in code
 
-Permissions are named capabilities (`stream.post`, `ownership.change`, `members.manage`, `export.run`, …) grouped into the four staff roles and two client roles. Authorisation is checked at the API, never only in the UI, as a combination of three questions: is this person a member of this tenant; does their role carry the capability; does the ownership model give them access to this horse and this item's scope. The third question is the one from `../docs/ownership-model.md` §3 and is evaluated the same way for every role, including Staff — staff get access by class, not by holding interests.
+Permissions are named capabilities (`stream.post`, `ownership.change`, `members.manage`, `export.run`, …) grouped into the four staff roles and two client roles. Authorisation is checked at the API, never only in the UI, as a combination of three questions: is this person a member of this tenant; does their role carry the capability; does the ownership model give them access to this horse and this item's scope. The third question is the one from `../ownership-model.md` §3 and is evaluated the same way for every role, including Staff — staff get access by class, not by holding interests.
 
 ## 6. Lifecycle of a membership
 
@@ -101,7 +101,7 @@ Permissions are named capabilities (`stream.post`, `ownership.change`, `members.
 
 **Suspension.** A Tenant admin can suspend a membership: sessions end within a minute, notifications stop, the person's items and history remain. Used for disputes, or a departed staff member before the handover is sorted.
 
-**Removal.** Removing a *staff* membership ends sessions and reassigns nothing — items they posted stay attributed to their name. Removing a *client* membership is not how lockout works: lockout comes from the managed interest ending (`../docs/ownership-model.md`), which the membership simply reflects. A client membership with no current interests at the tenant is "dormant", can still sign in, sees an empty portal with their historic read-only access if the tenant's lockout setting allows it, and is hidden from member lists after 12 months.
+**Removal.** Removing a *staff* membership ends sessions and reassigns nothing — items they posted stay attributed to their name. Removing a *client* membership is not how lockout works: lockout comes from the managed interest ending (`../ownership-model.md`), which the membership simply reflects. A client membership with no current interests at the tenant is "dormant", can still sign in, sees an empty portal with their historic read-only access if the tenant's lockout setting allows it, and is hidden from member lists after 12 months.
 
 **Departure from the product.** A person can ask us to delete their identity. Memberships are removed; the tenant's party records — their name on an ownership line, their replies in a stream — are the tenant's business records and stay. See `non-functional.md` for the privacy handling.
 

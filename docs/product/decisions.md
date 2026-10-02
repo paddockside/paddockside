@@ -1,6 +1,6 @@
 # Product Decisions Log
 
-_Running record, newest last. P-numbers are product decisions. Laurel Oak's D1–D14 in `../docs/decisions.md` are inherited as defaults and only listed here where the product changes or generalises them._
+_Running record, newest last. P-numbers are product decisions. Laurel Oak's D1–D14 in `../decisions.md` are inherited as defaults and only listed here where the product changes or generalises them._
 
 ---
 
@@ -10,7 +10,7 @@ _Running record, newest last. P-numbers are product decisions. Laurel Oak's D1�
 Needs a name that reads as horse-industry without being a pun, with an available `.com.au` and `.com`, and a short inbound-mail domain that looks sane in a trainer's contacts list. Candidates checked on 4 Sep 2026 in `naming-shortlist.md`: Paddockside (both domains free, recommended), Stableside (fallback). Blocked on David confirming `.com.au` at auDA WHOIS and an IP Australia trade mark search; no name is used in code until settled.
 
 **P2. This is a product, not a client build.**
-Laurel Oak is the first tenant and design partner. Its brief in `../docs/` becomes the worked example and the default configuration. Anything true only for Laurel Oak is a setting (`tenant-model.md`), not a feature.
+Laurel Oak is the first tenant and design partner. Its brief (the files one level up, beside `../README.md`) becomes the worked example and the default configuration. Anything true only for Laurel Oak is a setting (`tenant-model.md`), not a feature.
 
 **P3. First segment: syndicators and racing managers.** _(default, pending validation)_
 The pain is sharpest there, the design partner is one, and the race-start event is the best-specified template. Bloodstock agents and studs follow once the event library covers sales and breeding properly. Trainers last, if ever — that is miStable's home ground.

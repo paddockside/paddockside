@@ -4,12 +4,12 @@ _Last updated: 2 Sep 2026. Running notes so any session (or person) can pick thi
 
 ## Documents in this project
 
-- `claude/project-context.md` — this file: decisions, approach, where things stand.
-- `claude/project-outline.md` — what the application is, the event-based communication system, attribution tiers.
-- `claude/data-model.md` — conceptual data model: horse → event → stream item, plus ingest and attribution.
-- `claude/ownership-model.md` — ownership, transfers and access. Authoritative on visibility rules.
-- `claude/decisions.md` — running decisions log with reasoning. Start here for *why*.
-- `claude/competitive-landscape.md` — miStable and Prism: what they do, what they validate, where the gap is.
+- `project-context.md` — this file: decisions, approach, where things stand.
+- `project-outline.md` — what the application is, the event-based communication system, attribution tiers.
+- `data-model.md` — conceptual data model: horse → event → stream item, plus ingest and attribution.
+- `ownership-model.md` — ownership, transfers and access. Authoritative on visibility rules.
+- `decisions.md` — running decisions log with reasoning. Start here for *why*.
+- `competitive-landscape.md` — miStable and Prism: what they do, what they validate, where the gap is.
 
 ## Where things stand
 
@@ -31,7 +31,7 @@ Pre-build. No code, no folder connected yet. Scope is sketched, the data model i
 
 **Ownership: two separate ledgers.** Registered (industry) ownership and Laurel Oak's managed book are modelled independently, because the official record contains co-owners who must never appear in the in-house system. Access follows the current managed interest: exiting owners are locked out, incoming owners inherit the horse's complete history.
 
-**Audience separation is structural.** Trainers never see owner replies, so an outbound message addresses exactly one audience class and routing tokens are issued per recipient. Full reasoning in `claude/decisions.md` D12.
+**Audience separation is structural.** Trainers never see owner replies, so an outbound message addresses exactly one audience class and routing tokens are issued per recipient. Full reasoning in `decisions.md` D12.
 
 ## The differentiator, in one line
 
@@ -53,10 +53,10 @@ David wants a strong, thoroughly documented set of styles and rules living **in 
 
 ## Open items
 
-- **Statements gap** — miStable's owner portal carries statements and payments today; D2 puts them out of scope. Decide: leave them where they are, display them read-only in the stream, or accept the loss. `claude/competitive-landscape.md` §5.1.
-- **PWA versus native app** — owners coming from miStable expect push notifications and a real app. `claude/competitive-landscape.md` §5.2.
-- Ownership decisions — `claude/ownership-model.md` §5: absolute lockout, lessors, foal seeding, units vs percentages, who can action a transfer.
-- Dormancy thresholds and media retention — `claude/data-model.md` §6.
+- **Statements gap** — miStable's owner portal carries statements and payments today; D2 puts them out of scope. Decide: leave them where they are, display them read-only in the stream, or accept the loss. `competitive-landscape.md` §5.1.
+- **PWA versus native app** — owners coming from miStable expect push notifications and a real app. `competitive-landscape.md` §5.2.
+- Ownership decisions — `ownership-model.md` §5: absolute lockout, lessors, foal seeding, units vs percentages, who can action a transfer.
+- Dormancy thresholds and media retention — `data-model.md` §6.
 - Relenta export contents; miStable export, especially whether media comes out at original quality with dates and horse associations intact.
 - Visual direction (awaiting references).
 - Folder structure and repo location (David is defining these).

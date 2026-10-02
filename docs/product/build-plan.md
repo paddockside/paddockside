@@ -40,7 +40,7 @@ paddockside/
     Paddockside.Web/             Blazor WASM — owner portal and staff console, one app, role-routed
     Paddockside.Design/          tokens.json, Tailwind config, generated CSS/C#, component docs site
   tests/
-    Paddockside.Domain.Tests/    ownership scenarios (`../docs/ownership-model.md` §4), scope rule
+    Paddockside.Domain.Tests/    ownership scenarios (`../ownership-model.md` §4), scope rule
     Paddockside.Isolation.Tests/ the cross-tenant suite (P28) — gates every release
     Paddockside.Pipeline.Tests/  send → external reply → lands on the right event (the product test)
   docs/                          this folder, moved in, so the repo carries its own brief

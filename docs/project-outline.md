@@ -157,7 +157,7 @@ Outbound goes wherever the recipient is. Inbound always lands back in the event 
 
 ## 10. Where this sits
 
-See `claude/project-context.md` for build decisions already made — Blazor front end, Tailwind with a bespoke token set, Relume as a layout reference only, and the requirement that the design system be documented as a deliverable.
+See `project-context.md` for build decisions already made — Blazor front end, Tailwind with a bespoke token set, Relume as a layout reference only, and the requirement that the design system be documented as a deliverable.
 
 ## 11. Next
 
