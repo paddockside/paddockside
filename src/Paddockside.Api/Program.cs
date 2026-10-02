@@ -15,9 +15,12 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddOpenApi();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ITenantContext, SessionTenantContext>();
+// Which connection string to use: "Paddockside" (LocalDB locally; Key Vault in Azure) unless DatabaseConnection
+// names another, e.g. the https-azure launch profile picks PaddocksideAzureDev.
+var connectionName = builder.Configuration["DatabaseConnection"] ?? "Paddockside";
 builder.Services.AddPaddocksideDatabase(
-    builder.Configuration.GetConnectionString("Paddockside")
-    ?? throw new InvalidOperationException("ConnectionStrings:Paddockside is not configured."));
+    builder.Configuration.GetConnectionString(connectionName)
+    ?? throw new InvalidOperationException($"ConnectionStrings:{connectionName} is not configured."));
 builder.Services.AddBreachedPasswordList();
 
 // Staff sign-in: password + mandatory TOTP (identity-access.md §4.2).

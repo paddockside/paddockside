@@ -32,6 +32,10 @@ jobs:
       - name: No literal hex colours outside generated output
         run: node build/check-no-hex-colours.mjs
 
+      # Compile only; deployments are run by hand for now (infra/README.md).
+      - name: Infrastructure (Bicep) compiles
+        run: az bicep build --file infra/main.bicep --stdout > /dev/null
+
       # Throwaway SQL Server for the isolation suite. The password is generated per run and masked,
       # so no credential lives in the repo.
       - name: Start SQL Server

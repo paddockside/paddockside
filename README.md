@@ -12,6 +12,15 @@ Then open https://localhost:7175. The first run creates a local database with a 
 login; the email and password are in `src/Paddockside.Api/appsettings.Development.json` under `DevSeed`.
 The first sign-in asks you to set up an authenticator app.
 
+To run against the Azure dev database instead of LocalDB, sign in with `az login` first, then:
+
+```
+dotnet run --project src/Paddockside.Api --launch-profile https-azure
+```
+
+The first run seeds the same demo tenant there. Azure resources and costs are described in
+[infra/README.md](infra/README.md).
+
 ## Design tokens
 
 Colours, type and spacing are defined only in `src/Paddockside.Design/tokens.json`. After editing it:
