@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+  </PropertyGroup>
+
+  <!-- The domain has no framework references (build-plan §2). Fail the build if one is added. -->
+  <Target Name="EnforcePureDomain" BeforeTargets="Build">
+    <ItemGroup>
+      <_DomainDependency Include="@(PackageReference);@(ProjectReference);@(FrameworkReference)" />
+      <_DomainDependency Remove="@(_DomainDependency)" Condition="'%(_DomainDependency.IsImplicitlyDefined)' == 'true'" />
+    </ItemGroup>
+    <Error Condition="'@(_DomainDependency)' != ''" Text="Paddockside.Domain must not reference packages, projects or frameworks. Found: @(_DomainDependency)" />
+  </Target>
+
+</Project>
