@@ -6,13 +6,19 @@ namespace Paddockside.Domain;
 /// </summary>
 public sealed class ManagementPeriod
 {
-    internal ManagementPeriod(Guid horseId, DateTimeOffset from)
+    /// <summary>For EF Core materialisation.</summary>
+    private ManagementPeriod() { }
+
+    internal ManagementPeriod(Horse horse, DateTimeOffset from)
     {
-        HorseId = horseId;
+        TenantId = horse.TenantId;
+        HorseId = horse.Id;
         From = from;
     }
 
     public Guid Id { get; } = Guid.CreateVersion7();
+
+    public Guid TenantId { get; }
 
     public Guid HorseId { get; }
 

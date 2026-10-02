@@ -49,6 +49,9 @@ public enum StreamItemDirection
 /// </summary>
 public sealed class StreamItem
 {
+    /// <summary>For EF Core materialisation.</summary>
+    private StreamItem() => (Body, NamedPartyIds) = (null!, null!);
+
     public StreamItem(
         Horse horse,
         Event? @event,

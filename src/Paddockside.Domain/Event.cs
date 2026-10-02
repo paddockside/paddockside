@@ -14,6 +14,9 @@ public enum EventStatus
 /// </summary>
 public sealed class Event
 {
+    /// <summary>For EF Core materialisation.</summary>
+    private Event() => (EventType, Title) = (null!, null!);
+
     public Event(Horse horse, string eventType, string title, DateTimeOffset? keyDate = null)
     {
         if (string.IsNullOrWhiteSpace(eventType)) throw new DomainException("An event needs a type.");

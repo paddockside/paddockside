@@ -10,6 +10,9 @@ public sealed class Horse
     private readonly List<ManagementPeriod> _periods = [];
     private readonly List<ManagedInterest> _interests = [];
 
+    /// <summary>For EF Core materialisation.</summary>
+    private Horse() { }
+
     public Horse(Guid tenantId, string name, HorseNameKind nameKind, DateTimeOffset nameFrom, string? nameSource = null)
     {
         TenantId = tenantId;
@@ -58,7 +61,7 @@ public sealed class Horse
         if (_periods.Count > 0 && from < _periods[^1].To)
             throw new DomainException("A new management period cannot start before the previous one ended.");
 
-        var period = new ManagementPeriod(Id, from);
+        var period = new ManagementPeriod(this, from);
         _periods.Add(period);
         return period;
     }

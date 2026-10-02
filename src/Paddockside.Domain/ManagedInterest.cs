@@ -38,6 +38,9 @@ public enum AccessPolicy
 /// </summary>
 public sealed class ManagedInterest
 {
+    /// <summary>For EF Core materialisation.</summary>
+    private ManagedInterest() { }
+
     internal ManagedInterest(
         Horse horse,
         ManagementPeriod period,

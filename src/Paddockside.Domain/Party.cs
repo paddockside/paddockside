@@ -12,6 +12,9 @@ public enum PartyKind
 /// </summary>
 public sealed class Party
 {
+    /// <summary>For EF Core materialisation.</summary>
+    private Party() => DisplayName = null!;
+
     public Party(Guid tenantId, string displayName, PartyKind kind = PartyKind.Person)
     {
         if (string.IsNullOrWhiteSpace(displayName)) throw new DomainException("A party needs a display name.");

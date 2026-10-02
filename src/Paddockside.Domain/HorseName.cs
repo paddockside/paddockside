@@ -14,6 +14,9 @@ public enum HorseNameKind
 /// </summary>
 public sealed class HorseName
 {
+    /// <summary>For EF Core materialisation.</summary>
+    private HorseName() => Name = null!;
+
     internal HorseName(string name, HorseNameKind kind, DateTimeOffset validFrom, string? source)
     {
         if (string.IsNullOrWhiteSpace(name)) throw new DomainException("A horse name cannot be blank.");

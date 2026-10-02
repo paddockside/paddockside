@@ -16,6 +16,9 @@ public enum HoldingEntityType
 /// </summary>
 public sealed class HoldingEntity
 {
+    /// <summary>For EF Core materialisation.</summary>
+    private HoldingEntity() => Name = null!;
+
     public HoldingEntity(Guid tenantId, string name, HoldingEntityType type)
     {
         if (string.IsNullOrWhiteSpace(name)) throw new DomainException("A holding entity needs a name.");

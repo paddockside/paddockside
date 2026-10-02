@@ -6,6 +6,9 @@ namespace Paddockside.Domain;
 /// </summary>
 public sealed class Tenant
 {
+    /// <summary>For EF Core materialisation.</summary>
+    private Tenant() => Name = null!;
+
     public Tenant(string name)
     {
         if (string.IsNullOrWhiteSpace(name)) throw new DomainException("A tenant needs a name.");

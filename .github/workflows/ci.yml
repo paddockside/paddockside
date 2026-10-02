@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      # Throwaway SQL Server for the isolation suite. The password is generated per run and masked,
+      # so no credential lives in the repo.
+      - name: Start SQL Server
+        run: |
+          SA_PASSWORD="Ci-$(openssl rand -hex 16)-Aa1!"
+          echo "::add-mask::$SA_PASSWORD"
+          docker run -d --name sql -p 1433:1433 \
+            -e ACCEPT_EULA=Y -e MSSQL_SA_PASSWORD="$SA_PASSWORD" \
+            mcr.microsoft.com/mssql/server:2022-latest
+          for i in $(seq 1 60); do
+            if docker exec sql /opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P "$SA_PASSWORD" -Q "SELECT 1" >/dev/null 2>&1; then
+              echo "SQL Server is ready"; break
+            fi
+            [ "$i" = 60 ] && { echo "SQL Server did not start"; docker logs sql; exit 1; }
+            sleep 2
+          done
+          echo "PADDOCKSIDE_TEST_SQL=Server=localhost,1433;User ID=sa;Password=$SA_PASSWORD;TrustServerCertificate=true" >> "$GITHUB_ENV"
+
+      - name: Restore
+        run: dotnet restore Paddockside.sln
+
+      - name: Build
+        run: dotnet build Paddockside.sln --no-restore --configuration Release
+
+      # Release gate (P28): any cross-tenant leak fails the build.
+      - name: Tenant isolation suite
+        run: dotnet test tests/Paddockside.Isolation.Tests --no-build --configuration Release
+
+      - name: Domain tests
+        run: dotnet test tests/Paddockside.Domain.Tests --no-build --configuration Release
+
+      - name: Pipeline tests
+        run: dotnet test tests/Paddockside.Pipeline.Tests --no-build --configuration Release
