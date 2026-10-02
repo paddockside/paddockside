@@ -2,6 +2,7 @@ using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Paddockside.Application.Tenancy;
 using Paddockside.Domain;
+using Paddockside.Infrastructure.Identity;
 using Paddockside.Infrastructure.Persistence;
 
 namespace Paddockside.Isolation.Tests;
@@ -16,12 +17,12 @@ public sealed class IsolationDatabase : IAsyncLifetime
 {
     private const string LocalDb = "Server=(localdb)\\MSSQLLocalDB;Integrated Security=true;TrustServerCertificate=true";
 
-    private readonly string _connectionString;
+    public string ConnectionString { get; }
 
     public IsolationDatabase()
     {
         var server = Environment.GetEnvironmentVariable("PADDOCKSIDE_TEST_SQL") is { Length: > 0 } configured ? configured : LocalDb;
-        _connectionString = new SqlConnectionStringBuilder(server) { InitialCatalog = $"PaddocksideIsolation_{Guid.NewGuid():N}" }.ConnectionString;
+        ConnectionString = new SqlConnectionStringBuilder(server) { InitialCatalog = $"PaddocksideIsolation_{Guid.NewGuid():N}" }.ConnectionString;
     }
 
     public SeededTenant A { get; private set; } = null!;
@@ -29,10 +30,12 @@ public sealed class IsolationDatabase : IAsyncLifetime
     public SeededTenant B { get; private set; } = null!;
 
     public PaddocksideDbContext ContextFor(Guid? tenantId) =>
-        new(new DbContextOptionsBuilder<PaddocksideDbContext>().UseSqlServer(_connectionString).Options, new FixedTenant(tenantId));
+        new(new DbContextOptionsBuilder<PaddocksideDbContext>().UseSqlServer(ConnectionString).Options, new FixedTenant(tenantId));
 
     public async Task InitializeAsync()
     {
+        await using (var identity = new PaddocksideIdentityDbContext(new DbContextOptionsBuilder<PaddocksideIdentityDbContext>().UseSqlServer(ConnectionString).Options))
+            await identity.Database.MigrateAsync();
         await using (var context = ContextFor(null))
             await context.Database.MigrateAsync();
 

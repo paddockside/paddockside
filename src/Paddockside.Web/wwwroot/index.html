@@ -1,33 +1,33 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en-AU">
 
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Paddockside.Web</title>
+    <meta name="color-scheme" content="light dark" />
+    <title>Paddockside</title>
     <base href="/" />
-    <link rel="stylesheet" href="lib/bootstrap/dist/css/bootstrap.min.css" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&display=swap" />
+    <link rel="stylesheet" href="_content/Paddockside.Design/tokens.css" />
+    <link rel="stylesheet" href="_content/Paddockside.Design/base.css" />
     <link rel="stylesheet" href="css/app.css" />
+    <link rel="stylesheet" href="Paddockside.Web.styles.css" />
     <link rel="icon" type="image/png" href="favicon.png" />
-    <link href="Paddockside.Web.styles.css" rel="stylesheet" />
-    <link href="manifest.webmanifest" rel="manifest" />
+    <link rel="manifest" href="manifest.webmanifest" />
     <link rel="apple-touch-icon" sizes="512x512" href="icon-512.png" />
     <link rel="apple-touch-icon" sizes="192x192" href="icon-192.png" />
 </head>
 
 <body>
     <div id="app">
-        <svg class="loading-progress">
-            <circle r="40%" cx="50%" cy="50%" />
-            <circle r="40%" cx="50%" cy="50%" />
-        </svg>
-        <div class="loading-progress-text"></div>
+        <p class="app-loading" role="status">Loading Paddockside…</p>
     </div>
 
-    <div id="blazor-error-ui">
-        An unhandled error has occurred.
-        <a href="." class="reload">Reload</a>
-        <span class="dismiss">🗙</span>
+    <div id="blazor-error-ui" role="alert">
+        Something went wrong.
+        <a href="." class="reload">Reload the page</a>
     </div>
     <script src="_framework/blazor.webassembly.js"></script>
     <script>navigator.serviceWorker.register('service-worker.js');</script>

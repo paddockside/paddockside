@@ -1,41 +1,92 @@
+using System.Threading.RateLimiting;
+using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Identity;
+using Paddockside.Api.Auth;
+using Paddockside.Api.Development;
+using Paddockside.Api.Horses;
+using Paddockside.Api.Security;
+using Paddockside.Api.Tenancy;
+using Paddockside.Application.Tenancy;
+using Paddockside.Infrastructure;
+using Paddockside.Infrastructure.Identity;
+
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container.
-// Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<ITenantContext, SessionTenantContext>();
+builder.Services.AddPaddocksideDatabase(
+    builder.Configuration.GetConnectionString("Paddockside")
+    ?? throw new InvalidOperationException("ConnectionStrings:Paddockside is not configured."));
+builder.Services.AddBreachedPasswordList();
+
+// Staff sign-in: password + mandatory TOTP (identity-access.md §4.2).
+builder.Services
+    .AddIdentityCore<Person>(options =>
+    {
+        options.User.RequireUniqueEmail = true;
+        options.Password.RequiredLength = 12;
+        options.Password.RequireDigit = false;
+        options.Password.RequireLowercase = false;
+        options.Password.RequireUppercase = false;
+        options.Password.RequireNonAlphanumeric = false;
+        options.Password.RequiredUniqueChars = 1;
+        options.Lockout.AllowedForNewUsers = true;
+        options.Lockout.MaxFailedAccessAttempts = 5;
+        options.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(15);
+    })
+    .AddEntityFrameworkStores<PaddocksideIdentityDbContext>()
+    .AddSignInManager()
+    .AddDefaultTokenProviders()
+    .AddClaimsPrincipalFactory<StaffClaimsPrincipalFactory>()
+    .AddPasswordValidator<BreachedPasswordValidator>();
+
+builder.Services.AddAuthentication(IdentityConstants.ApplicationScheme).AddIdentityCookies();
+builder.Services.ConfigureApplicationCookie(StaffSessionCookie.Configure);
+builder.Services.Configure<CookieAuthenticationOptions>(IdentityConstants.TwoFactorUserIdScheme, StaffSessionCookie.ConfigurePending);
+
+builder.Services.AddAuthorizationBuilder().AddPolicy(StaffPolicy.Name, StaffPolicy.Build);
+
+// Rate limiting on every sign-in step, per client IP (non-functional.md §2).
+var authRequestsPerMinute = builder.Configuration.GetValue("RateLimits:AuthPerMinute", 10);
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.AddPolicy(AuthEndpoints.RateLimitPolicy, context => RateLimitPartition.GetFixedWindowLimiter(
+        context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+        _ => new FixedWindowRateLimiterOptions { PermitLimit = authRequestsPerMinute, Window = TimeSpan.FromMinutes(1) }));
+});
 
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
+    app.UseWebAssemblyDebugging();
+    await DevelopmentSeeder.SeedAsync(app.Services, app.Configuration);
+}
+else
+{
+    app.UseHsts();
 }
 
 app.UseHttpsRedirection();
 
-var summaries = new[]
-{
-    "Freezing", "Bracing", "Chilly", "Cool", "Mild", "Warm", "Balmy", "Hot", "Sweltering", "Scorching"
-};
+// The Blazor app is served from here, so the session cookie never has to cross origins.
+app.UseBlazorFrameworkFiles();
+app.UseStaticFiles();
 
-app.MapGet("/weatherforecast", () =>
-{
-    var forecast =  Enumerable.Range(1, 5).Select(index =>
-        new WeatherForecast
-        (
-            DateOnly.FromDateTime(DateTime.Now.AddDays(index)),
-            Random.Shared.Next(-20, 55),
-            summaries[Random.Shared.Next(summaries.Length)]
-        ))
-        .ToArray();
-    return forecast;
-})
-.WithName("GetWeatherForecast");
+app.UseRateLimiter();
+app.UseAuthentication();
+app.UseAuthorization();
+app.UseMiddleware<RequireApiRequestHeader>();
+
+app.MapAuthEndpoints();
+app.MapHorseEndpoints();
+app.MapFallback("/api/{**rest}", () => Results.NotFound());
+app.MapFallbackToFile("index.html");
 
 app.Run();
 
-record WeatherForecast(DateOnly Date, int TemperatureC, string? Summary)
-{
-    public int TemperatureF => 32 + (int)(TemperatureC / 0.5556);
-}
+/// <summary>Visible to the integration tests.</summary>
+public partial class Program;

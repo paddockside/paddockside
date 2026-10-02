@@ -1,0 +1,80 @@
+@page "/horses"
+@inject PaddocksideApi Api
+@inject SessionState Session
+@inject NavigationManager Navigation
+
+<PageTitle>Horses · Paddockside</PageTitle>
+
+<div class="ps-stack">
+    <h1>Horses</h1>
+
+    @if (_error is not null)
+    {
+        <p class="ps-alert ps-alert--danger" role="alert">@_error</p>
+    }
+    else if (_horses is null)
+    {
+        <p class="ps-muted" role="status">Loading horses…</p>
+    }
+    else if (_horses.Count == 0)
+    {
+        <div class="ps-card">
+            <p>No horses yet. Horses you add or import will appear here.</p>
+        </div>
+    }
+    else
+    {
+        <div class="ps-card">
+            <table class="ps-table">
+                <caption class="ps-visually-hidden">The horses @Session.Current?.TenantName manages or has managed</caption>
+                <thead>
+                    <tr>
+                        <th scope="col">Name</th>
+                        <th scope="col">Status</th>
+                        <th scope="col">Managed since</th>
+                        <th scope="col">Current owners</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var horse in _horses)
+                    {
+                        <tr>
+                            <td class="horse-name">@horse.Name</td>
+                            <td data-label="Status">
+                                @if (horse.Managed)
+                                {
+                                    <span class="ps-badge ps-badge--success">Managed</span>
+                                }
+                                else
+                                {
+                                    <span class="ps-badge ps-badge--neutral">No longer managed</span>
+                                }
+                            </td>
+                            <td data-label="Managed since">@(horse.ManagedSince?.ToString("d MMMM yyyy") ?? "—")</td>
+                            <td data-label="Current owners">@horse.CurrentOwners</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+        <p class="ps-muted">@_horses.Count(h => h.Managed) managed now, @_horses.Count in all.</p>
+    }
+</div>
+
+@code {
+    private List<HorseSummary>? _horses;
+    private string? _error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (await Session.RefreshAsync() is null)
+        {
+            Navigation.NavigateTo("sign-in");
+            return;
+        }
+
+        var result = await Api.HorsesAsync();
+        if (result.Succeeded) _horses = result.Value;
+        else _error = result.Error;
+    }
+}

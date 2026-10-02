@@ -1,0 +1,9 @@
+@if (!string.IsNullOrEmpty(Message))
+{
+    <p class="ps-alert ps-alert--danger" role="alert">@Message</p>
+}
+
+@code {
+    /// <summary>The message to show; nothing renders when it is empty.</summary>
+    [Parameter] public string? Message { get; set; }
+}

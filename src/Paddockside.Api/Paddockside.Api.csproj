@@ -5,12 +5,15 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.Server" Version="9.0.20" />
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="9.0.20" />
+    <PackageReference Include="QRCoder" Version="1.8.0" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\Paddockside.Application\Paddockside.Application.csproj" />
     <ProjectReference Include="..\Paddockside.Infrastructure\Paddockside.Infrastructure.csproj" />
+    <ProjectReference Include="..\Paddockside.Web\Paddockside.Web.csproj" />
   </ItemGroup>
 
 </Project>

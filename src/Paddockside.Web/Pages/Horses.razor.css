@@ -1,0 +1,4 @@
+.horse-name {
+    font-weight: var(--weight-strong);
+    font-size: var(--text-size-body);
+}

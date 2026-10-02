@@ -1,16 +1,40 @@
-﻿@inherits LayoutComponentBase
-<div class="page">
-    <div class="sidebar">
-        <NavMenu />
-    </div>
+@inherits LayoutComponentBase
+@implements IDisposable
+@inject SessionState Session
+@inject NavigationManager Navigation
 
-    <main>
-        <div class="top-row px-4">
-            <a href="https://learn.microsoft.com/aspnet/core/" target="_blank">About</a>
+<div class="shell">
+    <header class="shell__header">
+        <div class="shell__tenant">
+            @if (Session.Current is { } session)
+            {
+                <span class="shell__tenant-name">@session.TenantName</span>
+            }
         </div>
+        <div class="shell__actions">
+            @if (Session.Current is not null)
+            {
+                <button type="button" class="ps-button ps-button--secondary" @onclick="SignOut">Sign out</button>
+            }
+            <span class="shell__wordmark">Paddockside</span>
+        </div>
+    </header>
 
-        <article class="content px-4">
-            @Body
-        </article>
+    <main class="shell__main">
+        @Body
     </main>
 </div>
+
+@code {
+    protected override void OnInitialized() => Session.Changed += Refresh;
+
+    private void Refresh() => InvokeAsync(StateHasChanged);
+
+    private async Task SignOut()
+    {
+        await Session.SignOutAsync();
+        Navigation.NavigateTo("sign-in");
+    }
+
+    public void Dispose() => Session.Changed -= Refresh;
+}

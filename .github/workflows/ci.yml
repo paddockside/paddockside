@@ -21,6 +21,17 @@ jobs:
         with:
           global-json-file: global.json
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # design-system.md §3: colours live only in tokens.json.
+      - name: Design tokens are valid and generated output is current
+        run: node src/Paddockside.Design/build/tokens.mjs --check
+
+      - name: No literal hex colours outside generated output
+        run: node build/check-no-hex-colours.mjs
+
       # Throwaway SQL Server for the isolation suite. The password is generated per run and masked,
       # so no credential lives in the repo.
       - name: Start SQL Server

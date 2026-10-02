@@ -1,0 +1,43 @@
+using Microsoft.AspNetCore.Identity;
+using Paddockside.Domain;
+
+namespace Paddockside.Infrastructure.Identity;
+
+/// <summary>
+/// One person, one identity across the whole product (identity-access.md §3). Product-level, so not
+/// tenant-scoped: tenants reach a person only through a <see cref="Membership"/>.
+/// </summary>
+public sealed class Person : IdentityUser<Guid>
+{
+    public Person()
+    {
+        Id = Guid.CreateVersion7();
+        SecurityStamp = Guid.NewGuid().ToString();
+    }
+
+    public List<Membership> Memberships { get; } = [];
+}
+
+public enum MembershipStatus
+{
+    Active,
+    Suspended,
+}
+
+/// <summary>A person's role in one tenant (identity-access.md §3, §6).</summary>
+public sealed class Membership
+{
+    public Guid Id { get; init; } = Guid.CreateVersion7();
+
+    public Guid PersonId { get; init; }
+
+    public Guid TenantId { get; init; }
+
+    public MemberRole Role { get; set; }
+
+    public MembershipStatus Status { get; set; } = MembershipStatus.Active;
+
+    public DateTimeOffset CreatedAt { get; init; } = DateTimeOffset.UtcNow;
+
+    public AudienceClass Class => MemberRoles.ClassOf(Role);
+}
