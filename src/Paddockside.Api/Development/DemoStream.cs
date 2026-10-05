@@ -17,9 +17,18 @@ public static class DemoStream
     public static async Task EnsureAsync(DbContextOptions<PaddocksideDbContext> options, Guid tenantId, TimeProvider clock, ILogger logger)
     {
         await using var db = new PaddocksideDbContext(options, new DevelopmentSeeder.FixedTenant(tenantId));
-        if (await db.Events.AnyAsync()) return;
-
         var tenant = await db.Tenants.SingleAsync();
+
+        // Branding and owner email addresses, for databases seeded before email existed. Addresses use the
+        // reserved .test domain, which can never reach a real inbox.
+        if (tenant.Slug != "laureloak" || tenant.FooterDetails is null)
+            tenant.SetBranding("laureloak", tenant.LogoUrl, "Demo tenant for Paddockside development · not a real business");
+        foreach (var party in await db.Parties.ToListAsync())
+            if (party.Kind == PartyKind.Person && party.PrimaryEmail is null)
+                party.AddEmail($"{party.DisplayName.ToLowerInvariant().Replace(' ', '.')}@owners.paddockside.test");
+        await db.SaveChangesAsync();
+
+        if (await db.Events.AnyAsync()) return;
         var horses = await db.Horses.Include(h => h.ManagementPeriods).Include(h => h.Interests).AsSplitQuery().ToListAsync();
         var parties = await db.Parties.ToDictionaryAsync(p => p.DisplayName, p => p);
         Horse? Find(string name) => horses.FirstOrDefault(h => h.Name == name);

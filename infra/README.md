@@ -31,6 +31,25 @@ Key Vault secrets: `ConnectionStrings--Paddockside`, `ApplicationInsights--Conne
 `Storage--BlobEndpoint`, `Storage--QueueEndpoint`. None contains a password: SQL and storage are reached
 with Entra identities (the web app's managed identity in Azure, your `az login` locally).
 
+### Email (Postmark) secrets
+
+The app reads these straight from the vault (`KeyVault__Uri`). They are real secrets, so they are added by
+hand, never in code or Bicep:
+
+| Secret | What |
+|---|---|
+| `Postmark--ServerToken` | The Postmark server's API token (Servers → paddockside → API Tokens) |
+| `Postmark--WebhookUsername` | Any username you choose for the webhook |
+| `Postmark--WebhookPassword` | A long random password for the webhook |
+
+Postmark does not sign webhooks; its documented protection is Basic credentials in the URL. In Postmark,
+under Servers → paddockside → Default Transactional Stream → Webhooks, add
+`https://<username>:<password>@<web app host>/api/webhooks/postmark` with Delivery, Bounce, Spam complaint
+and Open ticked. The app also ignores any event whose message id does not match the delivery it names.
+
+Locally, `appsettings.Development.json` uses Postmark's `POSTMARK_API_TEST` token: sends are accepted and
+nothing is delivered. The `https-azure` launch profile reads the real token from the vault.
+
 ## Cost (dev)
 
 Prices are approximate, pay-as-you-go, Australia East, in AUD.
@@ -81,5 +100,8 @@ Then run the API with the `https-azure` launch profile (see the root README).
 - The web app's managed identity has no database user yet. Before the API is deployed there, run as the
   SQL admin: `CREATE USER [app-paddockside-dev-cd63cr] FROM EXTERNAL PROVIDER;` plus the roles it needs.
 - No code is deployed to the web app; that comes with the CD pipeline.
+- The `KeyVault__Uri` app setting is in `resources.bicep` but has not been deployed yet.
+- Postmark's sending domain `mail.paddockside.com.au` needs its DKIM record (from Postmark) in the DNS zone,
+  and the zone only answers once the registrar's name servers point at Azure.
 - The SQL admin is an external identity until the custom-domain member account exists
   (`docs/product/azure-tenant-setup.md` §2); update `main.dev.bicepparam` and redeploy then.

@@ -58,6 +58,10 @@ public sealed class IsolationDatabase : IAsyncLifetime
         var ann = new Party(tenant.Id, $"{name} Ann");
         var dee = new Party(tenant.Id, $"{name} Dee");
         var eve = new Party(tenant.Id, $"{name} Eve");
+        var mailDomain = $"{tenant.Slug}.test";
+        ann.AddEmail($"ann@{mailDomain}");
+        dee.AddEmail($"dee@{mailDomain}");
+        eve.AddEmail($"eve@{mailDomain}");
         var syndicate = new HoldingEntity(tenant.Id, $"{name} Syndicate", HoldingEntityType.ManagedSyndicate);
         var external = new HoldingEntity(tenant.Id, $"{name} External", HoldingEntityType.External);
 
@@ -75,9 +79,16 @@ public sealed class IsolationDatabase : IAsyncLifetime
         var note = new StreamItem(horse, raceStart, StreamItemKind.Note, StreamItemScope.Internal, StreamItemDirection.Internal, bought.AddMonths(6), $"{name} note");
 
         var deliveries = Delivery.ForOwners(tenant, horse, update, DeliveryChannel.Email, bought.AddMonths(6));
+        var routing = deliveries.Select(dl =>
+        {
+            var address = RoutingAddress.ForRecipient(update, dl.PartyId, RoutingToken.New(), bought.AddMonths(6));
+            dl.AssignRoutingAddress(address);
+            return address;
+        }).ToList();
 
         await using var context = ContextFor(tenant.Id);
         context.AddRange(tenant, ann, dee, eve, syndicate, external, horse, raceStart, update, personal, note);
+        context.AddRange(routing);
         context.AddRange(deliveries);
         await context.SaveChangesAsync();
 

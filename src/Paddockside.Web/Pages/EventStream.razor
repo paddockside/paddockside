@@ -122,9 +122,15 @@
             {
                 Audience.InternalNote => "Note added.",
                 Audience.Trainer => "Saved. Messages to the trainer start sending once the trainer is recorded on the horse.",
-                _ => $"Saved and queued for {result.Value!.Recipients} {(result.Value.Recipients == 1 ? "owner" : "owners")}. Email sending starts in Sprint 1.",
+                _ => $"Sending to {result.Value!.Recipients} {(result.Value.Recipients == 1 ? "owner" : "owners")} now. Each gets their own reply address; the delivery line updates as Postmark reports back.",
             };
             await Load();
+            if (draft.Audience == Audience.Owners)
+            {
+                // The background sender picks it up within a few seconds; show the result without a manual refresh.
+                await Task.Delay(TimeSpan.FromSeconds(6));
+                await Load();
+            }
         }
         finally
         {

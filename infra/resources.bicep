@@ -220,6 +220,8 @@ resource webApp 'Microsoft.Web/sites@2023-12-01' = {
         { name: 'APPLICATIONINSIGHTS_CONNECTION_STRING', value: '@Microsoft.KeyVault(SecretUri=${secretAppInsights.properties.secretUri})' }
         { name: 'Storage__BlobEndpoint', value: '@Microsoft.KeyVault(SecretUri=${secretBlobEndpoint.properties.secretUri})' }
         { name: 'Storage__QueueEndpoint', value: '@Microsoft.KeyVault(SecretUri=${secretQueueEndpoint.properties.secretUri})' }
+        // The app reads its secrets (Postmark--ServerToken, Postmark--WebhookUsername/Password) straight from Key Vault.
+        { name: 'KeyVault__Uri', value: keyVault.properties.vaultUri }
         { name: 'Storage__MediaContainer', value: mediaContainerName }
         { name: 'Storage__InboundQueue', value: inboundQueueName }
       ]

@@ -33,6 +33,8 @@ public sealed class PaddocksideDbContext(DbContextOptions<PaddocksideDbContext> 
 
     public DbSet<Delivery> Deliveries => Set<Delivery>();
 
+    public DbSet<RoutingAddress> RoutingAddresses => Set<RoutingAddress>();
+
     /// <summary>Read by the query filters. EF Core re-evaluates it for each context instance.</summary>
     private Guid? CurrentTenantId => tenantContext.TenantId;
 

@@ -1,5 +1,8 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Paddockside.Application.Messaging;
+using Paddockside.Infrastructure.Email;
 using Paddockside.Infrastructure.Identity;
 using Paddockside.Infrastructure.Persistence;
 
@@ -17,6 +20,7 @@ public static class DependencyInjection
             options.UseSqlServer(connectionString, sql => sql.EnableRetryOnFailure()));
         services.AddDbContext<PaddocksideIdentityDbContext>(options =>
             options.UseSqlServer(connectionString, sql => sql.EnableRetryOnFailure()));
+        services.AddScoped<TenantScopedDb>();
         return services;
     }
 
@@ -28,6 +32,21 @@ public static class DependencyInjection
             http.BaseAddress = new Uri("https://api.pwnedpasswords.com/");
             http.Timeout = TimeSpan.FromSeconds(5);
         });
+        return services;
+    }
+
+    /// <summary>Outbound email through Postmark (settings "Email" and "Postmark").</summary>
+    public static IServiceCollection AddEmail(this IServiceCollection services, IConfiguration configuration)
+    {
+        services.Configure<EmailOptions>(configuration.GetSection(EmailOptions.Section));
+        services.Configure<PostmarkOptions>(configuration.GetSection(PostmarkOptions.Section));
+        services.AddHttpClient<IEmailSender, PostmarkEmailSender>(http =>
+        {
+            http.BaseAddress = new Uri("https://api.postmarkapp.com/");
+            http.Timeout = TimeSpan.FromSeconds(15);
+        });
+        services.AddSingleton<OwnerEmailRenderer>();
+        services.AddScoped<EmailDispatcher>();
         return services;
     }
 }

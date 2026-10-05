@@ -94,7 +94,8 @@ public enum DeliveryStatus
     Suppressed,
 }
 
-public sealed record Recipient(string Name, string Channel, DeliveryStatus Status);
+/// <param name="Note">Why it was not sent, or the last error, in words.</param>
+public sealed record Recipient(string Name, string Channel, DeliveryStatus Status, string? Note = null);
 
 /// <param name="IsViewer">This reply was written by the owner looking at it (the only replies an owner sees).</param>
 public sealed record Reply(string Author, string Channel, string At, string Body, bool IsViewer = false);

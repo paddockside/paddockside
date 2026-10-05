@@ -52,6 +52,70 @@ public sealed class Delivery
 
     public DateTimeOffset StatusAt { get; private set; }
 
+    /// <summary>The address actually used (data-model.md DELIVERY: "address used").</summary>
+    public string? Address { get; private set; }
+
+    /// <summary>The routing token issued to this recipient with this message.</summary>
+    public Guid? RoutingAddressId { get; private set; }
+
+    /// <summary>The provider's id for the sent message (Postmark MessageID), to match its webhooks.</summary>
+    public string? ProviderMessageId { get; private set; }
+
+    public DateTimeOffset? SentAt { get; private set; }
+
+    public int Attempts { get; private set; }
+
+    /// <summary>Why it was not sent, or the last error, in words for staff.</summary>
+    public string? Note { get; private set; }
+
+    /// <summary>Retried until this many attempts, then left for staff to see.</summary>
+    public const int MaxAttempts = 5;
+
+    public bool IsWaitingToSend => Status == DeliveryStatus.Queued && Attempts < MaxAttempts;
+
+    public void AssignRoutingAddress(RoutingAddress address)
+    {
+        if (address.TenantId != TenantId || address.StreamItemId != StreamItemId || address.PartyId != PartyId)
+            throw new DomainException("The routing address was issued for a different recipient or message.");
+        RoutingAddressId = address.Id;
+    }
+
+    public void MarkSent(string address, string providerMessageId, DateTimeOffset at)
+    {
+        if (Status != DeliveryStatus.Queued) throw new DomainException("Only a queued delivery is sent.");
+        Address = address;
+        ProviderMessageId = providerMessageId;
+        SentAt = at;
+        Attempts++;
+        Note = null;
+        Record(DeliveryStatus.Sent, at);
+    }
+
+    /// <summary>Not sent, on purpose: no address, an undeliverable address, or no longer an owner.</summary>
+    public void Suppress(string reason, DateTimeOffset at, string? address = null)
+    {
+        Address ??= address;
+        Note = reason;
+        Record(DeliveryStatus.Suppressed, at);
+    }
+
+    /// <summary>The provider reported a permanent bounce after sending.</summary>
+    public void RecordBounce(string description, DateTimeOffset at)
+    {
+        Note = description;
+        Record(DeliveryStatus.Bounced, at);
+    }
+
+    /// <summary>A failed attempt. Transient failures stay queued for another try; permanent ones bounce.</summary>
+    public void RecordFailedAttempt(string error, bool permanent, DateTimeOffset at, string? address = null)
+    {
+        Address ??= address;
+        Attempts++;
+        Note = error;
+        if (permanent) Record(DeliveryStatus.Bounced, at);
+        else StatusAt = at;
+    }
+
     /// <summary>Records what the channel provider reported. Statuses only move forward, except to a failure.</summary>
     public void Record(DeliveryStatus status, DateTimeOffset at)
     {

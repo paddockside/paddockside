@@ -93,7 +93,9 @@ public sealed class RequireApiRequestHeader(RequestDelegate next)
     public Task InvokeAsync(HttpContext context)
     {
         var isUnsafe = !(HttpMethods.IsGet(context.Request.Method) || HttpMethods.IsHead(context.Request.Method) || HttpMethods.IsOptions(context.Request.Method));
-        if (isUnsafe && context.Request.Path.StartsWithSegments("/api") && !context.Request.Headers.ContainsKey(HeaderName))
+        // Webhooks come from providers, not browsers; they authenticate themselves instead (PostmarkWebhooks).
+        var isWebhook = context.Request.Path.StartsWithSegments("/api/webhooks");
+        if (isUnsafe && !isWebhook && context.Request.Path.StartsWithSegments("/api") && !context.Request.Headers.ContainsKey(HeaderName))
         {
             context.Response.StatusCode = StatusCodes.Status400BadRequest;
             return Task.CompletedTask;

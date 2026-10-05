@@ -4,6 +4,7 @@ using Paddockside.Api.Formatting;
 using Paddockside.Api.Horses;
 using Paddockside.Api.Security;
 using Paddockside.Domain;
+using Paddockside.Infrastructure.Email;
 using Paddockside.Infrastructure.Identity;
 using Paddockside.Infrastructure.Persistence;
 using DomainEvent = Paddockside.Domain.Event;
@@ -20,7 +21,7 @@ public static class EventEndpoints
 
     public sealed record ReplyView(string Author, string Channel, string At, string Body);
 
-    public sealed record RecipientView(string Name, string Channel, string Status);
+    public sealed record RecipientView(string Name, string Channel, string Status, string? Note);
 
     public sealed record ItemView(
         Guid Id,
@@ -111,7 +112,7 @@ public static class EventEndpoints
                         .ToList(),
                     itemDeliveries
                         .OrderBy(d => parties.GetValueOrDefault(d.PartyId))
-                        .Select(d => new RecipientView(parties.GetValueOrDefault(d.PartyId) ?? "Unknown", Channel(d.Channel), d.Status.ToString()))
+                        .Select(d => new RecipientView(parties.GetValueOrDefault(d.PartyId) ?? "Unknown", Channel(d.Channel), d.Status.ToString(), d.Note))
                         .ToList());
             })
             .ToList();
@@ -180,7 +181,9 @@ public static class EventEndpoints
                 }
 
                 item = StreamItem.Message(horse, e, null, request.Body.Trim(), scope, now, author, scope == StreamItemScope.NamedParties ? named : null, stepCode);
-                deliveries = Delivery.ForOwners(tenant, horse, item, ToChannel(request.Channel), now);
+                // Recipients are worked out now, at send time, and each gets its own routing token (messaging-channels.md §1).
+                db.StreamItems.Add(item);
+                deliveries = await OutboundQueue.QueueAsync(db, tenant, horse, item, ToChannel(request.Channel), now, cancellationToken);
                 break;
 
             case "Trainer":
@@ -194,8 +197,7 @@ public static class EventEndpoints
         }
 
         e.RecordActivity();
-        db.StreamItems.Add(item);
-        db.Deliveries.AddRange(deliveries);
+        if (db.Entry(item).State == EntityState.Detached) db.StreamItems.Add(item);
         await db.SaveChangesAsync(cancellationToken);
         return Results.Created($"/api/events/{id}", new Posted(item.Id, deliveries.Count));
     }

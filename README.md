@@ -22,7 +22,9 @@ The first sign-in asks you to set up an authenticator app.
 
 What you can see: the horse list, each horse's timeline (its events with their stage strip), and each event's
 page (facts, corrections, messages with replies and delivery, staff notes, and the compose box). Posting from
-the compose box saves the item and queues it for the current owners; email sending arrives in Sprint 1.
+the compose box saves the item and emails the current owners, each with their own reply address. Locally the
+Postmark test token accepts the send and delivers nothing; the demo owners have `.test` addresses.
+`infra/README.md` lists the Postmark secrets and webhook needed in Azure.
 `/design` shows every component with sample data.
 
 To run against the Azure dev database instead of LocalDB, sign in with `az login` first, then:

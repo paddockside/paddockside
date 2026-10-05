@@ -19,7 +19,8 @@
       "applicationUrl": "https://localhost:7175",
       "environmentVariables": {
         "ASPNETCORE_ENVIRONMENT": "Development",
-        "DatabaseConnection": "PaddocksideAzureDev"
+        "DatabaseConnection": "PaddocksideAzureDev",
+        "KeyVault__Uri": "https://kv-paddockside-dev-cd63.vault.azure.net/"
       }
     }
   }

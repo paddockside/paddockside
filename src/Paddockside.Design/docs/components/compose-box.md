@@ -25,6 +25,15 @@ follow can only be ones that make sense for it.
 7. **Send button**, labelled for the audience ("Send to owners", "Send to trainer", "Add note"), with a
    one-line summary beside it.
 
+## What happens on send (owners, by email)
+
+The API works out the recipients when the message is sent: the owners the access rule admits at that moment.
+An owner who exited earlier the same day is not included. Each recipient gets a DELIVERY row and their own
+12-character routing token, so the Reply-To is `r-{token}@{tenant}.in.paddockside.com.au`. A background
+sender emails them through Postmark within a few seconds. It checks each person again first, and skips anyone
+who has stopped being an owner since or whose address has bounced. Postmark's webhooks then move the row on to
+delivered, opened or bounced. The message thread's delivery line shows that progress.
+
 ## Variants
 
 None by design. Staff only; owners reply from the reply box, which is a separate component.

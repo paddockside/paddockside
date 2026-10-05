@@ -7,11 +7,17 @@ using Paddockside.Api.Events;
 using Paddockside.Api.Horses;
 using Paddockside.Api.Security;
 using Paddockside.Api.Tenancy;
+using Paddockside.Api.Webhooks;
 using Paddockside.Application.Tenancy;
 using Paddockside.Infrastructure;
 using Paddockside.Infrastructure.Identity;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Secrets (Postmark token, webhook credentials) come from Key Vault when KeyVault:Uri is set: always in Azure,
+// and locally with the https-azure profile. Secret "Postmark--ServerToken" becomes setting Postmark:ServerToken.
+if (builder.Configuration["KeyVault:Uri"] is { Length: > 0 } vaultUri)
+    builder.Configuration.AddAzureKeyVault(new Uri(vaultUri), new Azure.Identity.DefaultAzureCredential());
 
 builder.Services.AddOpenApi();
 builder.Services.AddHttpContextAccessor();
@@ -24,6 +30,8 @@ builder.Services.AddPaddocksideDatabase(
     builder.Configuration.GetConnectionString(connectionName)
     ?? throw new InvalidOperationException($"ConnectionStrings:{connectionName} is not configured."));
 builder.Services.AddBreachedPasswordList();
+builder.Services.AddEmail(builder.Configuration);
+builder.Services.AddHostedService<EmailDispatchService>();
 
 // Staff sign-in: password + mandatory TOTP (identity-access.md §4.2).
 builder.Services
@@ -89,6 +97,7 @@ app.UseMiddleware<RequireApiRequestHeader>();
 app.MapAuthEndpoints();
 app.MapHorseEndpoints();
 app.MapEventEndpoints();
+app.MapPostmarkWebhooks();
 app.MapFallback("/api/{**rest}", () => Results.NotFound());
 app.MapFallbackToFile("index.html");
 

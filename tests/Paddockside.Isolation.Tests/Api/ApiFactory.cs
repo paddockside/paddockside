@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
+using Paddockside.Application.Messaging;
 using Paddockside.Domain;
 using Paddockside.Infrastructure.Identity;
 
@@ -14,14 +15,25 @@ namespace Paddockside.Isolation.Tests.Api;
 public sealed class ApiFactory(IsolationDatabase db) : WebApplicationFactory<Program>
 {
     public const string BreachedPassword = "correct horse battery staple";
+    public const string WebhookUsername = "postmark-test";
+    public const string WebhookPassword = "webhook-test-password";
+
+    /// <summary>Records every email instead of sending it.</summary>
+    public FakeEmailSender Emails { get; } = new();
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Testing");
         builder.UseSetting("ConnectionStrings:Paddockside", db.ConnectionString);
         builder.UseSetting("RateLimits:AuthPerMinute", "100000");
+        builder.UseSetting("Email:DispatchEnabled", "false"); // tests run the dispatcher themselves
+        builder.UseSetting("Postmark:WebhookUsername", WebhookUsername);
+        builder.UseSetting("Postmark:WebhookPassword", WebhookPassword);
         builder.ConfigureTestServices(services =>
-            services.AddSingleton<IBreachedPasswordList>(new FakeBreachedList()));
+        {
+            services.AddSingleton<IBreachedPasswordList>(new FakeBreachedList());
+            services.AddSingleton<IEmailSender>(Emails);
+        });
     }
 
     /// <summary>A browser-like client: HTTPS (the session cookie is Secure) and a cookie jar.</summary>
@@ -64,6 +76,28 @@ public sealed class ApiFactory(IsolationDatabase db) : WebApplicationFactory<Pro
     {
         public Task<bool> ContainsAsync(string password, CancellationToken cancellationToken = default) =>
             Task.FromResult(password == BreachedPassword);
+    }
+}
+
+/// <summary>Accepts every email and keeps it, with a Postmark-like message id.</summary>
+public sealed class FakeEmailSender : IEmailSender
+{
+    private readonly System.Collections.Concurrent.ConcurrentQueue<(OutboundEmail Email, string MessageId)> _sent = new();
+
+    public bool IsConfigured => true;
+
+    public IReadOnlyList<(OutboundEmail Email, string MessageId)> Sent => _sent.ToList();
+
+    /// <summary>Addresses to reject permanently, as Postmark does for an inactive recipient.</summary>
+    public HashSet<string> Inactive { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+    public Task<EmailSendResult> SendAsync(OutboundEmail email, CancellationToken cancellationToken)
+    {
+        if (Inactive.Contains(email.ToAddress))
+            return Task.FromResult(EmailSendResult.Failed("Postmark 422, code 406: inactive recipient", permanent: true));
+        var id = Guid.NewGuid().ToString();
+        _sent.Enqueue((email, id));
+        return Task.FromResult(EmailSendResult.Sent(id));
     }
 }
 

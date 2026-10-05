@@ -24,7 +24,7 @@ public sealed record FieldView(string Label, string Value, string? Was);
 
 public sealed record ReplyView(string Author, string Channel, string At, string Body);
 
-public sealed record RecipientView(string Name, string Channel, string Status);
+public sealed record RecipientView(string Name, string Channel, string Status, string? Note);
 
 public sealed record ItemView(
     Guid Id,

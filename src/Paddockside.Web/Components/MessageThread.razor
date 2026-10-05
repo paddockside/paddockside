@@ -71,7 +71,13 @@
                             <tr class="border-t border-border-subtle">
                                 <td class="py-2 pr-4">@recipient.Name</td>
                                 <td class="py-2 pr-4">@recipient.Channel</td>
-                                <td class="py-2 @(Marks.IsProblem(recipient.Status) ? "font-strong text-status-danger-fg" : null)">@Marks.Label(recipient.Status)</td>
+                                <td class="py-2 @(Marks.IsProblem(recipient.Status) ? "font-strong text-status-danger-fg" : null)">
+                                    @Marks.Label(recipient.Status)
+                                    @if (recipient.Note is not null)
+                                    {
+                                        <span class="block font-regular text-text-muted">@recipient.Note</span>
+                                    }
+                                </td>
                             </tr>
                         }
                     </tbody>

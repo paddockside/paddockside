@@ -18,6 +18,11 @@ internal sealed class TenantConfiguration : IEntityTypeConfiguration<Tenant>
         b.Property(x => x.Id).ValueGeneratedNever();
         b.Property(x => x.Name).HasMaxLength(200);
         b.Property(x => x.PriorManagementPeriodsVisible);
+        b.Property(x => x.Slug).HasMaxLength(30);
+        b.Property(x => x.LogoUrl).HasMaxLength(500);
+        b.Property(x => x.FooterDetails).HasMaxLength(500);
+        // Slugs form reply addresses, so two tenants can never share one. (Empty = set before slugs existed.)
+        b.HasIndex(x => x.Slug).IsUnique().HasFilter("[Slug] <> ''");
     }
 }
 
@@ -28,6 +33,24 @@ internal sealed class PartyConfiguration : IEntityTypeConfiguration<Party>
         b.MapTenantOwned();
         b.Property(x => x.DisplayName).HasMaxLength(200);
         b.Property(x => x.Kind).AsString();
+        b.Ignore(x => x.PrimaryEmail);
+        b.Ignore(x => x.FirstName);
+
+        // Contacts belong to their party (and its tenant filter); they are never queried on their own.
+        b.OwnsMany(x => x.Contacts, c =>
+        {
+            c.ToTable("PartyContacts");
+            c.WithOwner().HasForeignKey("PartyId");
+            c.Property<int>("Id");
+            c.HasKey("Id");
+            c.Property(x => x.Kind).AsString();
+            c.Property(x => x.Value).HasMaxLength(320);
+            c.Property(x => x.IsPrimary);
+            c.Property(x => x.UndeliverableSince);
+            c.Ignore(x => x.IsDeliverable);
+            c.HasIndex(x => x.Value);
+        });
+        b.Navigation(x => x.Contacts).UsePropertyAccessMode(PropertyAccessMode.Field);
     }
 }
 
@@ -184,9 +207,37 @@ internal sealed class DeliveryConfiguration : IEntityTypeConfiguration<Delivery>
         b.Property(x => x.Channel).AsString();
         b.Property(x => x.Status).AsString();
         b.Property(x => x.StatusAt);
+        b.Property(x => x.Address).HasMaxLength(320);
+        b.Property(x => x.ProviderMessageId).HasMaxLength(100);
+        b.Property(x => x.SentAt);
+        b.Property(x => x.Attempts);
+        b.Property(x => x.Note).HasMaxLength(500);
+        b.Ignore(x => x.IsWaitingToSend);
         b.HasOne<StreamItem>().WithMany().HasForeignKey(x => x.StreamItemId).OnDelete(DeleteBehavior.Restrict);
         b.HasOne<Party>().WithMany().HasForeignKey(x => x.PartyId).OnDelete(DeleteBehavior.Restrict);
-        b.HasIndex(x => new { x.TenantId, x.StreamItemId });
+        b.HasOne<RoutingAddress>().WithMany().HasForeignKey(x => x.RoutingAddressId).OnDelete(DeleteBehavior.Restrict);
+        // Never twice to the same recipient for the same message on the same channel (messaging-channels.md §2.5).
+        b.HasIndex(x => new { x.StreamItemId, x.PartyId, x.Channel }).IsUnique();
+        b.HasIndex(x => new { x.TenantId, x.Status, x.Channel });
+        b.HasIndex(x => x.ProviderMessageId);
+    }
+}
+
+internal sealed class RoutingAddressConfiguration : IEntityTypeConfiguration<RoutingAddress>
+{
+    public void Configure(EntityTypeBuilder<RoutingAddress> b)
+    {
+        b.MapTenantOwned();
+        b.Property(x => x.Token).HasMaxLength(RoutingToken.Length).IsUnicode(false);
+        b.Property(x => x.Kind).AsString();
+        b.Property(x => x.CreatedAt);
+        b.Property(x => x.Active);
+        // Unique across every tenant: the index is not tenant-filtered, which is the point.
+        b.HasIndex(x => x.Token).IsUnique();
+        b.HasOne<Horse>().WithMany().HasForeignKey(x => x.HorseId).OnDelete(DeleteBehavior.Restrict);
+        b.HasOne<Event>().WithMany().HasForeignKey(x => x.EventId).OnDelete(DeleteBehavior.Restrict);
+        b.HasOne<StreamItem>().WithMany().HasForeignKey(x => x.StreamItemId).OnDelete(DeleteBehavior.Restrict);
+        b.HasOne<Party>().WithMany().HasForeignKey(x => x.PartyId).OnDelete(DeleteBehavior.Restrict);
     }
 }
 

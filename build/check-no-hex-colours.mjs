@@ -16,6 +16,7 @@ const skipDirectories = new Set(['.git', 'bin', 'obj', 'node_modules']);
 const generated = new Set([
   'src/Paddockside.Design/wwwroot/tokens.css',
   'src/Paddockside.Web/wwwroot/css/app.css', // Tailwind output, built from tokens by dotnet build
+  'src/Paddockside.Infrastructure/Email/EmailTokens.g.cs', // email colours, generated from tokens.json
 ]);
 
 // #rgb, #rgba, #rrggbb or #rrggbbaa as a whole word, not an HTML entity like &#160;.

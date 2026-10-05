@@ -24,7 +24,7 @@
   <Target Name="GenerateDesignTokens"
           BeforeTargets="BeforeBuild"
           Inputs="tokens.json;build\tokens.mjs"
-          Outputs="wwwroot\tokens.css;tailwind.config.js">
+          Outputs="wwwroot\tokens.css;tailwind.config.js;..\Paddockside.Infrastructure\Email\EmailTokens.g.cs">
     <Exec Command="node build/tokens.mjs" WorkingDirectory="$(MSBuildProjectDirectory)" />
   </Target>
 
