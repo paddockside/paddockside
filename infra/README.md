@@ -47,6 +47,24 @@ Expected total: **about $20–25 a month**, nearly all of it the App Service pla
 the plan and web app (`az webapp delete`, `az appservice plan delete`) and redeploy later; or scale the plan
 to F1 (free, but no Always On and no custom domains).
 
+## DNS zone (`dns.bicep`)
+
+The public zone `paddockside.com.au` lives in `rg-paddockside-dev`, deployed separately from the environment:
+
+```
+az deployment group create --resource-group rg-paddockside-dev --template-file infra/dns.bicep
+```
+
+It holds a copy of the records at Crazy Domains as of 6 Oct 2026: the website A records (apex and www),
+Titan email (MX, SPF, DKIM `titan1._domainkey`) and Microsoft's domain-verification TXT and MX. Each answer was
+checked against Crazy Domains' nameserver and matches exactly.
+
+**It is not live yet.** Crazy Domains is still the domain's nameserver, so changes here affect nobody until the
+nameservers at Crazy Domains are switched to `ns1-07.azure-dns.com`, `ns2-07.azure-dns.net`,
+`ns3-07.azure-dns.org` and `ns4-07.azure-dns.info`. Edit DNS in `dns.bicep` (and redeploy), not in the portal,
+so the file stays the record of truth. Cost: about AUD 0.80 a month for the zone, plus fractions of a cent per
+million queries once live.
+
 ## Local access to the Azure database
 
 Your public IP must be in the SQL firewall (home IPs change):
