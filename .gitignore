@@ -487,3 +487,7 @@ $RECYCLE.BIN/
 # Local environment/secrets files
 .env
 .env.*
+
+# Built by dotnet build of Paddockside.Web (Tailwind and self-hosted Figtree)
+src/Paddockside.Web/wwwroot/css/app.css
+src/Paddockside.Web/wwwroot/fonts/

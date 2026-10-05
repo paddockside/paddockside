@@ -5,53 +5,53 @@
 
 <PageTitle>Sign in · Paddockside</PageTitle>
 
-<div class="sign-in ps-card">
+<div class="card mx-auto grid max-w-md gap-4">
     @switch (_step)
     {
         case Step.Password:
             <h1>Staff sign in</h1>
-            <p class="ps-muted">Owners do not need to sign in here. Use the link in any message we send you.</p>
-            <EditForm Model="_form" OnValidSubmit="SubmitPassword" FormName="password" class="ps-stack">
-                <div class="ps-field">
-                    <label class="ps-field__label" for="email">Email</label>
-                    <InputText id="email" class="ps-input" type="email" autocomplete="username" @bind-Value="_form.Email" required />
+            <p class="text-text-muted">Owners do not need to sign in here. Use the link in any message we send you.</p>
+            <EditForm Model="_form" OnValidSubmit="SubmitPassword" FormName="password" class="grid gap-4">
+                <div class="field">
+                    <label class="field-label" for="email">Email</label>
+                    <InputText id="email" class="input" type="email" autocomplete="username" @bind-Value="_form.Email" required />
                 </div>
-                <div class="ps-field">
-                    <label class="ps-field__label" for="password">Password</label>
-                    <InputText id="password" class="ps-input" type="password" autocomplete="current-password" @bind-Value="_form.Password" required />
+                <div class="field">
+                    <label class="field-label" for="password">Password</label>
+                    <InputText id="password" class="input" type="password" autocomplete="current-password" @bind-Value="_form.Password" required />
                 </div>
                 <Error Message="@_error" />
-                <button type="submit" class="ps-button ps-button--primary ps-button--full" disabled="@_busy">Continue</button>
+                <button type="submit" class="btn-primary w-full" disabled="@_busy">Continue</button>
             </EditForm>
             break;
 
         case Step.AuthenticatorCode:
             <h1>Enter your code</h1>
             <p>Open your authenticator app and type the 6-digit code shown for Paddockside.</p>
-            <EditForm Model="_form" OnValidSubmit="SubmitCode" FormName="totp" class="ps-stack">
-                <div class="ps-field">
-                    <label class="ps-field__label" for="code">6-digit code</label>
-                    <InputText id="code" class="ps-input ps-input--code" inputmode="numeric" autocomplete="one-time-code" maxlength="7" @bind-Value="_form.Code" required />
+            <EditForm Model="_form" OnValidSubmit="SubmitCode" FormName="totp" class="grid gap-4">
+                <div class="field">
+                    <label class="field-label" for="code">6-digit code</label>
+                    <InputText id="code" class="input-code" inputmode="numeric" autocomplete="one-time-code" maxlength="7" @bind-Value="_form.Code" required />
                 </div>
                 <Error Message="@_error" />
-                <button type="submit" class="ps-button ps-button--primary ps-button--full" disabled="@_busy">Sign in</button>
+                <button type="submit" class="btn-primary w-full" disabled="@_busy">Sign in</button>
             </EditForm>
-            <button type="button" class="ps-button ps-button--link" @onclick="() => Go(Step.RecoveryCode)">I can't use my authenticator app</button>
+            <button type="button" class="btn-link" @onclick="() => Go(Step.RecoveryCode)">I can't use my authenticator app</button>
             break;
 
         case Step.RecoveryCode:
             <h1>Use a recovery code</h1>
             <p>Type one of the recovery codes you saved when you set up your authenticator. Each code works once.</p>
-            <EditForm Model="_form" OnValidSubmit="SubmitRecoveryCode" FormName="recovery" class="ps-stack">
-                <div class="ps-field">
-                    <label class="ps-field__label" for="recovery">Recovery code</label>
-                    <InputText id="recovery" class="ps-input ps-input--code" autocomplete="off" @bind-Value="_form.Code" required />
+            <EditForm Model="_form" OnValidSubmit="SubmitRecoveryCode" FormName="recovery" class="grid gap-4">
+                <div class="field">
+                    <label class="field-label" for="recovery">Recovery code</label>
+                    <InputText id="recovery" class="input-code" autocomplete="off" @bind-Value="_form.Code" required />
                 </div>
                 <Error Message="@_error" />
-                <button type="submit" class="ps-button ps-button--primary ps-button--full" disabled="@_busy">Sign in</button>
+                <button type="submit" class="btn-primary w-full" disabled="@_busy">Sign in</button>
             </EditForm>
-            <button type="button" class="ps-button ps-button--link" @onclick="() => Go(Step.AuthenticatorCode)">Use my authenticator app instead</button>
-            <p class="ps-muted">No codes left? Ask your tenant admin to reset your second step.</p>
+            <button type="button" class="btn-link" @onclick="() => Go(Step.AuthenticatorCode)">Use my authenticator app instead</button>
+            <p class="text-text-muted">No codes left? Ask your tenant admin to reset your second step.</p>
             break;
 
         case Step.Enrol:
@@ -60,25 +60,25 @@
             @if (_enrolment is null)
             {
                 <Error Message="@_error" />
-                <p class="ps-muted" role="status">Preparing…</p>
+                <p class="text-text-muted" role="status">Preparing…</p>
             }
             else
             {
-                <ol class="sign-in__steps">
+                <ol class="grid list-decimal gap-4 pl-6 marker:font-heading">
                     <li>Install an authenticator app on your phone, such as Microsoft Authenticator or Google Authenticator.</li>
                     <li>In the app, choose to add an account, then scan this code.
-                        <img class="sign-in__qr" src="data:image/png;base64,@_enrolment.QrCodePng" alt="QR code for adding Paddockside to your authenticator app" />
-                        <span class="ps-field__hint">Can't scan it? Choose "enter a key" in the app and type: <strong class="sign-in__key">@_enrolment.SharedKey</strong></span>
+                        <img class="my-3 block size-[12rem] rounded-control bg-surface-qr p-2 [image-rendering:pixelated]" src="data:image/png;base64,@_enrolment.QrCodePng" alt="QR code for adding Paddockside to your authenticator app" />
+                        <span class="field-hint block">Can't scan it? Choose "enter a key" in the app and type: <strong class="break-all tracking-wide tabular-nums">@_enrolment.SharedKey</strong></span>
                     </li>
                     <li>Type the 6-digit code the app now shows.</li>
                 </ol>
-                <EditForm Model="_form" OnValidSubmit="SubmitEnrolment" FormName="enrol" class="ps-stack">
-                    <div class="ps-field">
-                        <label class="ps-field__label" for="enrol-code">6-digit code</label>
-                        <InputText id="enrol-code" class="ps-input ps-input--code" inputmode="numeric" autocomplete="one-time-code" maxlength="7" @bind-Value="_form.Code" required />
+                <EditForm Model="_form" OnValidSubmit="SubmitEnrolment" FormName="enrol" class="grid gap-4">
+                    <div class="field">
+                        <label class="field-label" for="enrol-code">6-digit code</label>
+                        <InputText id="enrol-code" class="input-code" inputmode="numeric" autocomplete="one-time-code" maxlength="7" @bind-Value="_form.Code" required />
                     </div>
                     <Error Message="@_error" />
-                    <button type="submit" class="ps-button ps-button--primary ps-button--full" disabled="@_busy">Finish setting up</button>
+                    <button type="submit" class="btn-primary w-full" disabled="@_busy">Finish setting up</button>
                 </EditForm>
             }
             break;
@@ -86,13 +86,13 @@
         case Step.SaveRecoveryCodes:
             <h1>Save your recovery codes</h1>
             <p>If you lose your phone, each of these codes lets you sign in once. Print them or keep them somewhere safe. You will not see them again.</p>
-            <ul class="sign-in__codes">
+            <ul class="grid list-none grid-cols-2 gap-x-6 gap-y-2 rounded-control bg-surface-sunken p-4 text-title tabular-nums">
                 @foreach (var recoveryCode in _recoveryCodes)
                 {
                     <li>@recoveryCode</li>
                 }
             </ul>
-            <button type="button" class="ps-button ps-button--primary ps-button--full" @onclick="Finish">I have saved them, continue</button>
+            <button type="button" class="btn-primary w-full" @onclick="Finish">I have saved them, continue</button>
             break;
     }
 </div>

@@ -3,7 +3,15 @@
 
 /** @type {import('tailwindcss').Config} */
 module.exports = {
-  content: ['./**/*.{razor,html,cs}', '../Paddockside.Web/**/*.{razor,html,cs}'],
+  // Paths are relative to this file. Source folders only, never bin/ or obj/.
+  content: {
+    relative: true,
+    files: [
+      '../Paddockside.Web/{Layout,Pages,Shared}/**/*.{razor,cs}',
+      '../Paddockside.Web/App.razor',
+      '../Paddockside.Web/wwwroot/index.html',
+    ],
+  },
   darkMode: ['selector', '[data-theme="dark"]'],
   theme: {
     "colors": {
@@ -12,7 +20,8 @@ module.exports = {
       "surface": {
         "default": "var(--color-surface-default)",
         "raised": "var(--color-surface-raised)",
-        "sunken": "var(--color-surface-sunken)"
+        "sunken": "var(--color-surface-sunken)",
+        "qr": "var(--color-surface-qr)"
       },
       "text": {
         "primary": "var(--color-text-primary)",
@@ -176,6 +185,14 @@ module.exports = {
     "transitionDuration": {
       "fast": "var(--motion-fast)",
       "base": "var(--motion-base)"
+    },
+    "outlineColor": {
+      "DEFAULT": "var(--color-focus-ring)",
+      "focus": "var(--color-focus-ring)"
+    },
+    "ringColor": {
+      "DEFAULT": "var(--color-focus-ring)",
+      "focus": "var(--color-focus-ring)"
     },
     "extend": {
       "minHeight": {

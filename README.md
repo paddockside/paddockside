@@ -29,9 +29,15 @@ Colours, type and spacing are defined only in `src/Paddockside.Design/tokens.jso
 node src/Paddockside.Design/build/tokens.mjs
 ```
 
-This checks contrast and regenerates `wwwroot/tokens.css` and `tailwind.config.js`. CI fails if the
-generated files are stale or if a hex colour appears in any `.razor`, `.css` or `.cs` file
-(`node build/check-no-hex-colours.mjs`).
+This checks contrast and regenerates `wwwroot/tokens.css` and `tailwind.config.js`; `dotnet build` also runs it
+whenever `tokens.json` changes, so neither file is ever edited by hand. CI fails if the generated files are
+stale or if a hex colour appears in any `.razor`, `.css` or `.cs` file (`node build/check-no-hex-colours.mjs`).
+
+Styling is Tailwind 3, built by `dotnet build` of `Paddockside.Web`: it runs `npm ci` when the lockfile
+changes, then builds `wwwroot/css/app.css` from `Styles/app.css` with the generated config, and copies the
+self-hosted Figtree font into `wwwroot/fonts`. Both are build output and git-ignored. Every colour class is a
+CSS variable, so light and dark need no `dark:` variants. Use the theme's classes (`bg-surface-raised`,
+`text-text-muted`, `btn-primary`, …); Tailwind's default palette does not exist here.
 
 ## Tests
 

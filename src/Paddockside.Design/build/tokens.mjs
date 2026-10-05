@@ -164,6 +164,9 @@ const theme = {
   borderRadius: { none: '0', ...flat('radius') },
   boxShadow: { none: 'none', ...flat('elevation') },
   transitionDuration: flat('motion'),
+  // Outlines and rings default to the focus token rather than a Tailwind colour.
+  outlineColor: { DEFAULT: 'var(--color-focus-ring)', focus: 'var(--color-focus-ring)' },
+  ringColor: { DEFAULT: 'var(--color-focus-ring)', focus: 'var(--color-focus-ring)' },
   extend: {
     minHeight: { control: 'var(--control-height)' },
     height: { control: 'var(--control-height)' },
@@ -177,7 +180,15 @@ const tailwind = `// ${header}
 
 /** @type {import('tailwindcss').Config} */
 module.exports = {
-  content: ['./**/*.{razor,html,cs}', '../Paddockside.Web/**/*.{razor,html,cs}'],
+  // Paths are relative to this file. Source folders only, never bin/ or obj/.
+  content: {
+    relative: true,
+    files: [
+      '../Paddockside.Web/{Layout,Pages,Shared}/**/*.{razor,cs}',
+      '../Paddockside.Web/App.razor',
+      '../Paddockside.Web/wwwroot/index.html',
+    ],
+  },
   darkMode: ['selector', '[data-theme="dark"]'],
   theme: ${JSON.stringify(theme, null, 2).replace(/\n/g, '\n  ')},
 };

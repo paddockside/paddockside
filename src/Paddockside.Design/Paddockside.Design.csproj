@@ -4,7 +4,6 @@
     <TargetFramework>net9.0</TargetFramework>
   </PropertyGroup>
 
-
   <ItemGroup>
     <SupportedPlatform Include="browser" />
   </ItemGroup>
@@ -12,5 +11,21 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.Components.Web" Version="9.0.20" />
   </ItemGroup>
+
+  <!--
+    tokens.json is the only source of colour, type and spacing (design-system.md §3). Every build regenerates
+    wwwroot/tokens.css and tailwind.config.js from it when it has changed, so neither is ever hand-edited.
+    Needs Node on the PATH.
+  -->
+  <ItemGroup>
+    <None Include="tokens.json;build\**\*.mjs;tailwind.config.js" Pack="false" />
+  </ItemGroup>
+
+  <Target Name="GenerateDesignTokens"
+          BeforeTargets="BeforeBuild"
+          Inputs="tokens.json;build\tokens.mjs"
+          Outputs="wwwroot\tokens.css;tailwind.config.js">
+    <Exec Command="node build/tokens.mjs" WorkingDirectory="$(MSBuildProjectDirectory)" />
+  </Target>
 
 </Project>

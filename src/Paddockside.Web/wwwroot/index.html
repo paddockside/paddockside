@@ -7,13 +7,9 @@
     <meta name="color-scheme" content="light dark" />
     <title>Paddockside</title>
     <base href="/" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&display=swap" />
+    <link rel="preload" href="fonts/figtree-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="stylesheet" href="_content/Paddockside.Design/tokens.css" />
-    <link rel="stylesheet" href="_content/Paddockside.Design/base.css" />
     <link rel="stylesheet" href="css/app.css" />
-    <link rel="stylesheet" href="Paddockside.Web.styles.css" />
     <link rel="icon" type="image/png" href="favicon.png" />
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="apple-touch-icon" sizes="512x512" href="icon-512.png" />
@@ -22,7 +18,7 @@
 
 <body>
     <div id="app">
-        <p class="app-loading" role="status">Loading Paddockside…</p>
+        <p class="p-8 text-center text-text-muted" role="status">Loading Paddockside…</p>
     </div>
 
     <div id="blazor-error-ui" role="alert">

@@ -5,59 +5,65 @@
 
 <PageTitle>Horses · Paddockside</PageTitle>
 
-<div class="ps-stack">
+<div class="grid gap-4">
     <h1>Horses</h1>
 
     @if (_error is not null)
     {
-        <p class="ps-alert ps-alert--danger" role="alert">@_error</p>
+        <Error Message="@_error" />
     }
     else if (_horses is null)
     {
-        <p class="ps-muted" role="status">Loading horses…</p>
+        <p class="text-text-muted" role="status">Loading horses…</p>
     }
     else if (_horses.Count == 0)
     {
-        <div class="ps-card">
+        <div class="card">
             <p>No horses yet. Horses you add or import will appear here.</p>
         </div>
     }
     else
     {
-        <div class="ps-card">
-            <table class="ps-table">
-                <caption class="ps-visually-hidden">The horses @Session.Current?.TenantName manages or has managed</caption>
-                <thead>
-                    <tr>
-                        <th scope="col">Name</th>
-                        <th scope="col">Status</th>
-                        <th scope="col">Managed since</th>
-                        <th scope="col">Current owners</th>
+        <div class="card">
+            @* On a phone each row becomes a stacked block, with the column name before each value. *@
+            <table class="w-full border-collapse tabular-nums">
+                <caption class="sr-only">The horses @Session.Current?.TenantName manages or has managed</caption>
+                <thead class="hidden sm:table-header-group">
+                    <tr class="border-b border-border-subtle text-left text-small font-strong text-text-muted">
+                        <th scope="col" class="px-4 py-3">Name</th>
+                        <th scope="col" class="px-4 py-3">Status</th>
+                        <th scope="col" class="px-4 py-3">Managed since</th>
+                        <th scope="col" class="px-4 py-3">Current owners</th>
                     </tr>
                 </thead>
                 <tbody>
                     @foreach (var horse in _horses)
                     {
-                        <tr>
-                            <td class="horse-name">@horse.Name</td>
-                            <td data-label="Status">
+                        <tr class="grid gap-1 border-b border-border-subtle py-3 last:border-b-0 sm:table-row sm:py-0">
+                            <td class="px-2 font-strong sm:px-4 sm:py-3">@horse.Name</td>
+                            <td class="px-2 sm:px-4 sm:py-3">
+                                <span class="text-text-muted sm:hidden">Status: </span>
                                 @if (horse.Managed)
                                 {
-                                    <span class="ps-badge ps-badge--success">Managed</span>
+                                    <span class="badge bg-status-success-bg text-status-success-fg">Managed</span>
                                 }
                                 else
                                 {
-                                    <span class="ps-badge ps-badge--neutral">No longer managed</span>
+                                    <span class="badge bg-action-secondary-bg text-text-muted">No longer managed</span>
                                 }
                             </td>
-                            <td data-label="Managed since">@(horse.ManagedSince?.ToString("d MMMM yyyy") ?? "—")</td>
-                            <td data-label="Current owners">@horse.CurrentOwners</td>
+                            <td class="px-2 sm:px-4 sm:py-3">
+                                <span class="text-text-muted sm:hidden">Managed since: </span>@(horse.ManagedSince?.ToString("d MMMM yyyy") ?? "—")
+                            </td>
+                            <td class="px-2 sm:px-4 sm:py-3">
+                                <span class="text-text-muted sm:hidden">Current owners: </span>@horse.CurrentOwners
+                            </td>
                         </tr>
                     }
                 </tbody>
             </table>
         </div>
-        <p class="ps-muted">@_horses.Count(h => h.Managed) managed now, @_horses.Count in all.</p>
+        <p class="text-text-muted">@_horses.Count(h => h.Managed) managed now, @_horses.Count in all.</p>
     }
 </div>
 

@@ -18,4 +18,50 @@
     <ProjectReference Include="..\Paddockside.Design\Paddockside.Design.csproj" />
   </ItemGroup>
 
+  <!--
+    Styles: Tailwind builds wwwroot/css/app.css from Styles/app.css with the theme generated from
+    Paddockside.Design/tokens.json (Paddockside.Design regenerates tailwind.config.js before this project builds).
+    Figtree is self-hosted from npm into wwwroot/fonts. Both outputs are build artefacts, git-ignored.
+    Needs Node and npm on the PATH.
+  -->
+  <PropertyGroup>
+    <DesignProjectDir>$(MSBuildProjectDirectory)\..\Paddockside.Design\</DesignProjectDir>
+    <TailwindOutput>wwwroot\css\app.css</TailwindOutput>
+    <FigtreeFiles>node_modules\@fontsource-variable\figtree\files</FigtreeFiles>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="Styles\**;package.json;package-lock.json" />
+    <TailwindInputs Include="Styles\**\*.css;Layout\**\*.razor;Pages\**\*.razor;Shared\**\*.razor;App.razor;wwwroot\index.html" />
+    <TailwindInputs Include="$(DesignProjectDir)tailwind.config.js;$(DesignProjectDir)tokens.json" />
+  </ItemGroup>
+
+  <Target Name="RestoreStyleTools"
+          BeforeTargets="BeforeBuild"
+          Inputs="package.json;package-lock.json"
+          Outputs="node_modules\.package-lock.json">
+    <Exec Command="npm ci --no-audit --no-fund" WorkingDirectory="$(MSBuildProjectDirectory)" />
+  </Target>
+
+  <Target Name="CopyFigtree" AfterTargets="RestoreStyleTools" BeforeTargets="BeforeBuild">
+    <Copy SourceFiles="$(FigtreeFiles)\figtree-latin-wght-normal.woff2;$(FigtreeFiles)\figtree-latin-ext-wght-normal.woff2"
+          DestinationFolder="wwwroot\fonts"
+          SkipUnchangedFiles="true" />
+  </Target>
+
+  <Target Name="BuildTailwind"
+          AfterTargets="CopyFigtree"
+          BeforeTargets="BeforeBuild"
+          Inputs="@(TailwindInputs)"
+          Outputs="$(TailwindOutput)">
+    <Exec Command="npm run --silent build:css" WorkingDirectory="$(MSBuildProjectDirectory)" />
+  </Target>
+
+  <!-- On a clean checkout these files did not exist when the project was evaluated; register them now. -->
+  <Target Name="IncludeGeneratedStyles" AfterTargets="BuildTailwind" BeforeTargets="BeforeBuild">
+    <ItemGroup>
+      <Content Include="$(TailwindOutput);wwwroot\fonts\*.woff2" Exclude="@(Content)" />
+    </ItemGroup>
+  </Target>
+
 </Project>

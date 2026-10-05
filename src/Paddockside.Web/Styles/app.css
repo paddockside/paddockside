@@ -1,0 +1,134 @@
+/*
+  Tailwind input. Built to wwwroot/css/app.css by `dotnet build` (see Paddockside.Web.csproj) with the theme
+  generated from Paddockside.Design/tokens.json. Use the theme's classes or var(--...) only: literal colours
+  fail CI, and Tailwind's own palette does not exist here.
+
+  Light and dark need no `dark:` variants: every colour class resolves to a CSS variable from
+  _content/Paddockside.Design/tokens.css, which switches with the system setting or [data-theme].
+*/
+
+/* Figtree, self-hosted (OFL-1.1, via @fontsource-variable/figtree; copied to wwwroot/fonts at build).
+   font-display: swap shows the system fallback from --font-ui at once, then swaps when Figtree arrives. */
+@font-face {
+  font-family: 'Figtree';
+  font-style: normal;
+  font-weight: 300 900;
+  font-display: swap;
+  src: url('../fonts/figtree-latin-wght-normal.woff2') format('woff2-variations');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
+    U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: 'Figtree';
+  font-style: normal;
+  font-weight: 300 900;
+  font-display: swap;
+  src: url('../fonts/figtree-latin-ext-wght-normal.woff2') format('woff2-variations');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329,
+    U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    @apply bg-surface-sunken font-ui text-body text-text-primary;
+  }
+
+  h1 {
+    @apply text-heading font-heading;
+  }
+
+  h2 {
+    @apply text-title font-heading;
+  }
+
+  ::placeholder {
+    color: var(--color-text-muted);
+    opacity: 1;
+  }
+
+  :focus-visible {
+    @apply outline outline-[3px] outline-offset-2 outline-focus;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      transition: none !important;
+      animation: none !important;
+    }
+  }
+}
+
+/* The few components used on more than one screen (design-system.md §2.4). Everything else is utilities. */
+@layer components {
+  .btn {
+    @apply inline-flex min-h-control items-center justify-center gap-2 whitespace-nowrap rounded-control px-6
+      font-strong transition-colors duration-fast ease-out disabled:cursor-progress disabled:opacity-70;
+  }
+
+  .btn-primary {
+    @apply btn bg-action-primary-bg text-action-primary-fg hover:bg-action-primary-bg-hover;
+  }
+
+  .btn-secondary {
+    @apply btn bg-action-secondary-bg text-action-secondary-fg hover:bg-action-secondary-bg-hover;
+  }
+
+  .btn-link {
+    @apply inline-flex min-h-control items-center font-medium text-text-primary underline underline-offset-4;
+  }
+
+  .field {
+    @apply grid gap-2;
+  }
+
+  .field-label {
+    @apply font-strong;
+  }
+
+  .field-hint {
+    @apply text-small text-text-muted;
+  }
+
+  .input {
+    @apply min-h-control w-full rounded-control border border-border-strong bg-surface-default px-4
+      text-text-primary;
+  }
+
+  .input-code {
+    @apply input text-title tracking-[0.2em] tabular-nums;
+  }
+
+  .card {
+    @apply rounded-card border border-border-subtle bg-surface-raised p-card shadow-raised;
+  }
+
+  .alert-danger {
+    @apply rounded-control border-l-4 border-current bg-status-danger-bg px-4 py-3 text-status-danger-fg;
+  }
+
+  .badge {
+    @apply inline-block rounded-pill px-3 text-small font-medium;
+  }
+}
+
+/* Blazor's built-in error banner and validation message. */
+#blazor-error-ui {
+  @apply fixed inset-x-0 bottom-0 z-50 hidden bg-status-danger-bg px-6 py-4 text-status-danger-fg shadow-overlay;
+}
+
+#blazor-error-ui .reload {
+  @apply ml-4 font-strong text-current;
+}
+
+.validation-message {
+  @apply text-status-danger-fg;
+}

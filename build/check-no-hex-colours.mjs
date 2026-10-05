@@ -13,7 +13,10 @@ const extensions = new Set(['.razor', '.css', '.cs']);
 const skipDirectories = new Set(['.git', 'bin', 'obj', 'node_modules']);
 
 // The only files allowed to contain hex colours: generated from tokens.json.
-const generated = new Set(['src/Paddockside.Design/wwwroot/tokens.css']);
+const generated = new Set([
+  'src/Paddockside.Design/wwwroot/tokens.css',
+  'src/Paddockside.Web/wwwroot/css/app.css', // Tailwind output, built from tokens by dotnet build
+]);
 
 // #rgb, #rgba, #rrggbb or #rrggbbaa as a whole word, not an HTML entity like &#160;.
 const hexColour = /(?<![&\w])#(?:[0-9a-f]{8}|[0-9a-f]{6}|[0-9a-f]{4}|[0-9a-f]{3})\b/gi;
