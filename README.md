@@ -2,7 +2,15 @@ Paddockside — owner-communication platform for the thoroughbred industry. See 
 
 ## Running it locally
 
-Needs the .NET 9 SDK, Node 22+ and SQL Server LocalDB (installed with Visual Studio).
+Needs the .NET 9 SDK, Node 22+ and SQL Server LocalDB 2025 (installed with Visual Studio 2026).
+
+The app and the isolation tests use their own LocalDB instance, `(localdb)\Paddockside`. Create it once per
+machine with the **2025** tool (the SQL driver always uses the newest LocalDB installed, and it cannot start
+instances created by an older one, which is what broke the shared `MSSQLLocalDB` here):
+
+```
+"C:\Program Files\Microsoft SQL Server\170\Tools\Binn\SqlLocalDB.exe" create Paddockside -s
+```
 
 ```
 dotnet run --project src/Paddockside.Api --launch-profile https

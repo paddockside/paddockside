@@ -15,7 +15,7 @@ namespace Paddockside.Isolation.Tests;
 /// </summary>
 public sealed class IsolationDatabase : IAsyncLifetime
 {
-    private const string LocalDb = "Server=(localdb)\\MSSQLLocalDB;Integrated Security=true;TrustServerCertificate=true";
+    private const string LocalDb = "Server=(localdb)\\Paddockside;Integrated Security=true;TrustServerCertificate=true";
 
     public string ConnectionString { get; }
 

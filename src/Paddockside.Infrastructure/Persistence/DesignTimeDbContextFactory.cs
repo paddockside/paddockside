@@ -13,7 +13,7 @@ internal sealed class DesignTimeDbContextFactory : IDesignTimeDbContextFactory<P
     public PaddocksideDbContext CreateDbContext(string[] args)
     {
         var options = new DbContextOptionsBuilder<PaddocksideDbContext>()
-            .UseSqlServer("Server=(localdb)\\MSSQLLocalDB;Database=Paddockside;Integrated Security=true;TrustServerCertificate=true")
+            .UseSqlServer("Server=(localdb)\\Paddockside;Database=Paddockside;Integrated Security=true;TrustServerCertificate=true")
             .Options;
         return new PaddocksideDbContext(options, new NoTenant());
     }

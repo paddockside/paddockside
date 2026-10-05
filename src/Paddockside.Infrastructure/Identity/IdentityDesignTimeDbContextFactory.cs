@@ -8,6 +8,6 @@ internal sealed class IdentityDesignTimeDbContextFactory : IDesignTimeDbContextF
 {
     public PaddocksideIdentityDbContext CreateDbContext(string[] args) =>
         new(new DbContextOptionsBuilder<PaddocksideIdentityDbContext>()
-            .UseSqlServer("Server=(localdb)\\MSSQLLocalDB;Database=Paddockside;Integrated Security=true;TrustServerCertificate=true")
+            .UseSqlServer("Server=(localdb)\\Paddockside;Database=Paddockside;Integrated Security=true;TrustServerCertificate=true")
             .Options);
 }
