@@ -80,4 +80,17 @@ resource titanDkim 'Microsoft.Network/dnsZones/TXT@2018-05-01' = {
   }
 }
 
+// ---- Email (Postmark, transactional) -----------------------------------------------------------------
+
+// Return-Path for Postmark: bounces come back through pm-bounces.mail.paddockside.com.au, which aligns SPF for
+// DMARC. Added in Azure because Crazy Domains does not allow a CNAME at this name.
+resource postmarkReturnPath 'Microsoft.Network/dnsZones/CNAME@2018-05-01' = {
+  parent: zone
+  name: 'pm-bounces.mail'
+  properties: {
+    TTL: 300
+    CNAMERecord: { cname: 'pm.mtasv.net' }
+  }
+}
+
 output nameServers array = zone.properties.nameServers

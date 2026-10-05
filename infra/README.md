@@ -56,7 +56,8 @@ az deployment group create --resource-group rg-paddockside-dev --template-file i
 ```
 
 It holds a copy of the records at Crazy Domains as of 6 Oct 2026: the website A records (apex and www),
-Titan email (MX, SPF, DKIM `titan1._domainkey`) and Microsoft's domain-verification TXT and MX. Each answer was
+Titan email (MX, SPF, DKIM `titan1._domainkey`), Microsoft's domain-verification TXT and MX, and the Postmark
+Return-Path CNAME `pm-bounces.mail` → `pm.mtasv.net` (which Crazy Domains would not accept). Each answer was
 checked against Crazy Domains' nameserver and matches exactly.
 
 **It is not live yet.** Crazy Domains is still the domain's nameserver, so changes here affect nobody until the
