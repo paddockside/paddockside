@@ -74,8 +74,11 @@ public sealed class IsolationDatabase : IAsyncLifetime
         var personal = new StreamItem(horse, null, StreamItemKind.Message, StreamItemScope.NamedParties, StreamItemDirection.Outbound, bought.AddMonths(7), $"{name} personal", namedPartyIds: [ann.Id]);
         var note = new StreamItem(horse, raceStart, StreamItemKind.Note, StreamItemScope.Internal, StreamItemDirection.Internal, bought.AddMonths(6), $"{name} note");
 
+        var deliveries = Delivery.ForOwners(tenant, horse, update, DeliveryChannel.Email, bought.AddMonths(6));
+
         await using var context = ContextFor(tenant.Id);
         context.AddRange(tenant, ann, dee, eve, syndicate, external, horse, raceStart, update, personal, note);
+        context.AddRange(deliveries);
         await context.SaveChangesAsync();
 
         return new SeededTenant(tenant.Id, horse.Id, ann.Id, raceStart.Id, update.Id);

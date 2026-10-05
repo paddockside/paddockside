@@ -46,6 +46,20 @@ public sealed class ApiFactory(IsolationDatabase db) : WebApplicationFactory<Pro
         return (email, password);
     }
 
+    /// <summary>A browser signed in as a new staff member of the tenant, authenticator enrolled.</summary>
+    public async Task<HttpClient> SignedInAsync(Guid tenantId, MemberRole role)
+    {
+        var (email, password) = await CreatePersonAsync(tenantId, role);
+        var browser = Browser();
+        await browser.PostApiAsync("/api/auth/password", new { email, password });
+        var enrolment = await browser.GetFromJsonAsync<EnrolmentDetails>("/api/auth/enrolment");
+        var enrolled = await browser.PostApiAsync("/api/auth/enrolment", new { code = Totp.Code(Totp.SecretFrom(enrolment!.AuthenticatorUri)) });
+        enrolled.EnsureSuccessStatusCode();
+        return browser;
+    }
+
+    private sealed record EnrolmentDetails(string AuthenticatorUri);
+
     private sealed class FakeBreachedList : IBreachedPasswordList
     {
         public Task<bool> ContainsAsync(string password, CancellationToken cancellationToken = default) =>

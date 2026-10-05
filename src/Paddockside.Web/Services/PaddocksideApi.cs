@@ -14,6 +14,42 @@ public sealed record SessionInfo(string Email, string TenantName, string Role);
 
 public sealed record HorseSummary(Guid Id, string Name, bool Managed, DateTimeOffset? ManagedSince, int CurrentOwners);
 
+public sealed record HorseDetail(Guid Id, string Name, string? SexAge, string? Pedigree, bool Managed, string? ManagedSince, int CurrentOwners, string? NextKeyDate);
+
+public sealed record StepView(string Label, string State, string? Detail, bool ClientVisible);
+
+public sealed record EventSummary(Guid Id, string Type, string Title, string KeyDate, string Status, List<StepView> Steps, string LastActivity);
+
+public sealed record FieldView(string Label, string Value, string? Was);
+
+public sealed record ReplyView(string Author, string Channel, string At, string Body);
+
+public sealed record RecipientView(string Name, string Channel, string Status);
+
+public sealed record ItemView(
+    Guid Id,
+    string Kind,
+    string Scope,
+    string At,
+    string? Title,
+    string Body,
+    string? Author,
+    string? Step,
+    string? Source,
+    List<FieldView> Fields,
+    string? Correction,
+    string? Audience,
+    List<ReplyView> Replies,
+    List<RecipientView> Recipients);
+
+public sealed record OwnerOption(Guid Id, string Name);
+
+public sealed record EventPage(EventSummary Event, Guid HorseId, string HorseName, List<ItemView> Items, List<string> StepOptions, List<OwnerOption> Owners);
+
+public sealed record ComposeRequest(string Audience, string Scope, string? Step, string Channel, IReadOnlyList<Guid> NamedParties, string Body);
+
+public sealed record Posted(Guid Id, int Recipients);
+
 /// <summary>The outcome of a call: a value, or a message that can be shown to the person as it is.</summary>
 public sealed record ApiResult<T>(T? Value, string? Error, HttpStatusCode Status)
 {
@@ -42,6 +78,14 @@ public sealed class PaddocksideApi(HttpClient http)
     public Task<ApiResult<SessionInfo>> MeAsync() => GetAsync<SessionInfo>("api/auth/me");
 
     public Task<ApiResult<List<HorseSummary>>> HorsesAsync() => GetAsync<List<HorseSummary>>("api/horses");
+
+    public Task<ApiResult<HorseDetail>> HorseAsync(Guid id) => GetAsync<HorseDetail>($"api/horses/{id}");
+
+    public Task<ApiResult<List<EventSummary>>> HorseEventsAsync(Guid id) => GetAsync<List<EventSummary>>($"api/horses/{id}/events");
+
+    public Task<ApiResult<EventPage>> EventAsync(Guid id) => GetAsync<EventPage>($"api/events/{id}");
+
+    public Task<ApiResult<Posted>> PostToEventAsync(Guid id, ComposeRequest request) => PostAsync<Posted>($"api/events/{id}/items", request);
 
     private async Task<ApiResult<T>> GetAsync<T>(string path)
     {
@@ -85,6 +129,7 @@ public sealed class PaddocksideApi(HttpClient http)
             HttpStatusCode.TooManyRequests => "Too many attempts. Wait a minute, then try again.",
             HttpStatusCode.Unauthorized => "Please sign in.",
             HttpStatusCode.Forbidden => "Your account does not have access to this.",
+            HttpStatusCode.NotFound => "That could not be found. It may have been removed, or the link is wrong.",
             _ => "Something went wrong. Try again in a moment.",
         };
         return new ApiResult<T>(default, message, response.StatusCode);

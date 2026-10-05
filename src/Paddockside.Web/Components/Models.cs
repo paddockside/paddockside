@@ -126,11 +126,15 @@ public enum Channel
     PortalOnly,
 }
 
+/// <summary>A party offered in the compose box (a current owner).</summary>
+public sealed record PartyOption(string Id, string Name);
+
 public sealed record ComposeDraft(
     Audience Audience,
     Scope Scope,
     string? Step,
     Channel Channel,
+    /// <summary>Ids of the chosen parties (from <see cref="PartyOption.Id"/>).</summary>
     IReadOnlyList<string> NamedParties,
     string Body);
 

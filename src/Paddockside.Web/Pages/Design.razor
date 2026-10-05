@@ -82,7 +82,7 @@
                 <p>
                     To <strong>@_lastDraft.Audience</strong> · visible to <ScopeMark Scope="_lastDraft.Scope" />
                     @(_lastDraft.Step is null ? "" : $" · step {_lastDraft.Step}") · by @_lastDraft.Channel
-                    @(_lastDraft.NamedParties.Count > 0 ? $" · {string.Join(", ", _lastDraft.NamedParties)}" : "")
+                    @(_lastDraft.NamedParties.Count > 0 ? $" · {string.Join(", ", AutumnRidge.Owners.Where(o => _lastDraft.NamedParties.Contains(o.Id)).Select(o => o.Name))}" : "")
                 </p>
                 <p class="whitespace-pre-line text-text-muted">@_lastDraft.Body</p>
             </div>

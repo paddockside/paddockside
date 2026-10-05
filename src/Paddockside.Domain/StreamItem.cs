@@ -117,4 +117,117 @@ public sealed class StreamItem
 
     /// <summary>The expected step this item satisfies, if any.</summary>
     public string? StepCode { get; }
+
+    /// <summary>A short heading: a fact's label ("Acceptance") or a message's subject.</summary>
+    public string? Title { get; private set; }
+
+    /// <summary>Who wrote it, as shown at the time; staff are people, not parties, so the name is kept here.</summary>
+    public string? AuthorName { get; private set; }
+
+    /// <summary>Facts: the source system ("Racing NSW").</summary>
+    public string? Source { get; private set; }
+
+    /// <summary>Facts: the structured values.</summary>
+    public IReadOnlyList<FactField> Fields { get; private set; } = [];
+
+    /// <summary>Facts: the earlier version this one corrects. Corrections supersede, never overwrite (data-model.md §3).</summary>
+    public Guid? SupersedesId { get; private set; }
+
+    /// <summary>Facts: why the source corrected it, when it says.</summary>
+    public string? CorrectionNote { get; private set; }
+
+    /// <summary>Replies: the message this answers.</summary>
+    public Guid? InReplyToId { get; private set; }
+
+    /// <summary>How it arrived or went: email, text message, portal.</summary>
+    public string? Channel { get; private set; }
+
+    /// <summary>Data from a source system, shown as a structured card.</summary>
+    public static StreamItem Fact(
+        Horse horse,
+        Event? @event,
+        string label,
+        string source,
+        IEnumerable<FactField> fields,
+        DateTimeOffset receivedAt,
+        StreamItemScope scope = StreamItemScope.Owners,
+        string? stepCode = null)
+    {
+        var fieldList = fields.ToList();
+        if (fieldList.Count == 0) throw new DomainException("A fact needs at least one field.");
+        return new StreamItem(horse, @event, StreamItemKind.Fact, scope, StreamItemDirection.Inbound, receivedAt, label, stepCode: stepCode)
+        {
+            Title = label,
+            Source = source,
+            Fields = fieldList,
+        };
+    }
+
+    /// <summary>
+    /// A corrected version of this fact from its source. Returns a new item that supersedes this one; this item is
+    /// kept unchanged so the history stays answerable.
+    /// </summary>
+    public StreamItem Correct(Horse horse, Event? @event, IEnumerable<FactField> fields, DateTimeOffset receivedAt, string? note = null)
+    {
+        if (Kind != StreamItemKind.Fact) throw new DomainException("Only a fact can be corrected.");
+        if (horse.Id != HorseId || @event?.Id != EventId) throw new DomainException("A correction stays on the fact's own horse and event.");
+
+        var corrected = Fact(horse, @event, Title!, Source!, fields, receivedAt, Scope, StepCode);
+        corrected.SupersedesId = Id;
+        corrected.CorrectionNote = note;
+        return corrected;
+    }
+
+    /// <summary>An outbound message from staff to one audience class.</summary>
+    public static StreamItem Message(
+        Horse horse,
+        Event? @event,
+        string? subject,
+        string body,
+        StreamItemScope scope,
+        DateTimeOffset sentAt,
+        string authorName,
+        IEnumerable<Guid>? namedPartyIds = null,
+        string? stepCode = null)
+    {
+        if (string.IsNullOrWhiteSpace(body)) throw new DomainException("A message needs a body.");
+        if (scope == StreamItemScope.Internal) throw new DomainException("An internal item is a note, not a message.");
+        return new StreamItem(horse, @event, StreamItemKind.Message, scope, StreamItemDirection.Outbound, sentAt, body, namedPartyIds: namedPartyIds, stepCode: stepCode)
+        {
+            Title = subject,
+            AuthorName = authorName,
+        };
+    }
+
+    /// <summary>
+    /// A reply to this message. A reply from a party is visible to that party and staff only — owners never see
+    /// one another's replies (identity-access.md §5.1); a reply from nobody known stays internal.
+    /// </summary>
+    public StreamItem Reply(Horse horse, Event? @event, string authorName, Guid? authorPartyId, string channel, string body, DateTimeOffset receivedAt)
+    {
+        if (Kind != StreamItemKind.Message || InReplyToId is not null) throw new DomainException("Replies thread onto a message, not onto another reply.");
+        if (horse.Id != HorseId || @event?.Id != EventId) throw new DomainException("A reply stays on the message's own horse and event.");
+
+        var scope = authorPartyId is null ? StreamItemScope.Internal : StreamItemScope.NamedParties;
+        return new StreamItem(horse, @event, StreamItemKind.Message, scope, StreamItemDirection.Inbound, receivedAt, body,
+            authorPartyId: authorPartyId, namedPartyIds: authorPartyId is { } id ? [id] : null)
+        {
+            AuthorName = authorName,
+            InReplyToId = Id,
+            Channel = channel,
+        };
+    }
+
+    /// <summary>A staff-only note.</summary>
+    public static StreamItem Note(Horse horse, Event? @event, string body, DateTimeOffset at, string authorName, string? stepCode = null)
+    {
+        if (string.IsNullOrWhiteSpace(body)) throw new DomainException("A note needs a body.");
+        return new StreamItem(horse, @event, StreamItemKind.Note, StreamItemScope.Internal, StreamItemDirection.Internal, at, body, stepCode: stepCode)
+        {
+            AuthorName = authorName,
+        };
+    }
 }
+
+/// <summary>One labelled value on a fact ("Barrier", "9").</summary>
+public sealed record FactField(string Label, string Value);

@@ -1,0 +1,69 @@
+@page "/horses/{Id:guid}"
+@inject PaddocksideApi Api
+@inject SessionState Session
+@inject NavigationManager Navigation
+
+<PageTitle>@(_horse?.Name ?? "Horse") · Paddockside</PageTitle>
+
+@* The horse timeline (search-reporting.md §3): the horse, then every event, newest first. *@
+<div class="grid grid-cols-[minmax(0,1fr)] gap-6">
+    <a href="horses" class="btn-link justify-self-start">← All horses</a>
+
+    @if (_error is not null)
+    {
+        <Error Message="@_error" />
+    }
+    else if (_horse is null)
+    {
+        <p class="text-text-muted" role="status">Loading…</p>
+    }
+    else
+    {
+        <h1 class="sr-only">@_horse.Name</h1>
+        <HorseCard Model="_horse.ToCard()" />
+        <p class="text-text-muted">
+            @(_horse.Managed ? $"Managed since {_horse.ManagedSince}" : "No longer managed")
+            · @_horse.CurrentOwners current @(_horse.CurrentOwners == 1 ? "owner" : "owners")
+        </p>
+
+        <section class="grid grid-cols-[minmax(0,1fr)] gap-4" aria-labelledby="events-heading">
+            <h2 id="events-heading">Events</h2>
+            @if (_events is { Count: 0 })
+            {
+                <div class="card"><p>No events yet for @_horse.Name.</p></div>
+            }
+            else if (_events is not null)
+            {
+                @foreach (var e in _events)
+                {
+                    <EventCard Model='e.ToCard($"events/{e.Id}")' />
+                }
+            }
+        </section>
+    }
+</div>
+
+@code {
+    [Parameter] public Guid Id { get; set; }
+
+    private HorseDetail? _horse;
+    private List<EventSummary>? _events;
+    private string? _error;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (Session.Current is null && await Session.RefreshAsync() is null)
+        {
+            Navigation.NavigateTo("sign-in");
+            return;
+        }
+
+        var horse = await Api.HorseAsync(Id);
+        if (!horse.Succeeded) { _error = horse.Error; return; }
+        _horse = horse.Value;
+
+        var events = await Api.HorseEventsAsync(Id);
+        if (events.Succeeded) _events = events.Value;
+        else _error = events.Error;
+    }
+}

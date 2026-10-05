@@ -20,6 +20,11 @@ Then open https://localhost:7175. The first run creates a local database with a 
 login; the email and password are in `src/Paddockside.Api/appsettings.Development.json` under `DevSeed`.
 The first sign-in asks you to set up an authenticator app.
 
+What you can see: the horse list, each horse's timeline (its events with their stage strip), and each event's
+page (facts, corrections, messages with replies and delivery, staff notes, and the compose box). Posting from
+the compose box saves the item and queues it for the current owners; email sending arrives in Sprint 1.
+`/design` shows every component with sample data.
+
 To run against the Azure dev database instead of LocalDB, sign in with `az login` first, then:
 
 ```

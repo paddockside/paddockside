@@ -19,7 +19,8 @@ follow can only be ones that make sense for it.
 3. **Step**: optional, from the event type's expected steps.
 4. **Send by** (channel override): each person's preference (default), email, text message, or portal only.
    Hidden for staff notes.
-5. **Which owners**: checkbox tiles, only when the scope is Named parties.
+5. **Which owners**: checkbox tiles, only when the scope is Named parties. Choices are `PartyOption(Id, Name)`;
+   the draft carries the chosen ids, never names (two owners can share a name).
 6. **Message** (or **Note**) text area.
 7. **Send button**, labelled for the audience ("Send to owners", "Send to trainer", "Add note"), with a
    one-line summary beside it.
@@ -57,6 +58,12 @@ something first.", "Choose at least one owner.") · busy (button disabled).
     private async Task SendAsync(ComposeDraft draft) { /* POST to the API; recipients are computed there */ }
 }
 ```
+
+## Server rules
+
+The API enforces the same rules again (`POST /api/events/{id}/items`): one audience class, a scope that matches
+it, named parties who are current owners, and Coordinator role or above. Recipients are computed at send time
+with the access rule and start as Queued.
 
 ## Decisions
 

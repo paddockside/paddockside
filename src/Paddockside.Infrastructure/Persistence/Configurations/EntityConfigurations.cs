@@ -49,6 +49,10 @@ internal sealed class HorseConfiguration : IEntityTypeConfiguration<Horse>
         b.MapTenantOwned();
         b.Ignore(x => x.Name);
         b.Ignore(x => x.CurrentManagementPeriod);
+        b.Property(x => x.Sex).HasConversion<string>().HasMaxLength(32);
+        b.Property(x => x.FoaledOn);
+        b.Property(x => x.Sire).HasMaxLength(200);
+        b.Property(x => x.Dam).HasMaxLength(200);
 
         b.OwnsMany(x => x.Names, n =>
         {
@@ -148,10 +152,41 @@ internal sealed class StreamItemConfiguration : IEntityTypeConfiguration<StreamI
                     ids => ids.Aggregate(0, (hash, id) => hash ^ id.GetHashCode()),
                     ids => ids.ToHashSet()));
 
+        b.Property(x => x.Title).HasMaxLength(300);
+        b.Property(x => x.AuthorName).HasMaxLength(200);
+        b.Property(x => x.Source).HasMaxLength(100);
+        b.Property(x => x.CorrectionNote).HasMaxLength(500);
+        b.Property(x => x.Channel).HasMaxLength(32);
+        b.Property(x => x.Fields)
+            .HasConversion(
+                fields => JsonSerializer.Serialize(fields, (JsonSerializerOptions?)null),
+                json => JsonSerializer.Deserialize<List<FactField>>(json, (JsonSerializerOptions?)null) ?? new List<FactField>(),
+                new ValueComparer<IReadOnlyList<FactField>>(
+                    (a, c) => a!.SequenceEqual(c!),
+                    fields => fields.Aggregate(0, (hash, f) => HashCode.Combine(hash, f)),
+                    fields => fields.ToList()));
+
         b.HasOne<Horse>().WithMany().HasForeignKey(x => x.HorseId).OnDelete(DeleteBehavior.Restrict);
         b.HasOne<Event>().WithMany().HasForeignKey(x => x.EventId).OnDelete(DeleteBehavior.Restrict);
         b.HasOne<Party>().WithMany().HasForeignKey(x => x.AuthorPartyId).OnDelete(DeleteBehavior.Restrict);
+        b.HasOne<StreamItem>().WithMany().HasForeignKey(x => x.SupersedesId).OnDelete(DeleteBehavior.Restrict);
+        b.HasOne<StreamItem>().WithMany().HasForeignKey(x => x.InReplyToId).OnDelete(DeleteBehavior.Restrict);
         b.HasIndex(x => new { x.TenantId, x.HorseId, x.OccurredAt });
+        b.HasIndex(x => new { x.TenantId, x.EventId, x.OccurredAt });
+    }
+}
+
+internal sealed class DeliveryConfiguration : IEntityTypeConfiguration<Delivery>
+{
+    public void Configure(EntityTypeBuilder<Delivery> b)
+    {
+        b.MapTenantOwned();
+        b.Property(x => x.Channel).AsString();
+        b.Property(x => x.Status).AsString();
+        b.Property(x => x.StatusAt);
+        b.HasOne<StreamItem>().WithMany().HasForeignKey(x => x.StreamItemId).OnDelete(DeleteBehavior.Restrict);
+        b.HasOne<Party>().WithMany().HasForeignKey(x => x.PartyId).OnDelete(DeleteBehavior.Restrict);
+        b.HasIndex(x => new { x.TenantId, x.StreamItemId });
     }
 }
 

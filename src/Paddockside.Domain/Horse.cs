@@ -29,8 +29,34 @@ public sealed class Horse
 
     public IReadOnlyList<ManagedInterest> Interests => _interests;
 
+    public HorseSex? Sex { get; private set; }
+
+    public DateOnly? FoaledOn { get; private set; }
+
+    /// <summary>Sire's name. Text for now; becomes a link to the sire's own horse record (data-model.md §2).</summary>
+    public string? Sire { get; private set; }
+
+    /// <summary>Dam's name, as for <see cref="Sire"/>.</summary>
+    public string? Dam { get; private set; }
+
     /// <summary>The open management period, or null if the tenant does not currently manage the horse.</summary>
     public ManagementPeriod? CurrentManagementPeriod => _periods.SingleOrDefault(p => p.IsOpen);
+
+    /// <summary>Age in racing years: every horse in the southern hemisphere turns a year older on 1 August.</summary>
+    public int? AgeOn(DateOnly date)
+    {
+        if (FoaledOn is not { } foaled) return null;
+        static int Season(DateOnly d) => d.Month >= 8 ? d.Year : d.Year - 1;
+        return Season(date) - Season(foaled);
+    }
+
+    public void SetDetails(HorseSex? sex, DateOnly? foaledOn, string? sire, string? dam)
+    {
+        Sex = sex;
+        FoaledOn = foaledOn;
+        Sire = string.IsNullOrWhiteSpace(sire) ? null : sire.Trim();
+        Dam = string.IsNullOrWhiteSpace(dam) ? null : dam.Trim();
+    }
 
     /// <summary>The current primary name (sale lot or registered).</summary>
     public string Name => _names.Last(n => n.IsPrimary && n.IsCurrent).Name;

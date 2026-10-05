@@ -14,7 +14,8 @@ public static class AutumnRidge
 
     public static readonly IReadOnlyList<TenantOption> OtherTenants = [new("hillcrest", "Hillcrest Syndications")];
 
-    public static readonly string[] Owners = ["Margaret Hale", "Tom Okafor", "Priya Nair", "Graham Lowe", "Laurel Oak house share"];
+    public static readonly IReadOnlyList<PartyOption> Owners =
+        [new("margaret", "Margaret Hale"), new("tom", "Tom Okafor"), new("priya", "Priya Nair"), new("graham", "Graham Lowe"), new("house", "Laurel Oak house share")];
 
     public static readonly HorseCardModel Horse = new(
         Name: "Autumn Ridge",

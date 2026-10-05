@@ -64,10 +64,10 @@
             <div class="flex flex-wrap gap-2">
                 @foreach (var person in NamedPartyChoices)
                 {
-                    var chosen = _named.Contains(person);
+                    var chosen = _named.Contains(person.Id);
                     <label class="inline-flex min-h-control cursor-pointer items-center gap-2 rounded-control border px-4 @(chosen ? "border-action-primary-bg bg-action-secondary-bg" : "border-border-strong")">
-                        <input type="checkbox" class="size-[18px] accent-action-primary-bg" checked="@chosen" @onchange="() => Toggle(person)" />
-                        @person
+                        <input type="checkbox" class="size-[18px] accent-action-primary-bg" checked="@chosen" @onchange="() => Toggle(person.Id)" />
+                        @person.Name
                     </label>
                 }
             </div>
@@ -111,7 +111,7 @@
     [Parameter] public IReadOnlyList<string> Steps { get; set; } = [];
 
     /// <summary>The current owners, for a named-parties message.</summary>
-    [Parameter] public IReadOnlyList<string> NamedPartyChoices { get; set; } = [];
+    [Parameter] public IReadOnlyList<PartyOption> NamedPartyChoices { get; set; } = [];
 
     [Parameter] public bool Busy { get; set; }
 
@@ -144,9 +144,9 @@
         _error = null;
     }
 
-    private void Toggle(string person)
+    private void Toggle(string id)
     {
-        if (!_named.Remove(person)) _named.Add(person);
+        if (!_named.Remove(id)) _named.Add(id);
     }
 
     private async Task Submit()

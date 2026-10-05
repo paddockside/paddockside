@@ -31,11 +31,15 @@ public sealed class PaddocksideDbContext(DbContextOptions<PaddocksideDbContext> 
 
     public DbSet<StreamItem> StreamItems => Set<StreamItem>();
 
+    public DbSet<Delivery> Deliveries => Set<Delivery>();
+
     /// <summary>Read by the query filters. EF Core re-evaluates it for each context instance.</summary>
     private Guid? CurrentTenantId => tenantContext.TenantId;
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        // Value objects stored inside their owner's row (as JSON), not tables of their own.
+        modelBuilder.Ignore<FactField>();
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(PaddocksideDbContext).Assembly);
         ApplyTenantFilters(modelBuilder);
     }

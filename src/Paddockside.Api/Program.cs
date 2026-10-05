@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Identity;
 using Paddockside.Api.Auth;
 using Paddockside.Api.Development;
+using Paddockside.Api.Events;
 using Paddockside.Api.Horses;
 using Paddockside.Api.Security;
 using Paddockside.Api.Tenancy;
@@ -14,6 +15,7 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddOpenApi();
 builder.Services.AddHttpContextAccessor();
+builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddScoped<ITenantContext, SessionTenantContext>();
 // Which connection string to use: "Paddockside" (LocalDB locally; Key Vault in Azure) unless DatabaseConnection
 // names another, e.g. the https-azure launch profile picks PaddocksideAzureDev.
@@ -86,6 +88,7 @@ app.UseMiddleware<RequireApiRequestHeader>();
 
 app.MapAuthEndpoints();
 app.MapHorseEndpoints();
+app.MapEventEndpoints();
 app.MapFallback("/api/{**rest}", () => Results.NotFound());
 app.MapFallbackToFile("index.html");
 

@@ -16,7 +16,8 @@ part of the conversation.
 4. **Meta line**: author · when · audience · step (audience and step for staff only).
 5. **Body**, line breaks kept.
 6. **Replies**, oldest first, indented under a rule: author ("You" for the owner's own), when, channel, body.
-7. **Delivery line** (staff): "Sent to 5 · 4 delivered · 3 opened · 3 replied · 1 not delivered". Selecting it
+7. **Delivery line** (staff): "Sent to 5 · 4 delivered · 3 opened · 3 replied · 1 not delivered", or "Waiting to send to 5"
+   while nothing has gone yet (queued recipients are never counted as sent). Selecting it
    opens the **recipient table** (name, channel, status), with bounces and unsubscribes called out.
 
 ## Variants

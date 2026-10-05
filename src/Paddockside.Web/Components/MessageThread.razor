@@ -22,7 +22,7 @@
     </header>
 
     <p class="text-small text-text-muted">
-        @Model.Author · @Model.At@(owner ? null : $" · To {Model.Audience}")@(!owner && Model.Step is not null ? $" · Step: {Model.Step}" : null)
+        @Model.Author · @Model.At@(owner || string.IsNullOrEmpty(Model.Audience) ? null : $" · To {Model.Audience}")@(!owner && Model.Step is not null ? $" · Step: {Model.Step}" : null)
     </p>
 
     <div class="whitespace-pre-line">@Model.Body</div>
@@ -89,17 +89,24 @@
 
     [Parameter] public Side Side { get; set; } = Side.Staff;
 
-    /// <summary>"Sent to 5 · 4 delivered · 3 opened · 2 replied": each count includes everyone further along.</summary>
+    /// <summary>
+    /// "Sent to 5 · 4 delivered · 3 opened · 2 replied": each count includes everyone further along. Recipients
+    /// not yet sent to are counted as waiting, never as sent.
+    /// </summary>
     private string DeliveryLine
     {
         get
         {
             var r = Model.Recipients;
             int AtLeast(params DeliveryStatus[] statuses) => r.Count(x => statuses.Contains(x.Status));
+            var waiting = AtLeast(DeliveryStatus.Queued);
+            if (waiting == r.Count) return $"Waiting to send to {r.Count}";
+
             var delivered = AtLeast(DeliveryStatus.Delivered, DeliveryStatus.Opened, DeliveryStatus.Replied);
             var opened = AtLeast(DeliveryStatus.Opened, DeliveryStatus.Replied);
             var replied = AtLeast(DeliveryStatus.Replied);
-            return $"Sent to {r.Count} · {delivered} delivered · {opened} opened · {replied} replied";
+            var line = $"Sent to {r.Count - waiting} · {delivered} delivered · {opened} opened · {replied} replied";
+            return waiting > 0 ? $"{line} · {waiting} waiting to send" : line;
         }
     }
 }

@@ -29,7 +29,14 @@ public static class DevelopmentSeeder
         if (string.IsNullOrEmpty(email) || string.IsNullOrEmpty(password)) return;
 
         var users = provider.GetRequiredService<UserManager<Person>>();
-        if (await users.FindByEmailAsync(email) is not null) return;
+        var options = provider.GetRequiredService<DbContextOptions<PaddocksideDbContext>>();
+        if (await users.FindByEmailAsync(email) is { } existing)
+        {
+            // Databases seeded before events existed get the demo stream on their next start.
+            if (await identity.ActiveStaffMembershipAsync(existing.Id) is { } membership)
+                await DemoStream.EnsureAsync(options, membership.TenantId, provider.GetRequiredService<TimeProvider>(), logger);
+            return;
+        }
 
         var tenant = new Tenant("Laurel Oak Bloodstock (demo)");
         await using (var db = new PaddocksideDbContext(provider.GetRequiredService<DbContextOptions<PaddocksideDbContext>>(), new FixedTenant(tenant.Id)))
@@ -50,6 +57,7 @@ public static class DevelopmentSeeder
         identity.Memberships.Add(new Membership { PersonId = person.Id, TenantId = tenant.Id, Role = MemberRole.TenantAdmin });
         await identity.SaveChangesAsync();
         logger.LogInformation("Seeded demo tenant '{Tenant}' with staff login {Email}.", tenant.Name, email);
+        await DemoStream.EnsureAsync(options, tenant.Id, provider.GetRequiredService<TimeProvider>(), logger);
     }
 
     private static IEnumerable<object> DemoStable(Tenant tenant)
@@ -81,7 +89,7 @@ public static class DevelopmentSeeder
         return [syndicate, house, .. owners, mare, yearling, colt, sold];
     }
 
-    private sealed class FixedTenant(Guid tenantId) : ITenantContext
+    internal sealed class FixedTenant(Guid tenantId) : ITenantContext
     {
         public Guid? TenantId => tenantId;
     }

@@ -40,7 +40,7 @@
                     @foreach (var horse in _horses)
                     {
                         <tr class="grid gap-1 border-b border-border-subtle py-3 last:border-b-0 sm:table-row sm:py-0">
-                            <td class="px-2 font-strong sm:px-4 sm:py-3">@horse.Name</td>
+                            <td class="px-2 font-strong sm:px-4 sm:py-3"><a href="horses/@horse.Id" class="underline underline-offset-4 hover:text-action-primary-bg">@horse.Name</a></td>
                             <td class="px-2 sm:px-4 sm:py-3">
                                 <span class="text-text-muted sm:hidden">Status: </span>
                                 @if (horse.Managed)
