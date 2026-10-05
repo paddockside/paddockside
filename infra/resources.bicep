@@ -74,6 +74,26 @@ resource sqlServer 'Microsoft.Sql/servers@2023-08-01' = {
   }
 }
 
+// The server's `administrators` block above only applies when the server is created. Declaring the admin
+// and Entra-only setting as their own resources lets a redeploy change them later.
+resource sqlEntraAdmin 'Microsoft.Sql/servers/administrators@2023-08-01' = {
+  parent: sqlServer
+  name: 'ActiveDirectory'
+  properties: {
+    administratorType: 'ActiveDirectory'
+    login: sqlAdminLogin
+    sid: sqlAdminObjectId
+    tenantId: subscription().tenantId
+  }
+}
+
+resource sqlEntraOnly 'Microsoft.Sql/servers/azureADOnlyAuthentications@2023-08-01' = {
+  parent: sqlServer
+  name: 'Default'
+  properties: { azureADOnlyAuthentication: true }
+  dependsOn: [sqlEntraAdmin]
+}
+
 // Lets Azure services (the web app) through the firewall. Developer IPs are added separately, not in code.
 resource allowAzureServices 'Microsoft.Sql/servers/firewallRules@2023-08-01' = {
   parent: sqlServer

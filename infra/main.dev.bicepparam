@@ -8,9 +8,8 @@ using 'main.bicep'
 param environment = 'dev'
 param location = 'australiaeast'
 
-// SQL Entra administrator: David's account in the Paddockside tenant (an external identity until the
-// custom-domain member account from azure-tenant-setup.md §2 exists; swap both values then).
+// SQL Entra administrator: David's member account on the custom domain (azure-tenant-setup.md §2).
 param sqlAdminLogin = 'david@paddockside.com.au'
-param sqlAdminObjectId = '89852ae9-0324-4d05-9539-f9348b020fcf'
+param sqlAdminObjectId = 'e0722660-1134-411c-a06c-af4c7c7e20fc'
 
 param appServiceSku = 'B1'
