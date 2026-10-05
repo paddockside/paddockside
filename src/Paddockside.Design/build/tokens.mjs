@@ -184,7 +184,7 @@ module.exports = {
   content: {
     relative: true,
     files: [
-      '../Paddockside.Web/{Layout,Pages,Shared}/**/*.{razor,cs}',
+      '../Paddockside.Web/{Components,Layout,Pages,Shared}/**/*.{razor,cs}',
       '../Paddockside.Web/App.razor',
       '../Paddockside.Web/wwwroot/index.html',
     ],

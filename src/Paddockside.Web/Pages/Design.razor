@@ -1,0 +1,119 @@
+@page "/design"
+@using Paddockside.Web.Pages.DesignSample
+@inject IJSRuntime JS
+
+<PageTitle>Components · Paddockside</PageTitle>
+
+<div class="grid grid-cols-[minmax(0,1fr)] gap-12">
+    <header class="grid gap-3">
+        <h1>Components</h1>
+        <p class="max-w-[48rem] text-text-muted">
+            The first six components of the main system, shown with the Autumn Ridge sample race start. Each one has its
+            documentation page in <code class="break-all">src/Paddockside.Design/docs/components</code>. Staff screens use 16 px body
+            text; owner screens use 18 px.
+        </p>
+        <div class="flex flex-wrap items-center gap-2" role="group" aria-label="Colour theme">
+            <span class="field-label mr-2">Theme</span>
+            @foreach (var (value, label) in Themes)
+            {
+                <button type="button" class="@(_theme == value ? "btn-primary" : "btn-secondary")" aria-pressed="@(_theme == value)" @onclick="() => SetTheme(value)">@label</button>
+            }
+        </div>
+    </header>
+
+    <Section Title="AppHeader" Doc="app-header.md">
+        <div class="rounded-card border border-border-subtle">
+            <AppHeader TenantName="@AutumnRidge.Tenant">
+                <Actions><button type="button" class="btn-secondary">Sign out</button></Actions>
+            </AppHeader>
+        </div>
+        <p class="field-hint">With a second membership, the switcher appears:</p>
+        <div class="rounded-card border border-border-subtle">
+            <AppHeader TenantName="@AutumnRidge.Tenant" OtherTenants="AutumnRidge.OtherTenants" OnSwitchTenant="t => _switched = t.Name">
+                <Actions><button type="button" class="btn-secondary">Sign out</button></Actions>
+            </AppHeader>
+        </div>
+        @if (_switched is not null)
+        {
+            <p class="field-hint" role="status">Would switch to @_switched (switching is not built yet).</p>
+        }
+    </Section>
+
+    <Section Title="HorseCard" Doc="horse-card.md">
+        <div class="grid gap-4 lg:grid-cols-2">
+            <Variant Label="Staff, with unread updates"><HorseCard Model="AutumnRidge.Horse" /></Variant>
+            <Variant Label="Owner (18 px)"><HorseCard Model="AutumnRidge.Horse" Side="Side.Owner" /></Variant>
+            <Variant Label="No photo yet, nothing new"><HorseCard Model="AutumnRidge.Yearling" /></Variant>
+        </div>
+    </Section>
+
+    <Section Title="EventCard and stage strip" Doc="event-card.md">
+        <div class="grid gap-4">
+            <Variant Label="Staff: every step, including the missing trainer's pre-race"><EventCard Model="AutumnRidge.RaceStart" /></Variant>
+            <Variant Label="Owner: only the steps owners care about"><EventCard Model="AutumnRidge.RaceStart" Side="Side.Owner" /></Variant>
+            <div class="grid gap-4 lg:grid-cols-2">
+                <Variant Label="Closed (dimmed)"><EventCard Model="AutumnRidge.TrialClosed" /></Variant>
+                <Variant Label="Cancelled (struck through)"><EventCard Model="AutumnRidge.VetCancelled" /></Variant>
+            </div>
+        </div>
+    </Section>
+
+    <Section Title="FactCard" Doc="fact-card.md">
+        <div class="grid gap-4 lg:grid-cols-2">
+            <Variant Label="Corrected by the source"><FactCard Model="AutumnRidge.Acceptance" /></Variant>
+            <Variant Label="As received"><FactCard Model="AutumnRidge.Nomination" /></Variant>
+            <Variant Label="Owner view of the corrected fact"><FactCard Model="AutumnRidge.Acceptance" Side="Side.Owner" /></Variant>
+        </div>
+    </Section>
+
+    <Section Title="MessageThread" Doc="message-thread.md">
+        <div class="grid gap-4 lg:grid-cols-2">
+            <Variant Label="Staff: every reply and the delivery line (select it)"><MessageThread Model="AutumnRidge.TicketsMessage" /></Variant>
+            <Variant Label="Margaret's view: her own reply only"><MessageThread Model="AutumnRidge.TicketsMessage" Side="Side.Owner" /></Variant>
+        </div>
+    </Section>
+
+    <Section Title="ComposeBox" Doc="compose-box.md">
+        <ComposeBox Steps="AutumnRidge.ComposeSteps" NamedPartyChoices="AutumnRidge.Owners" OnSend="d => _lastDraft = d" />
+        @if (_lastDraft is not null)
+        {
+            <div class="card grid gap-2" role="status">
+                <p class="field-label">Would send (nothing leaves this page):</p>
+                <p>
+                    To <strong>@_lastDraft.Audience</strong> · visible to <ScopeMark Scope="_lastDraft.Scope" />
+                    @(_lastDraft.Step is null ? "" : $" · step {_lastDraft.Step}") · by @_lastDraft.Channel
+                    @(_lastDraft.NamedParties.Count > 0 ? $" · {string.Join(", ", _lastDraft.NamedParties)}" : "")
+                </p>
+                <p class="whitespace-pre-line text-text-muted">@_lastDraft.Body</p>
+            </div>
+        }
+    </Section>
+
+    <Section Title="Scope and kind marks" Doc="scope-and-kind-marks.md">
+        <div class="flex flex-wrap gap-2">
+            @foreach (var scope in Enum.GetValues<Scope>())
+            {
+                <ScopeMark Scope="scope" />
+            }
+        </div>
+        <div class="flex flex-wrap gap-2">
+            @foreach (var kind in Enum.GetValues<Kind>())
+            {
+                <KindMark Kind="kind" />
+            }
+        </div>
+    </Section>
+</div>
+
+@code {
+    private static readonly (string, string)[] Themes = [("system", "Follow device"), ("light", "Light"), ("dark", "Dark")];
+    private string _theme = "system";
+    private string? _switched;
+    private ComposeDraft? _lastDraft;
+
+    private async Task SetTheme(string theme)
+    {
+        _theme = theme;
+        await JS.InvokeVoidAsync("paddockside.setTheme", theme);
+    }
+}

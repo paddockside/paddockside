@@ -1,0 +1,11 @@
+@* One labelled example of a component on the /design page. *@
+<figure class="grid content-start gap-2">
+    <figcaption class="text-small font-strong text-text-muted">@Label</figcaption>
+    @ChildContent
+</figure>
+
+@code {
+    [Parameter, EditorRequired] public string Label { get; set; } = "";
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+}

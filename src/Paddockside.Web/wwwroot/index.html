@@ -25,6 +25,15 @@
         Something went wrong.
         <a href="." class="reload">Reload the page</a>
     </div>
+    <script>
+        // Theme override: "light" or "dark" pins the colours; "system" follows the device (tokens.css).
+        window.paddockside = {
+            setTheme(theme) {
+                if (theme === 'light' || theme === 'dark') document.documentElement.dataset.theme = theme;
+                else delete document.documentElement.dataset.theme;
+            }
+        };
+    </script>
     <script src="_framework/blazor.webassembly.js"></script>
     <script>navigator.serviceWorker.register('service-worker.js');</script>
 </body>

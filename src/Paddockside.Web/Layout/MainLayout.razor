@@ -3,22 +3,15 @@
 @inject SessionState Session
 @inject NavigationManager Navigation
 
-<div class="grid min-h-screen grid-rows-[auto_1fr]">
-    <header class="flex items-center justify-between gap-4 border-b border-border-subtle bg-surface-default px-4 py-3 sm:px-6">
-        <div>
-            @if (Session.Current is { } session)
-            {
-                <span class="text-title font-heading">@session.TenantName</span>
-            }
-        </div>
-        <div class="flex items-center gap-4">
+<div class="grid min-h-screen grid-cols-[minmax(0,1fr)] grid-rows-[auto_1fr]">
+    <AppHeader TenantName="@Session.Current?.TenantName">
+        <Actions>
             @if (Session.Current is not null)
             {
                 <button type="button" class="btn-secondary" @onclick="SignOut">Sign out</button>
             }
-            <span class="text-small font-strong text-text-muted">Paddockside</span>
-        </div>
-    </header>
+        </Actions>
+    </AppHeader>
 
     <main class="mx-auto w-full max-w-5xl px-4 py-6 sm:px-6 sm:py-8">
         @Body

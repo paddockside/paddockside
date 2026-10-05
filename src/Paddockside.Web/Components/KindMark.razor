@@ -1,0 +1,6 @@
+@* What an item is: fact, message, media or note. Text first; the colour only reinforces it. *@
+<span class="inline-flex items-center rounded-control px-2 text-small font-strong @Marks.Classes(Kind)">@Marks.Label(Kind)</span>
+
+@code {
+    [Parameter, EditorRequired] public Kind Kind { get; set; }
+}

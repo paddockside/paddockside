@@ -1,0 +1,60 @@
+@*
+    One event, collapsed to a card on the horse timeline (search-reporting.md §3): type, title, key date in words,
+    the stage strip, unread count and last activity. Closed events are dimmed; cancelled ones are struck through.
+*@
+@{
+    var owner = Side == Side.Owner;
+    var closed = Model.Status == EventStatus.Closed;
+    var cancelled = Model.Status == EventStatus.Cancelled;
+}
+<article class="card relative grid gap-4 @(owner ? "text-body-owner" : "text-body") @(closed || cancelled ? "opacity-70" : null)">
+    <div class="flex flex-wrap items-start justify-between gap-2">
+        <div class="grid gap-1">
+            <p class="text-small font-strong uppercase tracking-wide text-text-muted">@Model.Type</p>
+            <h3 class="font-heading @(owner ? "text-heading" : "text-title") @(cancelled ? "line-through" : null)">
+                @if (Model.Href is not null)
+                {
+                    <a href="@Model.Href" class="after:absolute after:inset-0 after:rounded-card focus-visible:outline-none focus-visible:after:outline focus-visible:after:outline-[3px] focus-visible:after:outline-focus">@Model.Title</a>
+                }
+                else
+                {
+                    @Model.Title
+                }
+            </h3>
+            <p class="font-strong">@Model.KeyDate</p>
+        </div>
+        <div class="flex items-center gap-2">
+            @if (Model.Status != EventStatus.Open)
+            {
+                <span class="badge bg-action-secondary-bg text-text-muted">@StatusLabel</span>
+            }
+            @if (Model.Unread > 0)
+            {
+                <span class="badge bg-action-primary-bg text-action-primary-fg">
+                    @Model.Unread<span class="sr-only"> unread</span><span aria-hidden="true"> new</span>
+                </span>
+            }
+        </div>
+    </div>
+
+    @if (!cancelled && Model.Steps.Count > 0)
+    {
+        <StageStrip Steps="Model.Steps" Side="Side" />
+    }
+
+    <p class="text-small text-text-muted">@Model.LastActivity</p>
+</article>
+
+@code {
+    [Parameter, EditorRequired] public EventCardModel Model { get; set; } = null!;
+
+    [Parameter] public Side Side { get; set; } = Side.Staff;
+
+    private string StatusLabel => Model.Status switch
+    {
+        EventStatus.Draft => "Draft",
+        EventStatus.Closed => "Closed",
+        EventStatus.Cancelled => "Cancelled",
+        _ => "Open",
+    };
+}

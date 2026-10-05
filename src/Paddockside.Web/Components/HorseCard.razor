@@ -1,0 +1,55 @@
+@*
+    One horse, recognisable at a glance (design-system.md §2.0: always a photo, because a photo is recognised
+    faster than a name). Used on the owner home and the staff horse list. The whole card is one link.
+*@
+@{
+    var owner = Side == Side.Owner;
+}
+<article class="card relative flex gap-4 !p-4 @(owner ? "text-body-owner" : "text-body") @(Model.Href is not null ? "hover:border-border-strong" : null)">
+    @if (Model.PhotoUrl is not null)
+    {
+        <img src="@Model.PhotoUrl" alt="" class="@(owner ? "size-[96px]" : "size-[72px]") shrink-0 rounded-control object-cover" />
+    }
+    else
+    {
+        <div class="@(owner ? "size-[96px]" : "size-[72px]") grid shrink-0 place-items-center rounded-control bg-surface-sunken text-center text-small text-text-muted">
+            No photo yet
+        </div>
+    }
+
+    <div class="grid min-w-0 content-start gap-1">
+        <h3 class="truncate font-heading @(owner ? "text-title" : "text-body")">
+            @if (Model.Href is not null)
+            {
+                @* Stretched link: the whole card is clickable, but only the name is announced as the link. *@
+                <a href="@Model.Href" class="after:absolute after:inset-0 after:rounded-card focus-visible:outline-none focus-visible:after:outline focus-visible:after:outline-[3px] focus-visible:after:outline-focus">@Model.Name</a>
+            }
+            else
+            {
+                @Model.Name
+            }
+        </h3>
+        @if (Model.Subtitle is not null)
+        {
+            <p class="truncate text-text-muted">@Model.Subtitle</p>
+        }
+        <p class="text-text-muted">@Model.SexAge@(Model.Trainer is not null ? $" · Trainer {Model.Trainer}" : null)</p>
+        @if (Model.NextKeyDate is not null)
+        {
+            <p><span class="text-text-muted">Next: </span><span class="font-strong">@Model.NextKeyDate</span></p>
+        }
+    </div>
+
+    @if (Model.Unread > 0)
+    {
+        <span class="badge ml-auto self-start bg-action-primary-bg text-action-primary-fg">
+            @Model.Unread<span class="sr-only"> unread @(Model.Unread == 1 ? "update" : "updates")</span><span aria-hidden="true"> new</span>
+        </span>
+    }
+</article>
+
+@code {
+    [Parameter, EditorRequired] public HorseCardModel Model { get; set; } = null!;
+
+    [Parameter] public Side Side { get; set; } = Side.Staff;
+}

@@ -1,0 +1,10 @@
+@* Who an item is for: colour plus label, never colour alone (design-system.md §2.1 rule 4). *@
+<span class="inline-flex items-center gap-2 rounded-pill px-3 text-small font-medium @Marks.Classes(Scope)"
+      title="@Marks.Describe(Scope)">
+    <span class="size-2 rounded-pill bg-current" aria-hidden="true"></span>
+    <span><span class="sr-only">Visible to: </span>@Marks.Label(Scope)</span>
+</span>
+
+@code {
+    [Parameter, EditorRequired] public Scope Scope { get; set; }
+}

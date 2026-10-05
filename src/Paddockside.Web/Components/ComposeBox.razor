@@ -1,0 +1,163 @@
+@*
+    Write to one audience class at a time (data-model.md D12: an owner and a trainer are never on the same
+    message). The audience is a single choice; the scope choices follow from it, so an owner message can never
+    be scoped to the trainer and a note can never be sent. Step tag and channel override are optional.
+    Staff only.
+*@
+<form class="card grid gap-4" @onsubmit="Submit" @onsubmit:preventDefault aria-label="Write to this event">
+    <fieldset class="grid gap-2">
+        <legend class="field-label mb-2">Send to</legend>
+        <div class="flex flex-wrap gap-2" role="radiogroup">
+            @foreach (var (audience, label) in AudienceOptions)
+            {
+                var selected = _audience == audience;
+                <label class="inline-flex min-h-control cursor-pointer items-center gap-2 rounded-control border px-4 @(selected ? "border-action-primary-bg bg-action-secondary-bg font-strong" : "border-border-strong")">
+                    <input type="radio" name="@_id-audience" class="size-[18px] accent-action-primary-bg" checked="@selected" @onchange="() => SetAudience(audience)" />
+                    @label
+                </label>
+            }
+        </div>
+        <p class="field-hint">One group per message. To tell the trainer and the owners, write to each.</p>
+    </fieldset>
+
+    <div class="grid gap-4 sm:grid-cols-3">
+        <div class="field">
+            <label class="field-label" for="@_id-scope">Who can see it</label>
+            <select id="@_id-scope" class="input" @bind="_scope" disabled="@(ScopeChoices.Count == 1)">
+                @foreach (var scope in ScopeChoices)
+                {
+                    <option value="@scope">@Marks.Label(scope)</option>
+                }
+            </select>
+            <span class="field-hint">@Marks.Describe(_scope)</span>
+        </div>
+
+        <div class="field">
+            <label class="field-label" for="@_id-step">Step</label>
+            <select id="@_id-step" class="input" @bind="_step">
+                <option value="">No step</option>
+                @foreach (var step in Steps)
+                {
+                    <option value="@step">@step</option>
+                }
+            </select>
+        </div>
+
+        @if (_audience != Audience.InternalNote)
+        {
+            <div class="field">
+                <label class="field-label" for="@_id-channel">Send by</label>
+                <select id="@_id-channel" class="input" @bind="_channel">
+                    <option value="@Channel.Preferred">Each person's preference</option>
+                    <option value="@Channel.Email">Email</option>
+                    <option value="@Channel.Sms">Text message</option>
+                    <option value="@Channel.PortalOnly">Portal only, no notification</option>
+                </select>
+            </div>
+        }
+    </div>
+
+    @if (_scope == Scope.NamedParties)
+    {
+        <fieldset class="grid gap-2">
+            <legend class="field-label mb-2">Which owners</legend>
+            <div class="flex flex-wrap gap-2">
+                @foreach (var person in NamedPartyChoices)
+                {
+                    var chosen = _named.Contains(person);
+                    <label class="inline-flex min-h-control cursor-pointer items-center gap-2 rounded-control border px-4 @(chosen ? "border-action-primary-bg bg-action-secondary-bg" : "border-border-strong")">
+                        <input type="checkbox" class="size-[18px] accent-action-primary-bg" checked="@chosen" @onchange="() => Toggle(person)" />
+                        @person
+                    </label>
+                }
+            </div>
+        </fieldset>
+    }
+
+    <div class="field">
+        <label class="field-label" for="@_id-body">@(_audience == Audience.InternalNote ? "Note" : "Message")</label>
+        <textarea id="@_id-body" class="input min-h-[8rem] py-3" @bind="_body" @bind:event="oninput" aria-describedby="@(_error is null ? null : $"{_id}-error")"></textarea>
+    </div>
+
+    @if (_error is not null)
+    {
+        <p id="@_id-error" class="alert-danger" role="alert">@_error</p>
+    }
+
+    <div class="flex flex-wrap items-center gap-4">
+        <button type="submit" class="btn-primary" disabled="@Busy">@SendLabel</button>
+        <span class="field-hint">@Summary</span>
+    </div>
+</form>
+
+@code {
+    private readonly string _id = $"compose-{Guid.NewGuid():N}";
+    private readonly HashSet<string> _named = [];
+    private Audience _audience = Audience.Owners;
+    private Scope _scope = Scope.Owners;
+    private Channel _channel = Channel.Preferred;
+    private string _step = "";
+    private string _body = "";
+    private string? _error;
+
+    private static readonly (Audience, string)[] AudienceOptions =
+    [
+        (Audience.Owners, "Owners"),
+        (Audience.Trainer, "Trainer"),
+        (Audience.InternalNote, "Staff note"),
+    ];
+
+    /// <summary>The event's expected steps, for the step tag.</summary>
+    [Parameter] public IReadOnlyList<string> Steps { get; set; } = [];
+
+    /// <summary>The current owners, for a named-parties message.</summary>
+    [Parameter] public IReadOnlyList<string> NamedPartyChoices { get; set; } = [];
+
+    [Parameter] public bool Busy { get; set; }
+
+    [Parameter] public EventCallback<ComposeDraft> OnSend { get; set; }
+
+    private IReadOnlyList<Scope> ScopeChoices => _audience switch
+    {
+        Audience.Owners => [Scope.Owners, Scope.OwnersAtTheTime, Scope.NamedParties],
+        Audience.Trainer => [Scope.Trainer],
+        _ => [Scope.Internal],
+    };
+
+    private string SendLabel => _audience switch
+    {
+        Audience.Owners => "Send to owners",
+        Audience.Trainer => "Send to trainer",
+        _ => "Add note",
+    };
+
+    private string Summary => _audience == Audience.InternalNote
+        ? "Staff only. Nobody outside the team is told."
+        : _scope == Scope.NamedParties
+            ? $"{_named.Count} {(_named.Count == 1 ? "owner" : "owners")} chosen."
+            : Marks.Describe(_scope) + ".";
+
+    private void SetAudience(Audience audience)
+    {
+        _audience = audience;
+        _scope = ScopeChoices[0];
+        _error = null;
+    }
+
+    private void Toggle(string person)
+    {
+        if (!_named.Remove(person)) _named.Add(person);
+    }
+
+    private async Task Submit()
+    {
+        _error = string.IsNullOrWhiteSpace(_body) ? "Write something first."
+            : _scope == Scope.NamedParties && _named.Count == 0 ? "Choose at least one owner."
+            : null;
+        if (_error is not null) return;
+
+        await OnSend.InvokeAsync(new ComposeDraft(_audience, _scope, _step == "" ? null : _step, _channel, _named.ToList(), _body.Trim()));
+        _body = "";
+        _named.Clear();
+    }
+}

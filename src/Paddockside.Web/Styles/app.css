@@ -87,7 +87,7 @@
   }
 
   .field {
-    @apply grid gap-2;
+    @apply grid content-start gap-2;
   }
 
   .field-label {
@@ -116,7 +116,7 @@
   }
 
   .badge {
-    @apply inline-block rounded-pill px-3 text-small font-medium;
+    @apply inline-block whitespace-nowrap rounded-pill px-3 text-small font-medium;
   }
 }
 

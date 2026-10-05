@@ -1,0 +1,18 @@
+@* A titled block on the /design page, with the path of the component's documentation page. *@
+<section class="grid grid-cols-[minmax(0,1fr)] gap-4" aria-labelledby="@_id">
+    <div class="flex flex-wrap items-baseline justify-between gap-2 border-b border-border-subtle pb-2">
+        <h2 id="@_id">@Title</h2>
+        <code class="text-small text-text-muted">docs/components/@Doc</code>
+    </div>
+    @ChildContent
+</section>
+
+@code {
+    private readonly string _id = $"section-{Guid.NewGuid():N}";
+
+    [Parameter, EditorRequired] public string Title { get; set; } = "";
+
+    [Parameter, EditorRequired] public string Doc { get; set; } = "";
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+}

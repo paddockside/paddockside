@@ -1,0 +1,105 @@
+@*
+    An outbound message with its replies threaded inside it (event-page-mockup-notes.md, timeline model).
+    Staff see every reply, the scope mark and the delivery line, which opens the recipient table
+    (messaging-channels.md §8). Owners see the message and only their own replies: never another owner's
+    (identity-access.md §5.1), and no delivery detail.
+*@
+@{
+    var owner = Side == Side.Owner;
+    var replies = owner ? Model.Replies.Where(r => r.IsViewer).ToList() : Model.Replies.ToList();
+}
+<article class="grid gap-4 rounded-card border border-border-subtle border-l-4 border-l-kind-message-fg bg-surface-raised p-4 @(owner ? "text-body-owner" : "text-body")">
+    <header class="flex flex-wrap items-center gap-2">
+        @if (!owner)
+        {
+            <KindMark Kind="Kind.Message" />
+        }
+        <h3 class="font-heading">@(Model.Title ?? $"From {Model.Author}")</h3>
+        @if (!owner)
+        {
+            <span class="ml-auto"><ScopeMark Scope="Model.Scope" /></span>
+        }
+    </header>
+
+    <p class="text-small text-text-muted">
+        @Model.Author · @Model.At@(owner ? null : $" · To {Model.Audience}")@(!owner && Model.Step is not null ? $" · Step: {Model.Step}" : null)
+    </p>
+
+    <div class="whitespace-pre-line">@Model.Body</div>
+
+    @if (replies.Count > 0)
+    {
+        <section aria-label="@(owner ? "Your replies" : $"{replies.Count} {(replies.Count == 1 ? "reply" : "replies")}")">
+            <ol class="grid gap-3 border-l-2 border-border-subtle pl-4">
+                @foreach (var reply in replies)
+                {
+                    <li class="grid gap-1 rounded-control bg-surface-sunken p-3">
+                        <p class="text-small text-text-muted">
+                            <span class="font-strong text-text-primary">@(reply.IsViewer && owner ? "You" : reply.Author)</span>
+                            · @reply.At · by @reply.Channel
+                        </p>
+                        <p class="whitespace-pre-line">@reply.Body</p>
+                    </li>
+                }
+            </ol>
+        </section>
+    }
+
+    @if (!owner && Model.Recipients.Count > 0)
+    {
+        var problems = Model.Recipients.Count(r => Marks.IsProblem(r.Status));
+        <footer class="grid gap-2 border-t border-border-subtle pt-3">
+            <button type="button" class="btn-link justify-start text-small" aria-expanded="@_showRecipients" aria-controls="@_tableId"
+                    @onclick="() => _showRecipients = !_showRecipients">
+                @DeliveryLine@(problems > 0 ? $" · {problems} not delivered" : null)
+            </button>
+
+            @if (_showRecipients)
+            {
+                <table id="@_tableId" class="w-full border-collapse text-small tabular-nums">
+                    <caption class="sr-only">Who this message went to, and what happened</caption>
+                    <thead>
+                        <tr class="text-left text-text-muted">
+                            <th scope="col" class="py-2 pr-4 font-strong">Name</th>
+                            <th scope="col" class="py-2 pr-4 font-strong">Channel</th>
+                            <th scope="col" class="py-2 font-strong">Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var recipient in Model.Recipients)
+                        {
+                            <tr class="border-t border-border-subtle">
+                                <td class="py-2 pr-4">@recipient.Name</td>
+                                <td class="py-2 pr-4">@recipient.Channel</td>
+                                <td class="py-2 @(Marks.IsProblem(recipient.Status) ? "font-strong text-status-danger-fg" : null)">@Marks.Label(recipient.Status)</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            }
+        </footer>
+    }
+</article>
+
+@code {
+    private readonly string _tableId = $"recipients-{Guid.NewGuid():N}";
+    private bool _showRecipients;
+
+    [Parameter, EditorRequired] public MessageModel Model { get; set; } = null!;
+
+    [Parameter] public Side Side { get; set; } = Side.Staff;
+
+    /// <summary>"Sent to 5 · 4 delivered · 3 opened · 2 replied": each count includes everyone further along.</summary>
+    private string DeliveryLine
+    {
+        get
+        {
+            var r = Model.Recipients;
+            int AtLeast(params DeliveryStatus[] statuses) => r.Count(x => statuses.Contains(x.Status));
+            var delivered = AtLeast(DeliveryStatus.Delivered, DeliveryStatus.Opened, DeliveryStatus.Replied);
+            var opened = AtLeast(DeliveryStatus.Opened, DeliveryStatus.Replied);
+            var replied = AtLeast(DeliveryStatus.Replied);
+            return $"Sent to {r.Count} · {delivered} delivered · {opened} opened · {replied} replied";
+        }
+    }
+}

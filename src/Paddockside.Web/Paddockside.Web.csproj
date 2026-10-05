@@ -32,7 +32,7 @@
 
   <ItemGroup>
     <None Include="Styles\**;package.json;package-lock.json" />
-    <TailwindInputs Include="Styles\**\*.css;Layout\**\*.razor;Pages\**\*.razor;Shared\**\*.razor;App.razor;wwwroot\index.html" />
+    <TailwindInputs Include="Styles\**\*.css;Components\**\*.razor;Components\**\*.cs;Layout\**\*.razor;Pages\**\*.razor;Shared\**\*.razor;App.razor;wwwroot\index.html" />
     <TailwindInputs Include="$(DesignProjectDir)tailwind.config.js;$(DesignProjectDir)tokens.json" />
   </ItemGroup>
 

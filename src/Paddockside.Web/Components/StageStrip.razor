@@ -1,0 +1,46 @@
+@*
+    Where an event is up to, against its event type's expected steps (event-library.md §3). The staff variant
+    shows every step, including a missing one; the client variant shows only the steps owners care about.
+    Part of EventCard, documented there.
+*@
+@{
+    var steps = Side == Side.Owner ? Steps.Where(s => s.ClientVisible).ToList() : Steps.ToList();
+}
+<ol class="flex flex-wrap gap-x-4 gap-y-2" aria-label="Progress">
+    @foreach (var step in steps)
+    {
+        <li class="flex items-center gap-2" aria-current="@(step.State == StepState.Current ? "step" : null)">
+            @switch (step.State)
+            {
+                case StepState.Done:
+                    <span class="grid size-[24px] place-items-center rounded-pill bg-action-primary-bg text-action-primary-fg" aria-hidden="true">
+                        <svg viewBox="0 0 16 16" class="size-[14px]" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M3 8.5l3 3 7-7" /></svg>
+                    </span>
+                    <span>@step.Label<span class="sr-only">, done</span></span>
+                    break;
+                case StepState.Current:
+                    <span class="size-[24px] rounded-pill border-4 border-action-primary-bg bg-surface-default" aria-hidden="true"></span>
+                    <span class="font-heading">@step.Label<span class="sr-only">, now</span></span>
+                    break;
+                case StepState.Missing:
+                    <span class="grid size-[24px] place-items-center rounded-pill bg-status-warning-bg font-heading text-status-warning-fg" aria-hidden="true">!</span>
+                    <span class="text-status-warning-fg">@step.Label<span class="font-strong"> · not received</span></span>
+                    break;
+                default:
+                    <span class="size-[24px] rounded-pill border-2 border-border-strong" aria-hidden="true"></span>
+                    <span class="text-text-muted">@step.Label<span class="sr-only">, to come</span></span>
+                    break;
+            }
+            @if (step.Detail is not null)
+            {
+                <span class="text-small text-text-muted">@step.Detail</span>
+            }
+        </li>
+    }
+</ol>
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<StageStep> Steps { get; set; } = [];
+
+    [Parameter] public Side Side { get; set; } = Side.Staff;
+}

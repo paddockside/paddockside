@@ -1,0 +1,51 @@
+@*
+    A fact from a source system (nomination, acceptance, barrier, result): compact and structured, so it never
+    looks like a message (design-system.md §2.1 rule 5). When the source corrects itself, the card says so in
+    words and shows the old value struck through next to the new one, instead of silently changing.
+*@
+<article class="grid gap-3 rounded-card border border-border-subtle border-l-4 border-l-kind-fact-fg bg-surface-raised p-4 @(Side == Side.Owner ? "text-body-owner" : "text-body")">
+    <header class="flex flex-wrap items-center gap-2">
+        <KindMark Kind="Kind.Fact" />
+        <h3 class="font-heading">@Model.Label</h3>
+        @if (Model.Correction is not null)
+        {
+            <span class="badge bg-status-warning-bg text-status-warning-fg">Corrected</span>
+        }
+        @if (Side == Side.Staff)
+        {
+            <span class="ml-auto"><ScopeMark Scope="Model.Scope" /></span>
+        }
+    </header>
+
+    <dl class="grid grid-cols-[auto_1fr] gap-x-6 gap-y-1">
+        @foreach (var field in Model.Fields)
+        {
+            <dt class="text-text-muted">@field.Label</dt>
+            <dd class="font-strong tabular-nums">
+                @field.Value
+                @if (field.WasValue is not null)
+                {
+                    <span class="ml-2 font-regular text-text-muted">(was <s>@field.WasValue</s>)</span>
+                }
+            </dd>
+        }
+    </dl>
+
+    <footer class="text-small text-text-muted">
+        From @Model.Source · @Model.ReceivedAt
+        @if (Model.Correction is not null)
+        {
+            <span class="block text-status-warning-fg">@Model.Correction</span>
+        }
+        @if (Side == Side.Staff && Model.Step is not null)
+        {
+            <span class="block">Step: @Model.Step</span>
+        }
+    </footer>
+</article>
+
+@code {
+    [Parameter, EditorRequired] public FactModel Model { get; set; } = null!;
+
+    [Parameter] public Side Side { get; set; } = Side.Staff;
+}

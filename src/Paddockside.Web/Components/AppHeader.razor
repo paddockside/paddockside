@@ -1,0 +1,85 @@
+@*
+    The top of every screen (design-system.md §2.2): tenant logo (max 40 px high) with the tenant name always as
+    text beside it; the product wordmark small at the far right on staff screens (owners see it in the footer
+    instead). The tenant switcher appears only for people with more than one membership (identity-access.md §3);
+    it is a placeholder until switching exists.
+*@
+<header class="flex min-w-0 items-center justify-between gap-4 border-b border-border-subtle bg-surface-default px-4 py-3 sm:px-6">
+    <div class="flex min-w-0 items-center gap-3">
+        @if (TenantName is null)
+        {
+            <span class="text-title font-heading">Paddockside</span>
+        }
+        else
+        {
+            @if (LogoUrl is not null)
+            {
+                @* The name is right beside it as text, so the image is decorative. *@
+                <img src="@LogoUrl" alt="" class="h-[40px] max-w-[160px] object-contain" />
+            }
+            else
+            {
+                <span class="grid size-[40px] shrink-0 place-items-center rounded-control bg-action-secondary-bg font-heading text-text-primary" aria-hidden="true">@Monogram</span>
+            }
+            <span class="truncate text-title font-heading">@TenantName</span>
+
+            @if (OtherTenants.Count > 0)
+            {
+                <div class="relative">
+                    <button type="button" class="btn-link" aria-expanded="@_switcherOpen" aria-controls="tenant-switcher" @onclick="() => _switcherOpen = !_switcherOpen">
+                        Switch organisation
+                    </button>
+                    @if (_switcherOpen)
+                    {
+                        <ul id="tenant-switcher" class="card absolute left-0 top-full z-10 mt-2 grid min-w-[16rem] gap-1 !p-2">
+                            @foreach (var tenant in OtherTenants)
+                            {
+                                <li>
+                                    <button type="button" class="flex min-h-control w-full items-center rounded-control px-3 text-left hover:bg-action-secondary-bg" @onclick="() => Switch(tenant)">
+                                        @tenant.Name
+                                    </button>
+                                </li>
+                            }
+                        </ul>
+                    }
+                </div>
+            }
+        }
+    </div>
+
+    <div class="flex shrink-0 items-center gap-4">
+        @Actions
+        @if (Side == Side.Staff && TenantName is not null)
+        {
+            <span class="hidden text-small font-strong text-text-muted sm:inline">Paddockside</span>
+        }
+    </div>
+</header>
+
+@code {
+    private bool _switcherOpen;
+
+    /// <summary>The active tenant's name. Null before sign-in: the product name is shown instead.</summary>
+    [Parameter] public string? TenantName { get; set; }
+
+    /// <summary>The tenant's logo; without one, a monogram stands in.</summary>
+    [Parameter] public string? LogoUrl { get; set; }
+
+    /// <summary>The person's other memberships. Empty for almost everyone, and then no switcher is shown.</summary>
+    [Parameter] public IReadOnlyList<TenantOption> OtherTenants { get; set; } = [];
+
+    [Parameter] public Side Side { get; set; } = Side.Staff;
+
+    /// <summary>Right-hand controls, such as Sign out.</summary>
+    [Parameter] public RenderFragment? Actions { get; set; }
+
+    [Parameter] public EventCallback<TenantOption> OnSwitchTenant { get; set; }
+
+    private string Monogram => string.Concat(TenantName!.Split(' ', StringSplitOptions.RemoveEmptyEntries).Take(2).Select(w => char.ToUpperInvariant(w[0])));
+
+    private async Task Switch(TenantOption tenant)
+    {
+        _switcherOpen = false;
+        await OnSwitchTenant.InvokeAsync(tenant);
+    }
+}
