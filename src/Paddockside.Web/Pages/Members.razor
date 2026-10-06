@@ -1,0 +1,194 @@
+@page "/members"
+@inject PaddocksideApi Api
+@inject SessionState Session
+@inject NavigationManager Navigation
+
+@*
+    The tenant's staff (identity-access.md §5.2, §6), for tenant admins: invite by email with a role, change roles,
+    suspend and reactivate. Each role says what it can do, in one line, where it is chosen (design-system.md §2.0
+    "in-place explanation"). The API enforces every rule; this page only explains them.
+*@
+<PageTitle>Members · Paddockside</PageTitle>
+
+<div class="grid grid-cols-[minmax(0,1fr)] gap-6">
+    <h1>Members</h1>
+
+    @if (_error is not null)
+    {
+        <Error Message="@_error" />
+    }
+    @if (_notice is not null)
+    {
+        <p class="rounded-control bg-status-success-bg px-4 py-3 text-status-success-fg" role="status">@_notice</p>
+    }
+
+    @if (_page is not null)
+    {
+        <section class="card grid gap-4" aria-labelledby="invite-heading">
+            <h2 id="invite-heading">Invite someone</h2>
+            <form class="grid gap-4" @onsubmit="InviteAsync" @onsubmit:preventDefault>
+                <div class="grid gap-2">
+                    <label for="invite-email" class="font-strong">Their email address</label>
+                    <input id="invite-email" type="email" autocomplete="off" class="min-h-control rounded-control border border-border-strong bg-surface-raised px-4" @bind="_email" />
+                </div>
+                <fieldset class="grid gap-2">
+                    <legend class="font-strong">Role</legend>
+                    @foreach (var role in _page.Roles)
+                    {
+                        <label class="flex cursor-pointer items-start gap-3 rounded-control border border-border-subtle p-3 @(_role == role.Role ? "border-action-primary-bg bg-action-secondary-bg" : null)">
+                            <input type="radio" name="role" class="mt-1 size-5" checked="@(_role == role.Role)" @onchange="() => _role = role.Role" />
+                            <span class="grid">
+                                <span class="font-strong">@role.Label</span>
+                                <span class="text-small text-text-muted">@role.Description</span>
+                            </span>
+                        </label>
+                    }
+                </fieldset>
+                <button type="submit" class="btn-primary justify-self-start" disabled="@_busy">Send invitation</button>
+                <p class="text-small text-text-muted">They get an email with a link that works once, for 14 days. They choose a password and set up an authenticator app.</p>
+            </form>
+        </section>
+
+        @if (_page.Invitations.Count > 0)
+        {
+            <section class="grid gap-3" aria-labelledby="pending-heading">
+                <h2 id="pending-heading">Waiting to be accepted</h2>
+                <ul class="card grid gap-3">
+                    @foreach (var invitation in _page.Invitations)
+                    {
+                        <li class="flex flex-wrap items-center gap-3 border-b border-border-subtle pb-3 last:border-b-0 last:pb-0">
+                            <span class="grid">
+                                <span class="font-strong">@invitation.Email</span>
+                                <span class="text-small text-text-muted">@invitation.RoleLabel · sent @invitation.Sent by @invitation.InvitedBy · works until @invitation.Expires</span>
+                            </span>
+                            <button type="button" class="btn-secondary ml-auto" disabled="@_busy" @onclick="() => RevokeAsync(invitation)">Cancel invitation</button>
+                        </li>
+                    }
+                </ul>
+            </section>
+        }
+
+        <section class="grid gap-3" aria-labelledby="members-heading">
+            <h2 id="members-heading">Staff</h2>
+            <ul class="card grid gap-3">
+                @foreach (var member in _page.Members)
+                {
+                    <li class="grid gap-2 border-b border-border-subtle pb-3 last:border-b-0 last:pb-0">
+                        <div class="flex flex-wrap items-center gap-2">
+                            <span class="font-strong">@member.Email@(member.IsYou ? " (you)" : null)</span>
+                            @if (member.Status == "Suspended")
+                            {
+                                <span class="badge bg-status-warning-bg text-status-warning-fg">Suspended</span>
+                            }
+                            <span class="ml-auto text-small text-text-muted">since @member.Since</span>
+                        </div>
+                        @if (member.IsYou)
+                        {
+                            <p class="text-small text-text-muted">@member.RoleLabel. Another tenant admin can change your role.</p>
+                        }
+                        else
+                        {
+                            <div class="flex flex-wrap items-center gap-3">
+                                <label for="role-@member.Id" class="sr-only">Role for @member.Email</label>
+                                <select id="role-@member.Id" class="min-h-control rounded-control border border-border-strong bg-surface-raised px-3"
+                                        value="@member.Role" @onchange="e => ChangeRoleAsync(member, e.Value?.ToString())" disabled="@_busy">
+                                    @foreach (var role in _page.Roles)
+                                    {
+                                        <option value="@role.Role">@role.Label</option>
+                                    }
+                                </select>
+                                @if (member.Status == "Suspended")
+                                {
+                                    <button type="button" class="btn-secondary" disabled="@_busy" @onclick="() => ReactivateAsync(member)">Reactivate</button>
+                                }
+                                else
+                                {
+                                    <button type="button" class="btn-secondary" disabled="@_busy" @onclick="() => SuspendAsync(member)">Suspend</button>
+                                }
+                            </div>
+                        }
+                    </li>
+                }
+            </ul>
+            <p class="text-small text-text-muted">Suspending ends their access within a minute; what they posted stays. There is always at least one tenant admin.</p>
+        </section>
+    }
+</div>
+
+@code {
+    private MembersPage? _page;
+    private string? _error;
+    private string? _notice;
+    private string? _email;
+    private string _role = "Coordinator";
+    private bool _busy;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (Session.Current is null && await Session.RefreshAsync() is null)
+        {
+            Navigation.NavigateTo("sign-in");
+            return;
+        }
+
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        var result = await Api.MembersAsync();
+        if (result.Succeeded) _page = result.Value;
+        else _error = result.Error;
+    }
+
+    private Task InviteAsync() => Run(async () =>
+    {
+        var result = await Api.InviteAsync(_email ?? "", _role);
+        if (!result.Succeeded) { _error = result.Error; return; }
+        _notice = result.Value!.Sent ? $"Invitation sent to {_email}." : result.Value.Problem;
+        _email = null;
+    });
+
+    private Task RevokeAsync(InvitationView invitation) => Run(async () =>
+    {
+        var result = await Api.RevokeInvitationAsync(invitation.Id);
+        if (result.Succeeded) _notice = $"The invitation to {invitation.Email} is cancelled; its link no longer works.";
+        else _error = result.Error;
+    });
+
+    private Task ChangeRoleAsync(MemberView member, string? role) => Run(async () =>
+    {
+        var result = await Api.ChangeRoleAsync(member.Id, role ?? member.Role);
+        if (result.Succeeded) _notice = $"{member.Email} is now {_page!.Roles.Single(r => r.Role == role).Label}.";
+        else _error = result.Error;
+    });
+
+    private Task SuspendAsync(MemberView member) => Run(async () =>
+    {
+        var result = await Api.SuspendAsync(member.Id);
+        if (result.Succeeded) _notice = $"{member.Email} is suspended.";
+        else _error = result.Error;
+    });
+
+    private Task ReactivateAsync(MemberView member) => Run(async () =>
+    {
+        var result = await Api.ReactivateAsync(member.Id);
+        if (result.Succeeded) _notice = $"{member.Email} can sign in again.";
+        else _error = result.Error;
+    });
+
+    /// <summary>Runs a change, then reloads, so the list always shows what the server holds.</summary>
+    private async Task Run(Func<Task> change)
+    {
+        (_busy, _error, _notice) = (true, null, null);
+        try
+        {
+            await change();
+            await LoadAsync();
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}

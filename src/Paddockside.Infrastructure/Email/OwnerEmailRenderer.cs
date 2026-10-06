@@ -93,6 +93,25 @@ public sealed class OwnerEmailRenderer
             TextFrame(text.ToString(), null, tenant.Name, tenant.FooterDetails, why));
     }
 
+    /// <summary>An invitation to join a tenant's staff (identity-access.md §6).</summary>
+    public RenderedEmail RenderStaffInvitation(string tenantName, string inviterName, MemberRole role, string link)
+    {
+        var lead = $"{inviterName} has invited you to join {tenantName} on Paddockside as {MemberRoles.Label(role)}.";
+        var html = new StringBuilder()
+            .Append(Heading($"Join {tenantName}"))
+            .Append(Paragraph(lead))
+            .Append(Muted(MemberRoles.Describe(role)))
+            .Append(Button(link, "Accept the invitation"))
+            .Append(Paragraph("You will choose a password, then set up an authenticator app on your phone: every staff sign-in needs both."))
+            .Append(Muted("The invitation works once and for 14 days. If you were not expecting it, ignore this email."));
+        var text = $"{lead}\n\n{MemberRoles.Describe(role)}\n\nAccept the invitation: {link}\n\n" +
+                   "You will choose a password, then set up an authenticator app on your phone.\nThe invitation works once and for 14 days.\n";
+        var why = $"You are receiving this because {inviterName} invited this address to {tenantName}.";
+        return new RenderedEmail($"Join {tenantName} on Paddockside",
+            Frame(tenantName, null, null, $"Join {tenantName}", lead, html.ToString(), null, why),
+            TextFrame(text, null, "Paddockside", null, why));
+    }
+
     private static string E(string s) => WebUtility.HtmlEncode(s);
 
     private static readonly string Font = $"font-family:{E(T.FontUi)}";

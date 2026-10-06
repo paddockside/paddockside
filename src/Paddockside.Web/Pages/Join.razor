@@ -1,0 +1,91 @@
+@page "/join"
+@inject PaddocksideApi Api
+@inject NavigationManager Navigation
+
+@*
+    Accepting a staff invitation (identity-access.md §6). The token is after "#", so it never reaches a server log;
+    looking at the invitation does not use it up, only accepting does. Then the second factor, as at every staff
+    sign-in.
+*@
+<PageTitle>Join · Paddockside</PageTitle>
+
+<div class="mx-auto grid w-full max-w-md gap-6">
+    @if (_error is not null && _details is null)
+    {
+        <h1>Invitation</h1>
+        <Error Message="@_error" />
+        <a href="sign-in" class="btn-link justify-self-start">Go to sign in</a>
+    }
+    else if (_details is null)
+    {
+        <p class="text-text-muted" role="status">Opening your invitation…</p>
+    }
+    else
+    {
+        <h1>Join @_details.TenantName</h1>
+        <div class="card grid gap-2">
+            <p>@_details.InvitedBy has invited <strong>@_details.Email</strong> to join as <strong>@_details.Role</strong>.</p>
+            <p class="text-small text-text-muted">@_details.RoleDescription</p>
+        </div>
+
+        <form class="grid gap-4" @onsubmit="AcceptAsync" @onsubmit:preventDefault>
+            @if (_details.Needs == "existing-password")
+            {
+                <label for="password" class="font-strong">Your Paddockside password</label>
+                <p class="text-small text-text-muted">You already have a Paddockside sign-in with this address. Use its password.</p>
+                <input id="password" type="password" autocomplete="current-password" class="min-h-control rounded-control border border-border-strong bg-surface-raised px-4" @bind="_password" />
+            }
+            else
+            {
+                <label for="password" class="font-strong">Choose a password</label>
+                <p class="text-small text-text-muted">At least 12 characters. A short phrase is easiest to remember, such as four unrelated words.</p>
+                <input id="password" type="password" autocomplete="new-password" class="min-h-control rounded-control border border-border-strong bg-surface-raised px-4" @bind="_password" />
+                <label for="confirm" class="font-strong">Type it again</label>
+                <input id="confirm" type="password" autocomplete="new-password" class="min-h-control rounded-control border border-border-strong bg-surface-raised px-4" @bind="_confirm" />
+            }
+            @if (_error is not null)
+            {
+                <p class="font-strong text-status-danger-fg" role="alert">@_error</p>
+            }
+            <button type="submit" class="btn-primary" disabled="@_busy">Accept and continue</button>
+            <p class="text-small text-text-muted">Next you'll set up an authenticator app on your phone. Every staff sign-in needs it.</p>
+        </form>
+    }
+</div>
+
+@code {
+    private string _token = "";
+    private JoinDetails? _details;
+    private string? _password;
+    private string? _confirm;
+    private string? _error;
+    private bool _busy;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _token = new Uri(Navigation.Uri).Fragment.TrimStart('#');
+        if (_token.Length == 0) { _error = "This link is incomplete. Open it again from the invitation email."; return; }
+
+        var result = await Api.InspectInvitationAsync(_token);
+        if (result.Succeeded) _details = result.Value;
+        else _error = result.Error;
+    }
+
+    private async Task AcceptAsync()
+    {
+        _error = null;
+        if (_details!.Needs == "new-password" && _password != _confirm) { _error = "The two passwords are different. Type them again."; return; }
+
+        _busy = true;
+        try
+        {
+            var result = await Api.AcceptInvitationAsync(_token, _password ?? "");
+            if (!result.Succeeded) { _error = result.Error; return; }
+            Navigation.NavigateTo($"sign-in?continue={result.Value!.Next}", replace: true);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}

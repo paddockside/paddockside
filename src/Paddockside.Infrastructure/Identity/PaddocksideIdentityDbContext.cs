@@ -15,6 +15,8 @@ public sealed class PaddocksideIdentityDbContext(DbContextOptions<PaddocksideIde
 
     public DbSet<SignInToken> SignInTokens => Set<SignInToken>();
 
+    public DbSet<StaffInvitation> StaffInvitations => Set<StaffInvitation>();
+
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
@@ -49,6 +51,18 @@ public sealed class PaddocksideIdentityDbContext(DbContextOptions<PaddocksideIde
             b.HasIndex(t => t.TokenHash).IsUnique().HasFilter("[TokenHash] IS NOT NULL");
             b.HasIndex(t => t.BindingHash);
             b.HasIndex(t => t.ExpiresAt);
+        });
+
+        builder.Entity<StaffInvitation>(b =>
+        {
+            b.HasKey(i => i.Id);
+            b.Property(i => i.TenantName).HasMaxLength(200);
+            b.Property(i => i.Email).HasMaxLength(320);
+            b.Property(i => i.Role).HasConversion<string>().HasMaxLength(32);
+            b.Property(i => i.InvitedByName).HasMaxLength(320);
+            b.Property(i => i.TokenHash).HasMaxLength(64).IsUnicode(false);
+            b.HasIndex(i => i.TokenHash).IsUnique();
+            b.HasIndex(i => new { i.TenantId, i.Email });
         });
     }
 }

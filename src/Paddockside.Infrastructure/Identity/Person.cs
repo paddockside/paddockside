@@ -39,6 +39,9 @@ public sealed class Membership
 
     public DateTimeOffset CreatedAt { get; init; } = DateTimeOffset.UtcNow;
 
+    /// <summary>Who invited them, for staff memberships created from an invitation.</summary>
+    public Guid? InvitedByPersonId { get; set; }
+
     /// <summary>When the person first signed in under this membership (accepting an invitation or any link).</summary>
     public DateTimeOffset? AcceptedAt { get; set; }
 

@@ -11,6 +11,10 @@
                 <nav aria-label="Main" class="flex items-center gap-4">
                     <a href="horses" class="btn-link">Horses</a>
                     <a href="inbound" class="btn-link">Inbound mail</a>
+                    @if (Session.Current.Role == "TenantAdmin")
+                    {
+                        <a href="members" class="btn-link">Members</a>
+                    }
                 </nav>
                 <button type="button" class="btn-secondary" @onclick="SignOut">Sign out</button>
             }

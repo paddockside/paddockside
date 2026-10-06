@@ -68,6 +68,20 @@ public sealed record InboundView(
     string? Event,
     List<AttachmentView> Attachments);
 
+// ---- Members (tenant admins) and joining ------------------------------------------------------------------------
+
+public sealed record MemberView(Guid Id, string Email, string Role, string RoleLabel, string Status, string? Since, bool IsYou);
+
+public sealed record InvitationView(Guid Id, string Email, string Role, string RoleLabel, string InvitedBy, string Sent, string Expires);
+
+public sealed record RoleOption(string Role, string Label, string Description);
+
+public sealed record MembersPage(List<MemberView> Members, List<InvitationView> Invitations, List<RoleOption> Roles);
+
+public sealed record Invited(Guid Id, bool Sent, string? Problem);
+
+public sealed record JoinDetails(string TenantName, string Email, string Role, string RoleDescription, string InvitedBy, string Needs);
+
 // ---- Owner portal --------------------------------------------------------------------------------------------
 
 public sealed record OwnerTenant(Guid Id, string Name, bool Current);
@@ -135,6 +149,24 @@ public sealed class PaddocksideApi(HttpClient http)
     public Task<ApiResult<List<InboundView>>> InboundAsync(string state) => GetAsync<List<InboundView>>($"api/inbound?state={Uri.EscapeDataString(state)}");
 
     public Task<ApiResult<InboundCounts>> InboundCountsAsync() => GetAsync<InboundCounts>("api/inbound/counts");
+
+    // ---- Members and joining -----------------------------------------------------------------------------------
+
+    public Task<ApiResult<MembersPage>> MembersAsync() => GetAsync<MembersPage>("api/members");
+
+    public Task<ApiResult<Invited>> InviteAsync(string email, string role) => PostAsync<Invited>("api/members/invitations", new { email, role });
+
+    public Task<ApiResult<object>> RevokeInvitationAsync(Guid id) => PostAsync<object>($"api/members/invitations/{id}/revoke", new { });
+
+    public Task<ApiResult<object>> ChangeRoleAsync(Guid membershipId, string role) => PostAsync<object>($"api/members/{membershipId}/role", new { role });
+
+    public Task<ApiResult<object>> SuspendAsync(Guid membershipId) => PostAsync<object>($"api/members/{membershipId}/suspend", new { });
+
+    public Task<ApiResult<object>> ReactivateAsync(Guid membershipId) => PostAsync<object>($"api/members/{membershipId}/reactivate", new { });
+
+    public Task<ApiResult<JoinDetails>> InspectInvitationAsync(string token) => PostAsync<JoinDetails>("api/join/inspect", new { token });
+
+    public Task<ApiResult<NextStep>> AcceptInvitationAsync(string token, string password) => PostAsync<NextStep>("api/join/accept", new { token, password });
 
     // ---- Owner sign-in and portal --------------------------------------------------------------------------------
 

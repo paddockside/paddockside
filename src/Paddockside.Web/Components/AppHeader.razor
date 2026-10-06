@@ -4,7 +4,7 @@
     instead). The tenant switcher appears only for people with more than one membership (identity-access.md §3);
     it is a placeholder until switching exists.
 *@
-<header class="flex min-w-0 items-center justify-between gap-4 border-b border-border-subtle bg-surface-default px-4 py-3 sm:px-6">
+<header class="flex min-w-0 flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b border-border-subtle bg-surface-default px-4 py-3 sm:px-6">
     <div class="flex min-w-0 items-center gap-3">
         @if (TenantName is null)
         {
@@ -47,7 +47,7 @@
         }
     </div>
 
-    <div class="flex shrink-0 items-center gap-4">
+    <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
         @Actions
         @if (Side == Side.Staff && TenantName is not null)
         {

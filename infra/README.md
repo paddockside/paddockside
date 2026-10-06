@@ -50,6 +50,25 @@ and Open ticked. The app also ignores any event whose message id does not match 
 Locally, `appsettings.Development.json` uses Postmark's `POSTMARK_API_TEST` token: sends are accepted and
 nothing is delivered. The `https-azure` launch profile reads the real token from the vault.
 
+### Staff logins: inviting, roles and retiring the dev login
+
+Staff join by invitation (`docs/product/identity-access.md` §5.2, §6).
+- **Invite:** a Tenant admin opens **Members**, enters an email address and picks a role.
+- **Accept:** the person gets a link (once, 14 days). They choose a password and set up an authenticator app.
+- **Manage:** Tenant admins change roles and suspend or reactivate members. Suspending ends access within a minute.
+- **Last admin:** the last Tenant admin cannot be demoted or suspended.
+
+On the Azure dev site, set up your own logins and retire the demo one:
+1. Sign in with the dev login (`DevSeed` in `appsettings.Development.json`). It is Tenant admin of *Laurel Oak
+   Bloodstock (demo)*.
+2. **Members → Invite someone:** your own address as **Tenant admin**, and anyone else with their role.
+3. Accept your invitation, choose a password and set up your authenticator. Sign out, then sign in as yourself.
+4. In **Members**, **Suspend** `kate@laurel-oak.test`. Its password is in the repository, so it must not stay
+   usable on a site others can reach.
+
+A person with staff roles in two businesses currently acts in the one they joined first; switching between
+businesses is still to come.
+
 ### Owner sign-in (email links and text codes)
 
 Owners sign in at `/my` with no password: an emailed link, or a code by text (`docs/product/identity-access.md`

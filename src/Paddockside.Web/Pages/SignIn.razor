@@ -114,6 +114,24 @@
     private string? _error;
     private bool _busy;
 
+    /// <summary>Set by an accepted invitation (/join): the password step is done; go straight to the second factor.</summary>
+    [SupplyParameterFromQuery(Name = "continue")] public string? Continue { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (Continue == "totp")
+        {
+            Go(Step.AuthenticatorCode);
+        }
+        else if (Continue == "enrol")
+        {
+            Go(Step.Enrol);
+            var enrolment = await Api.StartEnrolmentAsync();
+            if (enrolment.Succeeded) _enrolment = enrolment.Value;
+            else (_step, _error) = (Step.Password, "Your invitation was accepted, but setting up the authenticator did not start. Sign in with your new password to continue.");
+        }
+    }
+
     private void Go(Step step)
     {
         _step = step;

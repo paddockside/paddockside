@@ -109,7 +109,7 @@ public static class ClientPolicy
 }
 
 /// <summary>
-/// Every 30 minutes the session is checked against the person (their security stamp) and its claims rebuilt. The
+/// Every minute the session is checked against the person (their security stamp) and its claims rebuilt. The
 /// rebuild knows only staff memberships, so this carries over what it cannot know: how the person signed in
 /// ("amr", which the staff policy needs) and, for owners, the tenant and party they are acting as.
 /// </summary>
@@ -117,7 +117,14 @@ public static class SessionRefresh
 {
     private static readonly string[] OwnerClaims = [SessionClaims.Tenant, SessionClaims.Role, SessionClaims.AudienceClass, SessionClaims.Party];
 
-    public static void Configure(SecurityStampValidatorOptions options) => options.OnRefreshingPrincipal = context =>
+    public static void Configure(SecurityStampValidatorOptions options)
+    {
+        // Checked every minute, so a suspended member loses access within a minute (identity-access.md §6).
+        options.ValidationInterval = TimeSpan.FromMinutes(1);
+        options.OnRefreshingPrincipal = Refresh;
+    }
+
+    private static Task Refresh(SecurityStampRefreshingPrincipalContext context)
     {
         if (context.CurrentPrincipal?.Identity is not ClaimsIdentity current || context.NewPrincipal?.Identity is not ClaimsIdentity fresh)
             return Task.CompletedTask;
@@ -135,5 +142,5 @@ public static class SessionRefresh
         }
 
         return Task.CompletedTask;
-    };
+    }
 }

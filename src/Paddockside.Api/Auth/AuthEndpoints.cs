@@ -163,7 +163,7 @@ public static class AuthEndpoints
     }
 
     /// <summary>The same principal SignInManager uses for "password checked, second factor pending".</summary>
-    private static ClaimsPrincipal PendingSecondFactor(Person person) =>
+    internal static ClaimsPrincipal PendingSecondFactor(Person person) =>
         new(new ClaimsIdentity([new Claim(ClaimTypes.Name, person.Id.ToString())], IdentityConstants.TwoFactorUserIdScheme));
 
     private static string Normalise(string code) => code.Replace(" ", string.Empty).Replace("-", string.Empty);
