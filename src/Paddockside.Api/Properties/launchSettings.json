@@ -20,7 +20,8 @@
       "environmentVariables": {
         "ASPNETCORE_ENVIRONMENT": "Development",
         "DatabaseConnection": "PaddocksideAzureDev",
-        "KeyVault__Uri": "https://kv-paddockside-dev-cd63.vault.azure.net/"
+        "KeyVault__Uri": "https://kv-paddockside-dev-cd63.vault.azure.net/",
+        "AZURE_TOKEN_CREDENTIALS": "dev"
       }
     }
   }
