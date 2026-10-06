@@ -1,0 +1,133 @@
+@page "/inbound"
+@inject PaddocksideApi Api
+@inject SessionState Session
+@inject NavigationManager Navigation
+
+@*
+    Inbound email by state (messaging-channels.md §3.2). Pending is the queue: mail that arrived without a reply
+    token or horse address we know. Placed shows where each email went and why; Ignored is automatic mail; Held
+    (spam) is shown to tenant admins only.
+*@
+
+<PageTitle>Inbound mail · Paddockside</PageTitle>
+
+<div class="grid gap-4">
+    <h1>Inbound mail</h1>
+
+    @if (_counts is not null)
+    {
+        <div class="flex flex-wrap gap-2" role="group" aria-label="Show">
+            @foreach (var (state, label, count) in Tabs())
+            {
+                <button type="button" class="@(state == _state ? "btn-primary" : "btn-secondary")" aria-pressed="@(state == _state)"
+                        @onclick="() => ShowAsync(state)">
+                    @label (@count)
+                </button>
+            }
+        </div>
+        <p class="text-text-muted">@Explanation(_state)</p>
+    }
+
+    @if (_error is not null)
+    {
+        <Error Message="@_error" />
+    }
+    else if (_messages is null)
+    {
+        <p class="text-text-muted" role="status">Loading…</p>
+    }
+    else if (_messages.Count == 0)
+    {
+        <div class="card"><p>@(_state == "Pending" ? "Nothing waiting. Every email so far went where it belonged." : "Nothing here.")</p></div>
+    }
+    else
+    {
+        <ol class="grid gap-4">
+            @foreach (var m in _messages)
+            {
+                <li class="card grid gap-2">
+                    <div class="flex flex-wrap items-baseline gap-2">
+                        <h2 class="font-heading">@(m.Subject ?? "(no subject)")</h2>
+                        <span class="ml-auto text-small text-text-muted">@m.Received</span>
+                    </div>
+                    <p class="text-small text-text-muted">From @m.From · to @m.To</p>
+                    @if (m.Reason is not null)
+                    {
+                        <p class="text-small">@m.Reason</p>
+                    }
+                    @if (m.HorseId is not null)
+                    {
+                        <p class="text-small">
+                            On
+                            @if (m.EventId is not null)
+                            {
+                                <a href="events/@m.EventId" class="underline underline-offset-4">@m.Horse · @m.Event</a>
+                            }
+                            else
+                            {
+                                <a href="horses/@m.HorseId" class="underline underline-offset-4">@m.Horse (no event)</a>
+                            }
+                        </p>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(m.Body))
+                    {
+                        <div class="whitespace-pre-line rounded-control bg-surface-sunken p-3">@m.Body</div>
+                    }
+                    @if (m.Attachments.Count > 0)
+                    {
+                        <ul class="text-small text-text-muted">
+                            @foreach (var a in m.Attachments)
+                            {
+                                <li>📎 @a.Name@(a.Dropped is null ? null : $" — {a.Dropped}")</li>
+                            }
+                        </ul>
+                    }
+                </li>
+            }
+        </ol>
+    }
+</div>
+
+@code {
+    private string _state = "Pending";
+    private InboundCounts? _counts;
+    private List<InboundView>? _messages;
+    private string? _error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (await Session.RefreshAsync() is null)
+        {
+            Navigation.NavigateTo("sign-in");
+            return;
+        }
+
+        var counts = await Api.InboundCountsAsync();
+        if (counts.Succeeded) _counts = counts.Value;
+        await ShowAsync(_state);
+    }
+
+    private async Task ShowAsync(string state)
+    {
+        (_state, _messages, _error) = (state, null, null);
+        var result = await Api.InboundAsync(state);
+        if (result.Succeeded) _messages = result.Value;
+        else _error = result.Error;
+    }
+
+    private IEnumerable<(string State, string Label, int Count)> Tabs()
+    {
+        yield return ("Pending", "Waiting to be placed", _counts!.Pending);
+        yield return ("Placed", "Placed", _counts.Placed);
+        yield return ("Ignored", "Automatic mail", _counts.Ignored);
+        if (_counts.Held is { } held) yield return ("Held", "Held as spam", held);
+    }
+
+    private static string Explanation(string state) => state switch
+    {
+        "Pending" => "Mail that did not come to a reply address or a horse's own address. Placing it by hand comes next.",
+        "Placed" => "Replies threaded under their message (by reply address), and mail to a horse's own address.",
+        "Ignored" => "Out-of-office replies, auto-responders and bounces. Never placed, never answered.",
+        _ => "Marked as spam by the mail provider. Only tenant admins see these.",
+    };
+}

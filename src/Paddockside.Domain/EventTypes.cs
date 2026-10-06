@@ -6,8 +6,14 @@ namespace Paddockside.Domain;
 /// </summary>
 public sealed record ExpectedStep(string Code, string Label, int DaysFromKeyDate, bool ClientVisible = true);
 
-/// <summary>An event type and the steps it expects, in order.</summary>
-public sealed record EventType(string Code, string Name, IReadOnlyList<ExpectedStep> Steps);
+/// <summary>
+/// When traffic about an event is expected, in days around the key date (event-library.md §4 "Window"). An event
+/// type without one is open-ended.
+/// </summary>
+public sealed record EventWindow(int DaysBefore, int DaysAfter);
+
+/// <summary>An event type, the steps it expects in order, and its expected window.</summary>
+public sealed record EventType(string Code, string Name, IReadOnlyList<ExpectedStep> Steps, EventWindow? Window = null);
 
 public enum StageState
 {
@@ -36,14 +42,14 @@ public static class EventTypes
         new("STAFF_PRE", "Pre-race update", -1),
         new("RESULT_FACT", "Result", 0),
         new("DAY_AFTER", "Day after", 1, ClientVisible: false),
-    ]);
+    ], new EventWindow(DaysBefore: 28, DaysAfter: 21));
 
     public static readonly EventType BarrierTrial = new("BarrierTrial", "Barrier trial",
     [
         new("TRIAL_ENTRY", "Entered", -3),
         new("TRIAL_RESULT", "Trialled", 0),
         new("TRAINER_REPORT", "Trainer's report", 1),
-    ]);
+    ], new EventWindow(DaysBefore: 7, DaysAfter: 7));
 
     public static readonly EventType Veterinary = new("Veterinary", "Veterinary",
     [

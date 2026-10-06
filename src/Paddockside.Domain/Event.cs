@@ -70,6 +70,18 @@ public sealed class Event
         Status = EventStatus.Cancelled;
     }
 
+    /// <summary>
+    /// Whether <paramref name="at"/> falls in the type's expected window around the key date (data-model.md EVENT).
+    /// An open-ended type, or an event with no key date yet, is always in its window.
+    /// </summary>
+    public bool IsInWindow(DateTimeOffset at)
+    {
+        if (EventTypes.Find(EventType).Window is not { } window || KeyDate is not { } key) return true;
+        var day = DateOnly.FromDateTime(at.ToOffset(key.Offset).DateTime);
+        var keyDay = DateOnly.FromDateTime(key.DateTime);
+        return day >= keyDay.AddDays(-window.DaysBefore) && day <= keyDay.AddDays(window.DaysAfter);
+    }
+
     /// <summary>A matching item arrived. A closed event reopens rather than rejecting it.</summary>
     public void RecordActivity()
     {

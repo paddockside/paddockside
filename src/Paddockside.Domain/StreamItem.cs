@@ -218,6 +218,21 @@ public sealed class StreamItem
         };
     }
 
+    /// <summary>
+    /// Correspondence that arrived on its own rather than as a reply, e.g. a trainer writing to the horse's inbox.
+    /// Staff only until staff choose to share it: an inbound email has not been checked for what owners may see.
+    /// </summary>
+    public static StreamItem Inbound(Horse horse, Event? @event, string? subject, string body, string authorName, Guid? authorPartyId, string channel, DateTimeOffset receivedAt)
+    {
+        if (string.IsNullOrWhiteSpace(body) && string.IsNullOrWhiteSpace(subject)) throw new DomainException("An inbound message needs a subject or a body.");
+        return new StreamItem(horse, @event, StreamItemKind.Message, StreamItemScope.Internal, StreamItemDirection.Inbound, receivedAt, body, authorPartyId)
+        {
+            Title = subject,
+            AuthorName = authorName,
+            Channel = channel,
+        };
+    }
+
     /// <summary>A staff-only note.</summary>
     public static StreamItem Note(Horse horse, Event? @event, string body, DateTimeOffset at, string authorName, string? stepCode = null)
     {

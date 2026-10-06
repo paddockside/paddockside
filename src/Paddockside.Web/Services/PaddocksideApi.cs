@@ -50,6 +50,27 @@ public sealed record ComposeRequest(string Audience, string Scope, string? Step,
 
 public sealed record Posted(Guid Id, int Recipients);
 
+public sealed record AttachmentView(string Name, string? Dropped);
+
+public sealed record InboundView(
+    Guid Id,
+    string State,
+    string Received,
+    string From,
+    string To,
+    string? Subject,
+    string? Body,
+    string? Reason,
+    int? Tier,
+    Guid? HorseId,
+    string? Horse,
+    Guid? EventId,
+    string? Event,
+    List<AttachmentView> Attachments);
+
+/// <summary>Held is null unless the signed-in person is a tenant admin.</summary>
+public sealed record InboundCounts(int Pending, int Placed, int Ignored, int? Held);
+
 /// <summary>The outcome of a call: a value, or a message that can be shown to the person as it is.</summary>
 public sealed record ApiResult<T>(T? Value, string? Error, HttpStatusCode Status)
 {
@@ -86,6 +107,10 @@ public sealed class PaddocksideApi(HttpClient http)
     public Task<ApiResult<EventPage>> EventAsync(Guid id) => GetAsync<EventPage>($"api/events/{id}");
 
     public Task<ApiResult<Posted>> PostToEventAsync(Guid id, ComposeRequest request) => PostAsync<Posted>($"api/events/{id}/items", request);
+
+    public Task<ApiResult<List<InboundView>>> InboundAsync(string state) => GetAsync<List<InboundView>>($"api/inbound?state={Uri.EscapeDataString(state)}");
+
+    public Task<ApiResult<InboundCounts>> InboundCountsAsync() => GetAsync<InboundCounts>("api/inbound/counts");
 
     private async Task<ApiResult<T>> GetAsync<T>(string path)
     {

@@ -86,8 +86,13 @@ public sealed class IsolationDatabase : IAsyncLifetime
             return address;
         }).ToList();
 
+        routing.Add(RoutingAddress.ForHorse(horse, HorseSlug.From(horse.Name)!, bought));
+        var inbound = new InboundMessage(tenant.Id, "Postmark", $"seed-{Guid.NewGuid()}", bought.AddMonths(6), "trainer@stable.test", "Trainer",
+            $"{HorseSlug.From(horse.Name)}@{tenant.Slug}.in.paddockside.com.au", "", $"{name} trainer", "Going well.", null, "[]", $"{tenant.Id}/seed/postmark.json");
+        inbound.Park("Seeded.", "Going well.", null, bought.AddMonths(6));
+
         await using var context = ContextFor(tenant.Id);
-        context.AddRange(tenant, ann, dee, eve, syndicate, external, horse, raceStart, update, personal, note);
+        context.AddRange(tenant, ann, dee, eve, syndicate, external, horse, raceStart, update, personal, note, inbound);
         context.AddRange(routing);
         context.AddRange(deliveries);
         await context.SaveChangesAsync();

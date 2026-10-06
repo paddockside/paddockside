@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Paddockside.Api.Formatting;
 using Paddockside.Domain;
+using Paddockside.Infrastructure.Inbound;
 using Paddockside.Infrastructure.Persistence;
 using DomainEvent = Paddockside.Domain.Event;
 
@@ -27,6 +28,8 @@ public static class DemoStream
             if (party.Kind == PartyKind.Person && party.PrimaryEmail is null)
                 party.AddEmail($"{party.DisplayName.ToLowerInvariant().Replace(' ', '.')}@owners.paddockside.test");
         await db.SaveChangesAsync();
+        // Each horse's own inbox, e.g. faultless-miss@laureloak.in.paddockside.com.au.
+        await HorseInboxes.EnsureAsync(db, clock.GetUtcNow(), CancellationToken.None);
 
         if (await db.Events.AnyAsync()) return;
         var horses = await db.Horses.Include(h => h.ManagementPeriods).Include(h => h.Interests).AsSplitQuery().ToListAsync();

@@ -93,4 +93,18 @@ resource postmarkReturnPath 'Microsoft.Network/dnsZones/CNAME@2018-05-01' = {
   }
 }
 
+// Inbound email (messaging-channels.md §3.1) goes to Postmark, whose inbound domain is in.paddockside.com.au.
+// `*.in` covers every tenant's subdomain (r-{token}@laureloak.in…, {horse}@laureloak.in…); `in` is the
+// catch-all ({tenant}@in.paddockside.com.au). Adding a tenant needs no DNS change.
+resource inboundMx 'Microsoft.Network/dnsZones/MX@2018-05-01' = [for name in ['in', '*.in']: {
+  parent: zone
+  name: name
+  properties: {
+    TTL: 3600
+    MXRecords: [
+      { preference: 10, exchange: 'inbound.postmarkapp.com' }
+    ]
+  }
+}]
+
 output nameServers array = zone.properties.nameServers

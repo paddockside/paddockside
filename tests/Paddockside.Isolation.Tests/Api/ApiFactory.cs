@@ -5,9 +5,11 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
+using Paddockside.Api.Webhooks;
 using Paddockside.Application.Messaging;
 using Paddockside.Domain;
 using Paddockside.Infrastructure.Identity;
+using Paddockside.Infrastructure.Inbound;
 
 namespace Paddockside.Isolation.Tests.Api;
 
@@ -33,7 +35,21 @@ public sealed class ApiFactory(IsolationDatabase db) : WebApplicationFactory<Pro
         {
             services.AddSingleton<IBreachedPasswordList>(new FakeBreachedList());
             services.AddSingleton<IEmailSender>(Emails);
+
+            // Inbound: files in a temp folder, the in-memory queue, and no background processor (tests drain it).
+            services.AddSingleton<IInboundStore>(new FileInboundStore(InboundStoreRoot));
+            services.AddSingleton<IInboundQueue, MemoryInboundQueue>();
+            foreach (var hosted in services.Where(s => s.ImplementationType == typeof(InboundProcessingService)).ToList())
+                services.Remove(hosted);
         });
+    }
+
+    public string InboundStoreRoot { get; } = Path.Combine(Path.GetTempPath(), $"paddockside-inbound-{Guid.NewGuid():N}");
+
+    protected override void Dispose(bool disposing)
+    {
+        base.Dispose(disposing);
+        if (disposing && Directory.Exists(InboundStoreRoot)) Directory.Delete(InboundStoreRoot, recursive: true);
     }
 
     /// <summary>A browser-like client: HTTPS (the session cookie is Secure) and a cookie jar.</summary>

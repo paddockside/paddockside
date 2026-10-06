@@ -228,16 +228,69 @@ internal sealed class RoutingAddressConfiguration : IEntityTypeConfiguration<Rou
     public void Configure(EntityTypeBuilder<RoutingAddress> b)
     {
         b.MapTenantOwned();
-        b.Property(x => x.Token).HasMaxLength(RoutingToken.Length).IsUnicode(false);
+        b.Property(x => x.Token).HasMaxLength(HorseSlug.MaxLength).IsUnicode(false);
         b.Property(x => x.Kind).AsString();
         b.Property(x => x.CreatedAt);
         b.Property(x => x.Active);
-        // Unique across every tenant: the index is not tenant-filtered, which is the point.
-        b.HasIndex(x => x.Token).IsUnique();
+        // Recipient tokens: unique across every tenant (the index is not tenant-filtered, which is the point).
+        // Horse slugs: unique within a tenant; two tenants can each have a horse called Bel Esprit.
+        b.HasIndex(x => x.Token).IsUnique().HasFilter("[Kind] = 'Recipient'").HasDatabaseName("IX_RoutingAddresses_RecipientToken");
+        b.HasIndex("TenantId", nameof(RoutingAddress.Token)).IsUnique().HasFilter("[Kind] = 'HorseInbox'").HasDatabaseName("IX_RoutingAddresses_HorseSlug");
         b.HasOne<Horse>().WithMany().HasForeignKey(x => x.HorseId).OnDelete(DeleteBehavior.Restrict);
         b.HasOne<Event>().WithMany().HasForeignKey(x => x.EventId).OnDelete(DeleteBehavior.Restrict);
         b.HasOne<StreamItem>().WithMany().HasForeignKey(x => x.StreamItemId).OnDelete(DeleteBehavior.Restrict);
         b.HasOne<Party>().WithMany().HasForeignKey(x => x.PartyId).OnDelete(DeleteBehavior.Restrict);
+    }
+}
+
+internal sealed class InboundMessageConfiguration : IEntityTypeConfiguration<InboundMessage>
+{
+    public void Configure(EntityTypeBuilder<InboundMessage> b)
+    {
+        b.MapTenantOwned();
+        b.Property(x => x.Channel).HasMaxLength(16);
+        b.Property(x => x.Provider).HasMaxLength(32);
+        b.Property(x => x.ProviderMessageId).HasMaxLength(200);
+        b.Property(x => x.ReceivedAt);
+        b.Property(x => x.FromAddress).HasMaxLength(320);
+        b.Property(x => x.FromName).HasMaxLength(200);
+        b.Property(x => x.RecipientAddress).HasMaxLength(320);
+        b.Property(x => x.Recipients);
+        b.Property(x => x.Subject).HasMaxLength(1000);
+        b.Property(x => x.TextBody);
+        b.Property(x => x.HtmlBody);
+        b.Property(x => x.Headers);
+        b.Property(x => x.RawBlobName).HasMaxLength(400);
+        b.Property(x => x.State).AsString();
+        b.Property(x => x.StateAt);
+        b.Property(x => x.Reason).HasMaxLength(500);
+        b.Property(x => x.MatchTier);
+        b.Property(x => x.DisplayBody);
+
+        // A webhook delivered twice is stored once.
+        b.HasIndex("TenantId", nameof(InboundMessage.Provider), nameof(InboundMessage.ProviderMessageId)).IsUnique();
+        b.HasIndex("TenantId", nameof(InboundMessage.State), nameof(InboundMessage.ReceivedAt));
+
+        b.HasOne<RoutingAddress>().WithMany().HasForeignKey(x => x.RoutingAddressId).OnDelete(DeleteBehavior.Restrict);
+        b.HasOne<Party>().WithMany().HasForeignKey(x => x.PartyId).OnDelete(DeleteBehavior.Restrict);
+        b.HasOne<Horse>().WithMany().HasForeignKey(x => x.HorseId).OnDelete(DeleteBehavior.Restrict);
+        b.HasOne<Event>().WithMany().HasForeignKey(x => x.EventId).OnDelete(DeleteBehavior.Restrict);
+        b.HasOne<StreamItem>().WithMany().HasForeignKey(x => x.StreamItemId).OnDelete(DeleteBehavior.Restrict);
+
+        b.OwnsMany(x => x.Attachments, a =>
+        {
+            a.ToTable("InboundAttachments");
+            a.WithOwner().HasForeignKey("InboundMessageId");
+            a.Property<int>("Id");
+            a.HasKey("Id");
+            a.Property(x => x.FileName).HasMaxLength(260);
+            a.Property(x => x.ContentType).HasMaxLength(200);
+            a.Property(x => x.Length);
+            a.Property(x => x.ContentId).HasMaxLength(300);
+            a.Property(x => x.BlobName).HasMaxLength(400);
+            a.Property(x => x.DroppedReason).HasMaxLength(200);
+        });
+        b.Navigation(x => x.Attachments).UsePropertyAccessMode(PropertyAccessMode.Field);
     }
 }
 

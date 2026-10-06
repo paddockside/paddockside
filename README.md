@@ -24,7 +24,9 @@ What you can see: the horse list, each horse's timeline (its events with their s
 page (facts, corrections, messages with replies and delivery, staff notes, and the compose box). Posting from
 the compose box saves the item and emails the current owners, each with their own reply address. Locally the
 Postmark test token accepts the send and delivers nothing; the demo owners have `.test` addresses.
-`infra/README.md` lists the Postmark secrets and webhook needed in Azure.
+Replies come back by email and thread under the message; mail to a horse's own address
+(`faultless-miss@laureloak.in.paddockside.com.au`) lands on its open event; anything else waits on the
+**Inbound mail** page. `infra/README.md` lists the Postmark secrets, webhooks and DNS this needs in Azure.
 `/design` shows every component with sample data.
 
 To run against the Azure dev database instead of LocalDB, sign in with `az login` first, then:

@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Paddockside.Application.Messaging;
 using Paddockside.Infrastructure.Email;
 using Paddockside.Infrastructure.Identity;
+using Paddockside.Infrastructure.Inbound;
 using Paddockside.Infrastructure.Persistence;
 
 namespace Paddockside.Infrastructure;
@@ -48,6 +49,31 @@ public static class DependencyInjection
         services.AddSingleton<OwnerEmailRenderer>();
         services.AddScoped<EmailDispatcher>();
         services.AddSingleton<EmailDispatchSignal>();
+        return services;
+    }
+
+    /// <summary>
+    /// Inbound email: Azure blob storage and the Storage Queue when Storage:BlobEndpoint and Storage:QueueEndpoint are
+    /// set (always in Azure), otherwise files under <paramref name="contentRoot"/> and an in-memory queue.
+    /// </summary>
+    public static IServiceCollection AddInbound(this IServiceCollection services, IConfiguration configuration, string contentRoot)
+    {
+        services.Configure<StorageOptions>(configuration.GetSection(StorageOptions.Section));
+        var storage = configuration.GetSection(StorageOptions.Section).Get<StorageOptions>() ?? new StorageOptions();
+        if (!string.IsNullOrEmpty(storage.BlobEndpoint) && !string.IsNullOrEmpty(storage.QueueEndpoint))
+        {
+            services.AddSingleton<Azure.Core.TokenCredential>(new Azure.Identity.DefaultAzureCredential());
+            services.AddSingleton<IInboundStore, BlobInboundStore>();
+            services.AddSingleton<IInboundQueue, StorageInboundQueue>();
+        }
+        else
+        {
+            services.AddSingleton<IInboundStore>(new FileInboundStore(Path.Combine(contentRoot, storage.LocalPath)));
+            services.AddSingleton<IInboundQueue, MemoryInboundQueue>();
+        }
+
+        services.AddScoped<InboundReceiver>();
+        services.AddScoped<InboundProcessor>();
         return services;
     }
 }

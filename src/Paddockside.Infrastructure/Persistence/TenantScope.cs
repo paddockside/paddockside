@@ -17,10 +17,31 @@ public sealed class TenantScopedDb(DbContextOptions<PaddocksideDbContext> option
 {
     public PaddocksideDbContext For(Guid tenantId) => new(options, new FixedTenantContext(tenantId));
 
-    /// <summary>
-    /// The only cross-tenant read: which tenants have queued email. Returns ids and nothing else; all real work
-    /// then happens through <see cref="For"/>.
-    /// </summary>
+    // The cross-tenant reads. Each returns ids and nothing else; all real work then happens through For().
+
+    /// <summary>Which tenant an inbound subdomain (<c>{slug}.in.…</c>) belongs to.</summary>
+    public async Task<Guid?> TenantIdForSlugAsync(string slug, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrEmpty(slug)) return null;
+        await using var db = new PaddocksideDbContext(options, new FixedTenantContext(null));
+        var ids = await db.Tenants.IgnoreQueryFilters().Where(t => t.Slug == slug).Select(t => t.Id).ToListAsync(cancellationToken);
+        return ids.Count == 1 ? ids[0] : null;
+    }
+
+    /// <summary>Inbound messages stored but not yet processed, e.g. queued in memory before a restart.</summary>
+    public async Task<IReadOnlyList<(Guid TenantId, Guid Id)>> UnprocessedInboundAsync(int limit, CancellationToken cancellationToken)
+    {
+        await using var db = new PaddocksideDbContext(options, new FixedTenantContext(null));
+        var rows = await db.InboundMessages.IgnoreQueryFilters()
+            .Where(m => m.State == Domain.InboundState.Received)
+            .OrderBy(m => m.ReceivedAt)
+            .Select(m => new { m.TenantId, m.Id })
+            .Take(limit)
+            .ToListAsync(cancellationToken);
+        return rows.Select(r => (r.TenantId, r.Id)).ToList();
+    }
+
+    /// <summary>Which tenants have queued email.</summary>
     public async Task<IReadOnlyList<Guid>> TenantsWithQueuedEmailAsync(int limit, CancellationToken cancellationToken)
     {
         await using var db = new PaddocksideDbContext(options, new FixedTenantContext(null));

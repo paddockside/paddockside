@@ -10,7 +10,8 @@ import { fileURLToPath } from 'node:url';
 
 const repo = join(dirname(fileURLToPath(import.meta.url)), '..');
 const extensions = new Set(['.razor', '.css', '.cs']);
-const skipDirectories = new Set(['.git', 'bin', 'obj', 'node_modules']);
+// artifacts: local publish output (git-ignored), which contains the generated CSS.
+const skipDirectories = new Set(['.git', 'bin', 'obj', 'node_modules', 'artifacts']);
 
 // The only files allowed to contain hex colours: generated from tokens.json.
 const generated = new Set([

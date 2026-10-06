@@ -4,7 +4,9 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Paddockside.Domain;
+using Microsoft.AspNetCore.Http.Features;
 using Paddockside.Infrastructure.Email;
+using Paddockside.Infrastructure.Inbound;
 using Paddockside.Infrastructure.Persistence;
 
 namespace Paddockside.Api.Webhooks;
@@ -23,8 +25,56 @@ public static class PostmarkWebhooks
 {
     public const string Path = "/api/webhooks/postmark";
 
-    public static void MapPostmarkWebhooks(this IEndpointRouteBuilder app) =>
+    /// <summary>Postmark inbound: one email per call, attachments included (messaging-channels.md §3).</summary>
+    public const string InboundPath = "/api/webhooks/postmark/inbound";
+
+    /// <summary>Postmark accepts inbound mail up to 35 MB; base64 attachments grow that by a third in the JSON.</summary>
+    private const long InboundBodyLimit = 60 * 1024 * 1024;
+
+    public static void MapPostmarkWebhooks(this IEndpointRouteBuilder app)
+    {
         app.MapPost(Path, Handle).AllowAnonymous();
+        app.MapPost(InboundPath, HandleInbound).AllowAnonymous();
+    }
+
+    /// <summary>
+    /// Stores the email exactly as it arrived, queues it, and acknowledges. Interpretation happens off the queue, so
+    /// a slow or failing matcher never makes Postmark give up on a message.
+    /// </summary>
+    private static async Task<IResult> HandleInbound(
+        HttpContext http,
+        IOptions<PostmarkOptions> options,
+        InboundReceiver receiver,
+        CancellationToken cancellationToken)
+    {
+        if (Refuse(http, options.Value) is { } refused) return refused;
+
+        if (http.Features.Get<IHttpMaxRequestBodySizeFeature>() is { IsReadOnly: false } limit) limit.MaxRequestBodySize = InboundBodyLimit;
+        using var body = new MemoryStream();
+        await http.Request.Body.CopyToAsync(body, cancellationToken);
+
+        try
+        {
+            await receiver.ReceiveAsync(body.GetBuffer().AsMemory(0, (int)body.Length), cancellationToken);
+            return Results.Ok();
+        }
+        catch (FormatException)
+        {
+            // Not an inbound email at all. 403 is the one status that stops Postmark retrying something that will
+            // never parse.
+            return Results.StatusCode(StatusCodes.Status403Forbidden);
+        }
+    }
+
+    /// <summary>The webhook credentials: 404 when none are configured (the endpoint is off), 401 when wrong.</summary>
+    private static IResult? Refuse(HttpContext http, PostmarkOptions options)
+    {
+        var (username, password) = (options.WebhookUsername, options.WebhookPassword);
+        if (string.IsNullOrEmpty(username) || string.IsNullOrEmpty(password)) return Results.NotFound();
+        if (HasCredentials(http.Request, username, password)) return null;
+        http.Response.Headers.WWWAuthenticate = "Basic realm=\"postmark\"";
+        return Results.Unauthorized();
+    }
 
     private static async Task<IResult> Handle(
         HttpContext http,
@@ -35,13 +85,7 @@ public static class PostmarkWebhooks
         CancellationToken cancellationToken)
     {
         var logger = loggers.CreateLogger(nameof(PostmarkWebhooks));
-        var (username, password) = (options.Value.WebhookUsername, options.Value.WebhookPassword);
-        if (string.IsNullOrEmpty(username) || string.IsNullOrEmpty(password)) return Results.NotFound();
-        if (!HasCredentials(http.Request, username, password))
-        {
-            http.Response.Headers.WWWAuthenticate = "Basic realm=\"postmark\"";
-            return Results.Unauthorized();
-        }
+        if (Refuse(http, options.Value) is { } refused) return refused;
 
         JsonDocument payload;
         try

@@ -18,6 +18,7 @@ var appInsightsName = 'appi-paddockside-${environment}'
 var appServicePlanName = 'asp-paddockside-${environment}'
 var webAppName = 'app-paddockside-${environment}-${suffix}'
 var mediaContainerName = 'media'
+var inboundContainerName = 'inbound'
 var inboundQueueName = 'inbound'
 
 // Built-in role definition IDs.
@@ -175,6 +176,13 @@ resource blobService 'Microsoft.Storage/storageAccounts/blobServices@2023-05-01'
 resource mediaContainer 'Microsoft.Storage/storageAccounts/blobServices/containers@2023-05-01' = {
   parent: blobService
   name: mediaContainerName
+  properties: { publicAccess: 'None' }
+}
+
+// Inbound email exactly as it arrived (Postmark payloads and attachments). Private; the app writes it.
+resource inboundContainer 'Microsoft.Storage/storageAccounts/blobServices/containers@2023-05-01' = {
+  parent: blobService
+  name: inboundContainerName
   properties: { publicAccess: 'None' }
 }
 

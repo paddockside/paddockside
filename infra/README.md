@@ -50,6 +50,22 @@ and Open ticked. The app also ignores any event whose message id does not match 
 Locally, `appsettings.Development.json` uses Postmark's `POSTMARK_API_TEST` token: sends are accepted and
 nothing is delivered. The `https-azure` launch profile reads the real token from the vault.
 
+### Inbound email (Postmark)
+
+Mail to any address under `in.paddockside.com.au` reaches Postmark through the MX records in `dns.bicep`:
+`r-{token}@{tenant}.in.paddockside.com.au` is a reply (tier 1), `{horse-slug}@{tenant}.in.paddockside.com.au` a
+horse's own inbox (tier 2), and `{tenant}@in.paddockside.com.au` the catch-all. In Postmark, under Servers →
+paddockside → **Default Inbound Stream** → Settings:
+
+- **Inbound domain**: `in.paddockside.com.au`
+- **Webhook URL**: `https://<username>:<password>@app-paddockside-dev-cd63cr.azurewebsites.net/api/webhooks/postmark/inbound`,
+  with the same webhook username and password as the delivery webhook.
+
+The webhook stores each email exactly as it arrived (the JSON payload and every attachment in the private
+`inbound` blob container; headers and bodies in `InboundMessages`), puts it on the `inbound` Storage Queue and
+answers 200. A background worker then places it. Locally, without Azure Storage, the files go under
+`App_Data/inbound` (git-ignored) and the queue is in memory.
+
 ## Cost (dev)
 
 Prices are approximate, pay-as-you-go, Australia East, in AUD.
@@ -77,13 +93,13 @@ az deployment group create --resource-group rg-paddockside-dev --template-file i
 It holds a copy of the records at Crazy Domains as of 6 Oct 2026: the website A records (apex and www),
 Titan email (MX, SPF, DKIM `titan1._domainkey`), Microsoft's domain-verification TXT and MX, and the Postmark
 Return-Path CNAME `pm-bounces.mail` → `pm.mtasv.net` (which Crazy Domains would not accept). Each answer was
-checked against Crazy Domains' nameserver and matches exactly.
+checked against Crazy Domains' nameserver and matches exactly. Since then: the inbound MX records `in` and
+`*.in` → `inbound.postmarkapp.com` (priority 10).
 
-**It is not live yet.** Crazy Domains is still the domain's nameserver, so changes here affect nobody until the
-nameservers at Crazy Domains are switched to `ns1-07.azure-dns.com`, `ns2-07.azure-dns.net`,
-`ns3-07.azure-dns.org` and `ns4-07.azure-dns.info`. Edit DNS in `dns.bicep` (and redeploy), not in the portal,
-so the file stays the record of truth. Cost: about AUD 0.80 a month for the zone, plus fractions of a cent per
-million queries once live.
+**It is live.** Since 6 Oct 2026 the domain's name servers are Azure's (`ns1-07.azure-dns.com`,
+`ns2-07.azure-dns.net`, `ns3-07.azure-dns.org`, `ns4-07.azure-dns.info`), so this zone is what the world sees.
+Edit DNS in `dns.bicep` (and redeploy), not in the portal, so the file stays the record of truth. Cost: about
+AUD 0.80 a month for the zone, plus fractions of a cent per million queries.
 
 ## Local access to the Azure database
 

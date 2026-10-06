@@ -8,6 +8,10 @@
         <Actions>
             @if (Session.Current is not null)
             {
+                <nav aria-label="Main" class="flex items-center gap-4">
+                    <a href="horses" class="btn-link">Horses</a>
+                    <a href="inbound" class="btn-link">Inbound mail</a>
+                </nav>
                 <button type="button" class="btn-secondary" @onclick="SignOut">Sign out</button>
             }
         </Actions>

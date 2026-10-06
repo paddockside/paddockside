@@ -28,8 +28,10 @@ public enum RoutingAddressKind
 }
 
 /// <summary>
-/// A routing token and what it points at (data-model.md ROUTING_ADDRESS). Tokens are unique across the whole
-/// product, not just the tenant, so an inbound reply can be placed before anything else is known about it.
+/// A routing token and what it points at (data-model.md ROUTING_ADDRESS). Recipient tokens are unique across the
+/// whole product, not just the tenant, so an inbound reply can be placed before anything else is known about it.
+/// A horse inbox uses the horse's slug as its token, unique within the tenant. A renamed horse keeps its old
+/// slugs, so an old address keeps working (messaging-channels.md §3.1).
 /// </summary>
 public sealed class RoutingAddress
 {
@@ -38,7 +40,10 @@ public sealed class RoutingAddress
 
     private RoutingAddress(Guid tenantId, string token, RoutingAddressKind kind, Guid horseId, Guid? eventId, Guid? streamItemId, Guid? partyId, DateTimeOffset at)
     {
-        if (!RoutingToken.IsWellFormed(token)) throw new DomainException("A routing token is 12 characters from the routing alphabet.");
+        if (kind == RoutingAddressKind.Recipient && !RoutingToken.IsWellFormed(token))
+            throw new DomainException("A routing token is 12 characters from the routing alphabet.");
+        if (kind == RoutingAddressKind.HorseInbox && !HorseSlug.IsWellFormed(token))
+            throw new DomainException("A horse address is a slug of lower-case letters, digits and hyphens.");
         TenantId = tenantId;
         Token = token;
         Kind = kind;
@@ -82,11 +87,17 @@ public sealed class RoutingAddress
         return new RoutingAddress(message.TenantId, token, RoutingAddressKind.Recipient, message.HorseId, message.EventId, message.Id, partyId, at);
     }
 
-    /// <summary>The reply address: <c>r-{token}@{tenant}.in.{product domain}</c>.</summary>
+    public static RoutingAddress ForHorse(Horse horse, string slug, DateTimeOffset at) =>
+        new(horse.TenantId, slug, RoutingAddressKind.HorseInbox, horse.Id, null, null, null, at);
+
+    /// <summary>
+    /// The address: <c>r-{token}@{tenant}.in.{product domain}</c> for a recipient, <c>{slug}@…</c> for a horse.
+    /// </summary>
     public string EmailAddress(Tenant tenant, string inboundDomain)
     {
         if (tenant.Id != TenantId) throw new DomainException("The token belongs to a different tenant.");
-        return $"r-{Token}@{tenant.Slug}.{inboundDomain}";
+        var local = Kind == RoutingAddressKind.Recipient ? $"r-{Token}" : Token;
+        return $"{local}@{tenant.Slug}.{inboundDomain}";
     }
 
     public void Deactivate() => Active = false;

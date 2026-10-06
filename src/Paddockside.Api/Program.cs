@@ -5,6 +5,7 @@ using Paddockside.Api.Auth;
 using Paddockside.Api.Development;
 using Paddockside.Api.Events;
 using Paddockside.Api.Horses;
+using Paddockside.Api.Inbound;
 using Paddockside.Api.Security;
 using Paddockside.Api.Tenancy;
 using Paddockside.Api.Webhooks;
@@ -32,6 +33,8 @@ builder.Services.AddPaddocksideDatabase(
 builder.Services.AddBreachedPasswordList();
 builder.Services.AddEmail(builder.Configuration);
 builder.Services.AddHostedService<EmailDispatchService>();
+builder.Services.AddInbound(builder.Configuration, builder.Environment.ContentRootPath);
+builder.Services.AddHostedService<InboundProcessingService>();
 
 // Staff sign-in: password + mandatory TOTP (identity-access.md §4.2).
 builder.Services
@@ -97,6 +100,7 @@ app.UseMiddleware<RequireApiRequestHeader>();
 app.MapAuthEndpoints();
 app.MapHorseEndpoints();
 app.MapEventEndpoints();
+app.MapInboundEndpoints();
 app.MapPostmarkWebhooks();
 app.MapFallback("/api/{**rest}", () => Results.NotFound());
 app.MapFallbackToFile("index.html");
