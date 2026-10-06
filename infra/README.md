@@ -94,7 +94,7 @@ It holds a copy of the records at Crazy Domains as of 6 Oct 2026: the website A 
 Titan email (MX, SPF, DKIM `titan1._domainkey`), Microsoft's domain-verification TXT and MX, and the Postmark
 Return-Path CNAME `pm-bounces.mail` → `pm.mtasv.net` (which Crazy Domains would not accept). Each answer was
 checked against Crazy Domains' nameserver and matches exactly. Since then: the inbound MX records `in` and
-`*.in` → `inbound.postmarkapp.com` (priority 10).
+`*.in` → `inbound.postmarkapp.com` (priority 10), and the Postmark DKIM key `20261005053422pm._domainkey.mail`.
 
 **It is live.** Since 6 Oct 2026 the domain's name servers are Azure's (`ns1-07.azure-dns.com`,
 `ns2-07.azure-dns.net`, `ns3-07.azure-dns.org`, `ns4-07.azure-dns.info`), so this zone is what the world sees.

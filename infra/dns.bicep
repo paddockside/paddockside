@@ -93,6 +93,18 @@ resource postmarkReturnPath 'Microsoft.Network/dnsZones/CNAME@2018-05-01' = {
   }
 }
 
+// DKIM for Postmark sending from mail.paddockside.com.au (the selector and public key come from Postmark).
+resource postmarkDkim 'Microsoft.Network/dnsZones/TXT@2018-05-01' = {
+  parent: zone
+  name: '20261005053422pm._domainkey.mail'
+  properties: {
+    TTL: 3600
+    TXTRecords: [
+      { value: ['k=rsa;p=MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQCDcbcgoklEJtSij3j7wlS913GY31bRwFlkKKXB/XlYKB5/yia3eDXrCnMsvJCITjEHkc8ooBsztRwyJdMANyb+020k2zBFCDddUVpCG0eGRKQfMDqVN7YmpzbHIvl2rxK0qh7psBIqGxXA6ytMr9k20Ulzo0Fhvcxs7dPUGhVGPwIDAQAB'] }
+    ]
+  }
+}
+
 // Inbound email (messaging-channels.md §3.1) goes to Postmark, whose inbound domain is in.paddockside.com.au.
 // `*.in` covers every tenant's subdomain (r-{token}@laureloak.in…, {horse}@laureloak.in…); `in` is the
 // catch-all ({tenant}@in.paddockside.com.au). Adding a tenant needs no DNS change.
