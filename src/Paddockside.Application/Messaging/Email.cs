@@ -41,6 +41,12 @@ public sealed class EmailOptions
     /// <summary>Replies go to <c>r-{token}@{tenant slug}.{InboundDomain}</c>.</summary>
     public string InboundDomain { get; set; } = "in.paddockside.com.au";
 
+    /// <summary>
+    /// Where the owner portal lives, for links in emails ("{PortalBaseUrl}/my/link#token"). No links are added when
+    /// unset.
+    /// </summary>
+    public string? PortalBaseUrl { get; set; }
+
     /// <summary>The background sender drains queued email when true (switched off in tests).</summary>
     public bool DispatchEnabled { get; set; } = true;
 

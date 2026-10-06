@@ -24,9 +24,16 @@ public static class DemoStream
         // reserved .test domain, which can never reach a real inbox.
         if (tenant.Slug != "laureloak" || tenant.FooterDetails is null)
             tenant.SetBranding("laureloak", tenant.LogoUrl, "Demo tenant for Paddockside development · not a real business");
-        foreach (var party in await db.Parties.ToListAsync())
-            if (party.Kind == PartyKind.Person && party.PrimaryEmail is null)
-                party.AddEmail($"{party.DisplayName.ToLowerInvariant().Replace(' ', '.')}@owners.paddockside.test");
+        // Mobiles come from 0491 570 006–159, the range ACMA reserves for fiction, so no real phone is ever texted.
+        var fictional = 6;
+        foreach (var party in (await db.Parties.ToListAsync()).OrderBy(p => p.DisplayName))
+        {
+            if (party.Kind != PartyKind.Person) continue;
+            if (party.PrimaryEmail is null) party.AddEmail($"{party.DisplayName.ToLowerInvariant().Replace(' ', '.')}@owners.paddockside.test");
+            if (party.PrimaryMobile is null && fictional <= 159) party.AddMobile($"0491 570 {fictional:D3}");
+            fictional++;
+        }
+
         await db.SaveChangesAsync();
         // Each horse's own inbox, e.g. faultless-miss@laureloak.in.paddockside.com.au.
         await HorseInboxes.EnsureAsync(db, clock.GetUtcNow(), CancellationToken.None);

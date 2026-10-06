@@ -68,6 +68,30 @@ public sealed record InboundView(
     string? Event,
     List<AttachmentView> Attachments);
 
+// ---- Owner portal --------------------------------------------------------------------------------------------
+
+public sealed record OwnerTenant(Guid Id, string Name, bool Current);
+
+public sealed record OwnerSession(string Name, string? Email, string? Mobile, string TenantName, string? TenantLogoUrl, List<OwnerTenant> Tenants);
+
+public sealed record OwnerHorse(Guid Id, string Name, string? SexAge, string? Pedigree, string? Next, string LastUpdate);
+
+public sealed record OwnerUpdate(Guid ItemId, Guid HorseId, string Horse, Guid? EventId, string? Event, string Kind, string? Title, string Summary, string At);
+
+public sealed record OwnerField(string Label, string Value);
+
+public sealed record OwnerReply(string Author, string At, string Body);
+
+public sealed record OwnerItem(Guid Id, string Kind, string At, string? Title, string Body, string? Author, string? Source,
+    List<OwnerField> Fields, string? Corrected, List<OwnerReply> Replies, bool CanReply);
+
+public sealed record OwnerEventPage(EventSummary Event, Guid HorseId, string Horse, List<OwnerItem> Items);
+
+public sealed record SignedIn(string Destination);
+
+/// <summary>A sign-in link redeemed: where to go, or why not (and where it was going).</summary>
+public sealed record LinkOutcome(string? Destination, string? Error, string? ReturnPath);
+
 /// <summary>Held is null unless the signed-in person is a tenant admin.</summary>
 public sealed record InboundCounts(int Pending, int Placed, int Ignored, int? Held);
 
@@ -112,6 +136,50 @@ public sealed class PaddocksideApi(HttpClient http)
 
     public Task<ApiResult<InboundCounts>> InboundCountsAsync() => GetAsync<InboundCounts>("api/inbound/counts");
 
+    // ---- Owner sign-in and portal --------------------------------------------------------------------------------
+
+    public Task<ApiResult<object>> RequestEmailLinkAsync(string email, string? returnPath) =>
+        PostAsync<object>("api/client-auth/email", new { email, returnPath });
+
+    public Task<ApiResult<object>> RequestSmsCodeAsync(string mobile, string? returnPath) =>
+        PostAsync<object>("api/client-auth/sms", new { mobile, returnPath });
+
+    public Task<ApiResult<SignedIn>> SubmitClientCodeAsync(string code) => PostAsync<SignedIn>("api/client-auth/code", new { code });
+
+    /// <summary>Redeems a link; a used or expired one says why and where it was going.</summary>
+    public async Task<LinkOutcome> RedeemLinkAsync(string token)
+    {
+        try
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Post, "api/client-auth/link") { Content = JsonContent.Create(new { token }) };
+            request.Headers.Add(RequestHeader, "1");
+            using var response = await http.SendAsync(request);
+            if (response.IsSuccessStatusCode) return new LinkOutcome((await response.Content.ReadFromJsonAsync<SignedIn>())!.Destination, null, null);
+            var problem = await response.Content.ReadFromJsonAsync<LinkProblem>();
+            return new LinkOutcome(null, problem?.Title ?? "That link didn't work. Ask for a new one below.", problem?.ReturnPath);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or System.Text.Json.JsonException)
+        {
+            return new LinkOutcome(null, "We could not reach Paddockside. Check your connection and try again.", null);
+        }
+    }
+
+    public Task<ApiResult<OwnerSession>> OwnerSessionAsync() => GetAsync<OwnerSession>("api/my/session");
+
+    public Task<ApiResult<object>> SwitchTenantAsync(Guid tenantId) => PostAsync<object>("api/my/tenant", new { tenantId });
+
+    public Task<ApiResult<List<OwnerHorse>>> MyHorsesAsync() => GetAsync<List<OwnerHorse>>("api/my/horses");
+
+    public Task<ApiResult<List<EventSummary>>> MyHorseEventsAsync(Guid horseId) => GetAsync<List<EventSummary>>($"api/my/horses/{horseId}/events");
+
+    public Task<ApiResult<List<OwnerUpdate>>> MyUpdatesAsync() => GetAsync<List<OwnerUpdate>>("api/my/updates");
+
+    public Task<ApiResult<OwnerEventPage>> MyEventAsync(Guid id) => GetAsync<OwnerEventPage>($"api/my/events/{id}");
+
+    public Task<ApiResult<OwnerReply>> ReplyAsync(Guid itemId, string body) => PostAsync<OwnerReply>($"api/my/items/{itemId}/replies", new { body });
+
+    private sealed record LinkProblem(string? Title, string? ReturnPath);
+
     private async Task<ApiResult<T>> GetAsync<T>(string path)
     {
         try
@@ -142,7 +210,9 @@ public sealed class PaddocksideApi(HttpClient http)
     {
         if (response.IsSuccessStatusCode)
         {
-            var value = response.StatusCode == HttpStatusCode.NoContent ? default : await response.Content.ReadFromJsonAsync<T>();
+            // 202 and 204 carry no body.
+            var empty = response.StatusCode is HttpStatusCode.NoContent or HttpStatusCode.Accepted || response.Content.Headers.ContentLength == 0;
+            var value = empty ? default : await response.Content.ReadFromJsonAsync<T>();
             return new ApiResult<T>(value, null, response.StatusCode);
         }
 

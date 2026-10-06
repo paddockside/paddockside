@@ -29,7 +29,9 @@ public static class StaffSessionCookie
         // Sliding renewal keeps the session alive while in use, but never past 30 days from sign-in.
         options.Events.OnSigningIn = context =>
         {
-            if (!context.Properties.Items.ContainsKey(AbsoluteExpiryKey))
+            // Owner sessions are long-lived by design (identity-access.md §4.1): no absolute cap, only their own expiry.
+            var isClient = context.Principal?.FindFirst(SessionClaims.AudienceClass)?.Value == nameof(AudienceClass.Client);
+            if (!isClient && !context.Properties.Items.ContainsKey(AbsoluteExpiryKey))
                 context.Properties.Items[AbsoluteExpiryKey] = DateTimeOffset.UtcNow.Add(AbsoluteLifetime).ToString("O");
             return Task.CompletedTask;
         };

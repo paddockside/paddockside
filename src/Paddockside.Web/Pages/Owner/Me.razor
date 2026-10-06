@@ -1,0 +1,61 @@
+@page "/my/me"
+@layout OwnerLayout
+@inherits OwnerPage
+
+@* The owner's own details and sign out. Contact details are changed by the tenant (identity-access.md §4.1). *@
+<PageTitle>Me</PageTitle>
+
+<div class="grid gap-6">
+    <h1 class="text-heading font-heading">Me</h1>
+    @if (Session.Current is { } me)
+    {
+        <dl class="card grid gap-3">
+            <div><dt class="text-small text-text-muted">Name</dt><dd class="font-strong">@me.Name</dd></div>
+            @if (me.Email is not null)
+            {
+                <div><dt class="text-small text-text-muted">Email</dt><dd>@me.Email</dd></div>
+            }
+            @if (me.Mobile is not null)
+            {
+                <div><dt class="text-small text-text-muted">Mobile</dt><dd>@me.Mobile</dd></div>
+            }
+        </dl>
+        <p class="text-text-muted">To change these, contact @me.TenantName. You don't need a password: we send you a link or a code each time.</p>
+
+        @if (me.Tenants.Count > 1)
+        {
+            <section class="grid gap-3" aria-labelledby="tenants-heading">
+                <h2 id="tenants-heading" class="font-heading">Your horses are with</h2>
+                @foreach (var t in me.Tenants)
+                {
+                    @if (t.Current)
+                    {
+                        <p class="card font-strong">@t.Name (showing now)</p>
+                    }
+                    else
+                    {
+                        <button type="button" class="btn-secondary" @onclick="() => SwitchAsync(t.Id)">Show @t.Name</button>
+                    }
+                }
+            </section>
+        }
+
+        <button type="button" class="btn-secondary" @onclick="SignOutAsync">Sign out</button>
+    }
+</div>
+
+@code {
+    protected override async Task OnInitializedAsync() => await EnsureSignedInAsync();
+
+    private async Task SwitchAsync(Guid tenantId)
+    {
+        await Session.SwitchAsync(tenantId);
+        Navigation.NavigateTo("my/horses");
+    }
+
+    private async Task SignOutAsync()
+    {
+        await Session.SignOutAsync();
+        Navigation.NavigateTo("my/sign-in");
+    }
+}

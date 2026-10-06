@@ -29,6 +29,18 @@ Replies come back by email and thread under the message; mail to a horse's own a
 **Inbound mail** page. `infra/README.md` lists the Postmark secrets, webhooks and DNS this needs in Azure.
 `/design` shows every component with sample data.
 
+**The owners' portal** is at https://localhost:7175/my. Owners have no password:
+- they sign in with an emailed link (or the code in that email);
+- or with a code texted to their mobile.
+
+Every owner email also carries its own link, which opens that update already signed in. Locally, texts are not
+sent: the code appears in the app's log, as a line starting `DEVELOPMENT: text to`. The demo owners have mobiles
+from 0491 570 006 up, the range reserved for fiction. So to try it:
+1. Open `/my`.
+2. Choose **Text me a code instead**.
+3. Enter `0491 570 006`.
+4. Type the code from the log.
+
 To run against the Azure dev database instead of LocalDB, sign in with `az login` first, then:
 
 ```

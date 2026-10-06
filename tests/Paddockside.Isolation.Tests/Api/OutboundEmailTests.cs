@@ -32,7 +32,7 @@ public sealed partial class OutboundEmailTests(IsolationDatabase db, ApiFactoryF
         var messageId = await PostToOwnersAsync(db.A, "Barrier 9 for Saturday.\n\nTickets <limited> & first in, first served.");
         await DispatchAsync();
 
-        var sent = Api.Emails.Sent.Where(s => s.Email.Metadata["deliveryId"] is var id && DeliveryIdsFor(messageId).Contains(Guid.Parse(id))).ToList();
+        var sent = Api.Emails.Sent.Where(s => s.Email.Metadata.GetValueOrDefault("deliveryId") is { } id && DeliveryIdsFor(messageId).Contains(Guid.Parse(id))).ToList();
         await using var a = db.ContextFor(db.A.TenantId);
         var tenant = await a.Tenants.SingleAsync();
 
@@ -91,7 +91,7 @@ public sealed partial class OutboundEmailTests(IsolationDatabase db, ApiFactoryF
         var eveDelivery = deliveries.Single(d => d.PartyId == eve);
         Assert.Equal(DeliveryStatus.Suppressed, eveDelivery.Status);
         Assert.Contains("no longer an owner", eveDelivery.Note);
-        Assert.DoesNotContain(Api.Emails.Sent, s => s.Email.Metadata["deliveryId"] == eveDelivery.Id.ToString());
+        Assert.DoesNotContain(Api.Emails.Sent, s => s.Email.Metadata.GetValueOrDefault("deliveryId") == eveDelivery.Id.ToString());
     }
 
     [Fact]

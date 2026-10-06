@@ -17,8 +17,10 @@ public static class DependencyInjection
     /// </summary>
     public static IServiceCollection AddPaddocksideDatabase(this IServiceCollection services, string connectionString)
     {
-        services.AddDbContext<PaddocksideDbContext>(options =>
-            options.UseSqlServer(connectionString, sql => sql.EnableRetryOnFailure()));
+        // Interceptors registered elsewhere (e.g. the one that wakes the email sender) join every context.
+        services.AddDbContext<PaddocksideDbContext>((provider, options) => options
+            .UseSqlServer(connectionString, sql => sql.EnableRetryOnFailure())
+            .AddInterceptors(provider.GetServices<Microsoft.EntityFrameworkCore.Diagnostics.IInterceptor>()));
         services.AddDbContext<PaddocksideIdentityDbContext>(options =>
             options.UseSqlServer(connectionString, sql => sql.EnableRetryOnFailure()));
         services.AddScoped<TenantScopedDb>();
@@ -49,6 +51,16 @@ public static class DependencyInjection
         services.AddSingleton<OwnerEmailRenderer>();
         services.AddScoped<EmailDispatcher>();
         services.AddSingleton<EmailDispatchSignal>();
+        services.AddSingleton<Microsoft.EntityFrameworkCore.Diagnostics.IInterceptor, MailQueuedInterceptor>();
+
+        // Owner sign-in: links and codes by email and text (identity-access.md §4.1).
+        services.Configure<TwilioOptions>(configuration.GetSection(TwilioOptions.Section));
+        services.AddHttpClient<ISmsSender, TwilioSmsSender>(http =>
+        {
+            http.BaseAddress = new Uri("https://api.twilio.com/");
+            http.Timeout = TimeSpan.FromSeconds(15);
+        });
+        services.AddScoped<ClientAccess.ClientSignIn>();
         return services;
     }
 

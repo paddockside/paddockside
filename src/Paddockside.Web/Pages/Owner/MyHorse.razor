@@ -1,0 +1,48 @@
+@page "/my/horses/{Id:guid}"
+@layout OwnerLayout
+@inherits OwnerPage
+
+@* One horse: its events, newest first, each opening its updates. Only the steps owners follow are shown. *@
+<PageTitle>@(_name ?? "Horse")</PageTitle>
+
+<div class="grid gap-4">
+    <a href="my/horses" class="btn-link justify-self-start">← My horses</a>
+    <h1 class="text-heading font-heading">@_name</h1>
+    @if (_error is not null)
+    {
+        <Error Message="@_error" />
+    }
+    else if (_events is null)
+    {
+        <p class="text-text-muted" role="status">Loading…</p>
+    }
+    else if (_events.Count == 0)
+    {
+        <div class="card"><p>Nothing yet. Updates about @_name will appear here, and come to you by email too.</p></div>
+    }
+    else
+    {
+        @foreach (var e in _events)
+        {
+            <EventCard Side="Side.Owner" Model='e.ToCard($"my/events/{e.Id}")' />
+        }
+    }
+</div>
+
+@code {
+    [Parameter] public Guid Id { get; set; }
+
+    private string? _name;
+    private List<EventSummary>? _events;
+    private string? _error;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (!await EnsureSignedInAsync()) return;
+        var horses = await Api.MyHorsesAsync();
+        _name = horses.Value?.FirstOrDefault(h => h.Id == Id)?.Name;
+        var result = await Api.MyHorseEventsAsync(Id);
+        if (result.Succeeded) _events = result.Value;
+        else _error = result.Error;
+    }
+}

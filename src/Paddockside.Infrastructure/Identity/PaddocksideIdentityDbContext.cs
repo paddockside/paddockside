@@ -13,6 +13,8 @@ public sealed class PaddocksideIdentityDbContext(DbContextOptions<PaddocksideIde
 {
     public DbSet<Membership> Memberships => Set<Membership>();
 
+    public DbSet<SignInToken> SignInTokens => Set<SignInToken>();
+
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
@@ -32,6 +34,21 @@ public sealed class PaddocksideIdentityDbContext(DbContextOptions<PaddocksideIde
             b.HasIndex(m => new { m.PersonId, m.TenantId, m.Role }).IsUnique();
             b.HasIndex(m => m.TenantId);
             b.HasOne<Person>().WithMany(p => p.Memberships).HasForeignKey(m => m.PersonId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        builder.Entity<SignInToken>(b =>
+        {
+            b.HasKey(t => t.Id);
+            b.Property(t => t.Purpose).HasConversion<string>().HasMaxLength(32);
+            b.Property(t => t.TokenHash).HasMaxLength(64).IsUnicode(false);
+            b.Property(t => t.CodeHash).HasMaxLength(64).IsUnicode(false);
+            b.Property(t => t.BindingHash).HasMaxLength(64).IsUnicode(false);
+            b.Property(t => t.Email).HasMaxLength(320);
+            b.Property(t => t.Mobile).HasMaxLength(20);
+            b.Property(t => t.ReturnPath).HasMaxLength(400);
+            b.HasIndex(t => t.TokenHash).IsUnique().HasFilter("[TokenHash] IS NOT NULL");
+            b.HasIndex(t => t.BindingHash);
+            b.HasIndex(t => t.ExpiresAt);
         });
     }
 }

@@ -40,6 +40,12 @@ public sealed class Tenant
     /// </summary>
     public bool PriorManagementPeriodsVisible { get; set; }
 
+    /// <summary>
+    /// Tenant setting "invite owners on first interest" (identity-access.md §6, default on): a party gaining their
+    /// first managed interest is sent an invitation to the portal.
+    /// </summary>
+    public bool InviteOwnersOnFirstInterest { get; set; } = true;
+
     public void SetBranding(string slug, string? logoUrl, string? footerDetails)
     {
         Slug = NormaliseSlug(slug);

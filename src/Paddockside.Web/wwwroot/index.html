@@ -31,6 +31,14 @@
             setTheme(theme) {
                 if (theme === 'light' || theme === 'dark') document.documentElement.dataset.theme = theme;
                 else delete document.documentElement.dataset.theme;
+            },
+            // Owner portal: a notification link lands on the exact item (identity-access.md §4.1).
+            scrollToItem(id) {
+                const item = document.getElementById(id);
+                if (!item) return false;
+                item.scrollIntoView({ block: 'start' });
+                item.focus({ preventScroll: true });
+                return true;
             }
         };
     </script>

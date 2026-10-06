@@ -1,0 +1,37 @@
+@page "/my/link"
+@layout OwnerLayout
+@inject PaddocksideApi Api
+@inject OwnerSessionState Session
+@inject NavigationManager Navigation
+
+@*
+    Where every emailed link lands (identity-access.md §4.1). The token is in the address after "#", so it never
+    reaches a server log, and this page — not the link itself — spends it, so a mail scanner opening links cannot.
+*@
+<PageTitle>Signing in · Owners</PageTitle>
+
+<p class="text-text-muted" role="status">Signing you in…</p>
+
+@code {
+    protected override async Task OnInitializedAsync()
+    {
+        var hash = new Uri(Navigation.Uri).Fragment.TrimStart('#');
+        if (hash.Length == 0)
+        {
+            Navigation.NavigateTo("my/sign-in", replace: true);
+            return;
+        }
+
+        var outcome = await Api.RedeemLinkAsync(hash);
+        if (outcome.Destination is { } destination)
+        {
+            await Session.RefreshAsync();
+            Navigation.NavigateTo(destination.TrimStart('/'), replace: true);
+            return;
+        }
+
+        // Used or expired: the plain sign-in page, remembering where the link was going.
+        var query = $"reason={Uri.EscapeDataString(outcome.Error!)}{(outcome.ReturnPath is { } r ? $"&return={Uri.EscapeDataString(r)}" : "")}";
+        Navigation.NavigateTo($"my/sign-in?{query}", replace: true);
+    }
+}

@@ -39,5 +39,8 @@ public sealed class Membership
 
     public DateTimeOffset CreatedAt { get; init; } = DateTimeOffset.UtcNow;
 
+    /// <summary>When the person first signed in under this membership (accepting an invitation or any link).</summary>
+    public DateTimeOffset? AcceptedAt { get; set; }
+
     public AudienceClass Class => MemberRoles.ClassOf(Role);
 }

@@ -1,0 +1,72 @@
+@inherits LayoutComponentBase
+@implements IDisposable
+@inject OwnerSessionState Session
+@inject NavigationManager Navigation
+
+@*
+    The owner portal's frame (design-system.md §2.0, §2.2): the tenant's logo and name at the top, one thing per
+    screen, 18 px text, and a bottom bar of three labelled destinations — My horses, Updates, Me. No hamburger menu,
+    no icon-only controls. The product's name is small in the footer, never in the owner's way.
+*@
+<div class="grid min-h-screen grid-cols-[minmax(0,1fr)] grid-rows-[auto_1fr_auto] bg-surface-default text-body-owner">
+    <AppHeader Side="Side.Owner" TenantName="@Session.Current?.TenantName" LogoUrl="@Session.Current?.TenantLogoUrl"
+               OtherTenants="OtherTenants" OnSwitchTenant="Switch" />
+
+    <main class="mx-auto w-full max-w-xl px-4 pb-[8rem] pt-6">
+        @Body
+        <p class="mt-12 text-center text-small text-text-muted">Paddockside</p>
+    </main>
+
+    @if (Session.Current is not null)
+    {
+        <nav aria-label="Main" class="fixed inset-x-0 bottom-0 z-10 border-t border-border-subtle bg-surface-raised pb-[env(safe-area-inset-bottom)]">
+            <ul class="mx-auto grid max-w-xl grid-cols-3">
+                @foreach (var (href, label) in Destinations)
+                {
+                    var current = IsCurrent(href);
+                    <li>
+                        <a href="@href" aria-current="@(current ? "page" : null)"
+                           class="flex min-h-[64px] items-center justify-center px-2 font-strong @(current ? "text-action-primary-bg underline decoration-2 underline-offset-8" : "text-text-primary")">
+                            @label
+                        </a>
+                    </li>
+                }
+            </ul>
+        </nav>
+    }
+</div>
+
+@code {
+    private static readonly (string Href, string Label)[] Destinations = [("my/horses", "My horses"), ("my/updates", "Updates"), ("my/me", "Me")];
+
+    private IReadOnlyList<TenantOption> OtherTenants =>
+        Session.Current?.Tenants.Where(t => !t.Current).Select(t => new TenantOption(t.Id.ToString(), t.Name)).ToList() ?? [];
+
+    private bool IsCurrent(string href)
+    {
+        var path = "/" + Navigation.ToBaseRelativePath(Navigation.Uri).Split('#', '?')[0];
+        return path.StartsWith("/" + href, StringComparison.Ordinal) || (href == "my/horses" && path.StartsWith("/my/events", StringComparison.Ordinal));
+    }
+
+    private async Task Switch(TenantOption tenant)
+    {
+        await Session.SwitchAsync(Guid.Parse(tenant.Id));
+        Navigation.NavigateTo("my/horses");
+    }
+
+    protected override void OnInitialized()
+    {
+        Session.Changed += Refresh;
+        Navigation.LocationChanged += Moved;
+    }
+
+    private void Refresh() => InvokeAsync(StateHasChanged);
+
+    private void Moved(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e) => InvokeAsync(StateHasChanged);
+
+    public void Dispose()
+    {
+        Session.Changed -= Refresh;
+        Navigation.LocationChanged -= Moved;
+    }
+}

@@ -15,6 +15,9 @@ public static class SessionClaims
     public const string Role = "paddockside:role";
 
     public const string AudienceClass = "paddockside:class";
+
+    /// <summary>Clients: the party they act as in the active tenant (identity-access.md §3).</summary>
+    public const string Party = "paddockside:party";
 }
 
 /// <summary>Finds the membership a staff sign-in acts under.</summary>

@@ -50,6 +50,21 @@ and Open ticked. The app also ignores any event whose message id does not match 
 Locally, `appsettings.Development.json` uses Postmark's `POSTMARK_API_TEST` token: sends are accepted and
 nothing is delivered. The `https-azure` launch profile reads the real token from the vault.
 
+### Owner sign-in (email links and text codes)
+
+Owners sign in at `/my` with no password: an emailed link, or a code by text (`docs/product/identity-access.md`
+§4.1).
+
+- **Links in emails** use `Email:PortalBaseUrl`. It is set in `appsettings.json` to the web app's address; change
+  it when the portal gets its own domain.
+- **Texts** go through Twilio, using the Key Vault secrets `Twilio--AccountSid`, `Twilio--AuthToken` and
+  `Twilio--FromNumber`. A Twilio *trial* account only texts numbers verified in Twilio. Without the secrets, SMS
+  sign-in answers normally but nothing is sent; locally the code goes to the log instead.
+
+Sign-in tokens are kept only as hashes, in `identity.SignInTokens`. Owner sessions last 90 days on a device the
+owner has used before, and a day on a new one. That depends on the app's data-protection keys surviving restarts:
+App Service keeps them in the app's storage.
+
 ### Inbound email (Postmark)
 
 Mail to any address under `in.paddockside.com.au` reaches Postmark through the MX records in `dns.bicep`:

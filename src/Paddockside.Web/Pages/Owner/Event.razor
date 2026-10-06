@@ -1,0 +1,114 @@
+@page "/my/events/{Id:guid}"
+@layout OwnerLayout
+@inherits OwnerPage
+@inject IJSRuntime JS
+
+@*
+    One event as an owner sees it (search-reporting.md §3; design-system.md §2.0): the steps owners follow, then
+    what they may see, newest first — results as cards, messages with only their own replies, and a reply box under
+    each message. A notification link lands on its item ("#item-…"), scrolled into view and highlighted.
+*@
+<PageTitle>@(_page?.Event.Title ?? "Update")</PageTitle>
+
+<div class="grid gap-6">
+    @if (_error is not null)
+    {
+        <a href="my/horses" class="btn-link justify-self-start">← My horses</a>
+        <Error Message="@_error" />
+    }
+    else if (_page is null)
+    {
+        <p class="text-text-muted" role="status">Loading…</p>
+    }
+    else
+    {
+        <a href="my/horses/@_page.HorseId" class="btn-link justify-self-start">← @_page.Horse</a>
+        <h1 class="sr-only">@_page.Horse: @_page.Event.Title</h1>
+        <EventCard Side="Side.Owner" Model="_page.Event.ToCard()" />
+
+        @if (_page.Items.Count == 0)
+        {
+            <div class="card"><p>Nothing posted yet. You'll get an email when there is.</p></div>
+        }
+        @foreach (var item in _page.Items)
+        {
+            var target = item.Id == _target;
+            <section id="item-@item.Id" tabindex="-1" aria-label="@(item.Title ?? item.Kind)"
+                     class="grid gap-3 rounded-card @(target ? "ring-4 ring-focus ring-offset-4 ring-offset-surface-default" : null)">
+                @if (item.Kind == "Result")
+                {
+                    <FactCard Side="Side.Owner" Model="@(new FactModel(item.Title ?? "Result", item.Source ?? "", item.At, Scope.Owners,
+                        item.Fields.Select(f => new Components.FactField(f.Label, f.Value)).ToList(), Correction: item.Corrected))" />
+                }
+                else
+                {
+                    <MessageThread Side="Side.Owner" Model="@(new MessageModel(item.Author ?? Session.Current?.TenantName ?? "", item.At, Scope.Owners, "", item.Body,
+                        item.Replies.Select(r => new Reply(r.Author, "", r.At, r.Body, IsViewer: true)).ToList(), [], Title: item.Title))" />
+                }
+
+                @if (item.CanReply)
+                {
+                    <form class="grid gap-3" @onsubmit="() => ReplyAsync(item)" @onsubmit:preventDefault>
+                        <label for="reply-@item.Id" class="font-strong">Reply to @(Session.Current?.TenantName ?? "us")</label>
+                        <textarea id="reply-@item.Id" rows="3" class="rounded-control border border-border-strong bg-surface-raised p-4"
+                                  @bind="_drafts[item.Id]" placeholder="Only @(Session.Current?.TenantName ?? "the team") will see this."></textarea>
+                        <button type="submit" class="btn-primary justify-self-start" disabled="@(_sending == item.Id)">Send reply</button>
+                        @if (_replyError.TryGetValue(item.Id, out var problem))
+                        {
+                            <p class="font-strong text-status-danger-fg" role="alert">@problem</p>
+                        }
+                    </form>
+                }
+            </section>
+        }
+    }
+</div>
+
+@code {
+    [Parameter] public Guid Id { get; set; }
+
+    private OwnerEventPage? _page;
+    private string? _error;
+    private Guid? _target;
+    private Guid? _sending;
+    private bool _scrolled;
+    private readonly Dictionary<Guid, string?> _drafts = [];
+    private readonly Dictionary<Guid, string> _replyError = [];
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (!await EnsureSignedInAsync()) return;
+        var hash = new Uri(Navigation.Uri).Fragment;
+        _target = hash.StartsWith("#item-", StringComparison.Ordinal) && Guid.TryParse(hash["#item-".Length..], out var id) ? id : null;
+
+        var result = await Api.MyEventAsync(Id);
+        if (!result.Succeeded) { _error = result.Error; return; }
+        _page = result.Value;
+        foreach (var item in _page!.Items.Where(i => i.CanReply)) _drafts.TryAdd(item.Id, null);
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_page is not null && _target is { } target && !_scrolled)
+            _scrolled = await JS.InvokeAsync<bool>("paddockside.scrollToItem", $"item-{target}");
+    }
+
+    private async Task ReplyAsync(OwnerItem item)
+    {
+        _replyError.Remove(item.Id);
+        if (string.IsNullOrWhiteSpace(_drafts[item.Id])) { _replyError[item.Id] = "Write your reply first."; return; }
+
+        _sending = item.Id;
+        try
+        {
+            var result = await Api.ReplyAsync(item.Id, _drafts[item.Id]!);
+            if (!result.Succeeded) { _replyError[item.Id] = result.Error!; return; }
+            item.Replies.Add(result.Value!);
+            _drafts[item.Id] = null;
+        }
+        finally
+        {
+            _sending = null;
+        }
+    }
+}

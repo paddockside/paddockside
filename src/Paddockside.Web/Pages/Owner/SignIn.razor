@@ -1,0 +1,123 @@
+@page "/my/sign-in"
+@layout OwnerLayout
+@inject PaddocksideApi Api
+@inject NavigationManager Navigation
+
+@*
+    Owner sign-in (identity-access.md §4.1): no password. An email with a link (and a code for when it is read on
+    another device), or a text with a code. One question per screen, big fields, plain words.
+*@
+<PageTitle>Sign in · Owners</PageTitle>
+
+<div class="grid gap-6">
+    <h1 class="text-heading font-heading">Sign in</h1>
+
+    @if (Reason is { Length: > 0 })
+    {
+        <p class="rounded-control bg-status-info-bg px-4 py-3 text-status-info-fg" role="status">@Reason</p>
+    }
+
+    @if (_step == Step.Ask)
+    {
+        <form class="grid gap-4" @onsubmit="AskAsync" @onsubmit:preventDefault>
+            @if (_byText)
+            {
+                <label for="mobile" class="font-strong">Your mobile number</label>
+                <input id="mobile" type="tel" inputmode="tel" autocomplete="tel" class="min-h-control rounded-control border border-border-strong bg-surface-raised px-4"
+                       @bind="_mobile" aria-describedby="@(_error is null ? null : "ask-error")" />
+                <button type="submit" class="btn-primary" disabled="@_busy">Text me a code</button>
+                <button type="button" class="btn-link justify-self-start" @onclick="() => _byText = false">Use my email instead</button>
+            }
+            else
+            {
+                <label for="email" class="font-strong">Your email address</label>
+                <p class="text-text-muted">The one you get updates at. We'll email you a link.</p>
+                <input id="email" type="email" inputmode="email" autocomplete="email" class="min-h-control rounded-control border border-border-strong bg-surface-raised px-4"
+                       @bind="_email" aria-describedby="@(_error is null ? null : "ask-error")" />
+                <button type="submit" class="btn-primary" disabled="@_busy">Email me a link</button>
+                <button type="button" class="btn-link justify-self-start" @onclick="() => _byText = true">Text me a code instead</button>
+            }
+            @if (_error is not null)
+            {
+                <p id="ask-error" class="font-strong text-status-danger-fg" role="alert">@_error</p>
+            }
+        </form>
+    }
+    else
+    {
+        <div class="grid gap-4">
+            <p role="status">
+                @if (_byText)
+                {
+                    <span>If that number is one we have, a 6-digit code is on its way to it.</span>
+                }
+                else
+                {
+                    <span>If that address is one we have, an email is on its way. Tap the button in it to sign in.</span>
+                }
+            </p>
+            <form class="grid gap-4" @onsubmit="CodeAsync" @onsubmit:preventDefault>
+                <label for="code" class="font-strong">@(_byText ? "The code from the text" : "Or type the code from the email")</label>
+                <input id="code" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="7"
+                       class="min-h-control rounded-control border border-border-strong bg-surface-raised px-4 text-title tracking-[0.3em]"
+                       @bind="_code" aria-describedby="@(_error is null ? null : "code-error")" />
+                <button type="submit" class="btn-primary" disabled="@_busy">Sign in</button>
+                @if (_error is not null)
+                {
+                    <p id="code-error" class="font-strong text-status-danger-fg" role="alert">@_error</p>
+                }
+                <button type="button" class="btn-link justify-self-start" @onclick="StartAgain">Start again</button>
+            </form>
+        </div>
+    }
+</div>
+
+@code {
+    private enum Step { Ask, Code }
+
+    [SupplyParameterFromQuery(Name = "return")] public string? ReturnPath { get; set; }
+
+    [SupplyParameterFromQuery(Name = "reason")] public string? Reason { get; set; }
+
+    private Step _step = Step.Ask;
+    private bool _byText;
+    private bool _busy;
+    private string? _email;
+    private string? _mobile;
+    private string? _code;
+    private string? _error;
+
+    private async Task AskAsync()
+    {
+        (_busy, _error) = (true, null);
+        try
+        {
+            var result = _byText
+                ? await Api.RequestSmsCodeAsync(_mobile ?? "", ReturnPath)
+                : await Api.RequestEmailLinkAsync(_email ?? "", ReturnPath);
+            if (result.Succeeded) _step = Step.Code;
+            else _error = result.Error;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task CodeAsync()
+    {
+        (_busy, _error) = (true, null);
+        try
+        {
+            var result = await Api.SubmitClientCodeAsync(_code ?? "");
+            if (result.Succeeded) Navigation.NavigateTo(result.Value!.Destination.TrimStart('/'), replace: true);
+            else _error = result.Error;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private void StartAgain() => (_step, _code, _error) = (Step.Ask, null, null);
+}

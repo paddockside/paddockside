@@ -33,6 +33,38 @@ public sealed class Party
 
     public PartyKind Kind { get; }
 
+    /// <summary>
+    /// The signed-in person this party is, once linked (identity-access.md §3). Linking happens the first time the
+    /// person accepts a link sent to one of this party's verified addresses. Most parties are never linked.
+    /// </summary>
+    public Guid? PersonId { get; private set; }
+
+    /// <summary>Links the party to a person. A party is one person; relinking to someone else is refused.</summary>
+    public void LinkPerson(Guid personId)
+    {
+        if (PersonId is { } existing && existing != personId)
+            throw new DomainException("This party is already linked to another person; a tenant admin must sort it out.");
+        PersonId = personId;
+    }
+
+    /// <summary>The mobile number texts go to, in E.164 form.</summary>
+    public PartyContact? PrimaryMobile =>
+        _contacts.Where(c => c.Kind == ContactKind.Mobile).OrderByDescending(c => c.IsPrimary).FirstOrDefault();
+
+    /// <summary>Adds a mobile number, stored in E.164 form so an SMS sign-in matches however it was typed.</summary>
+    public PartyContact AddMobile(string number, bool primary = true)
+    {
+        var normalised = PhoneNumbers.Normalise(number) ?? throw new DomainException($"'{number}' is not a mobile number.");
+        if (_contacts.Any(c => c.Kind == ContactKind.Mobile && c.Value == normalised))
+            throw new DomainException("That mobile number is already on this party.");
+        if (primary)
+            foreach (var other in _contacts.Where(c => c.Kind == ContactKind.Mobile)) other.IsPrimary = false;
+
+        var contact = new PartyContact(ContactKind.Mobile, normalised, primary || PrimaryMobile is null);
+        _contacts.Add(contact);
+        return contact;
+    }
+
     /// <summary>How to reach the party (data-model.md PARTY_CONTACT).</summary>
     public IReadOnlyList<PartyContact> Contacts => _contacts;
 

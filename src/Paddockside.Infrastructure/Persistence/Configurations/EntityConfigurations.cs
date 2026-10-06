@@ -18,6 +18,7 @@ internal sealed class TenantConfiguration : IEntityTypeConfiguration<Tenant>
         b.Property(x => x.Id).ValueGeneratedNever();
         b.Property(x => x.Name).HasMaxLength(200);
         b.Property(x => x.PriorManagementPeriodsVisible);
+        b.Property(x => x.InviteOwnersOnFirstInterest).HasDefaultValue(true);
         b.Property(x => x.Slug).HasMaxLength(30);
         b.Property(x => x.LogoUrl).HasMaxLength(500);
         b.Property(x => x.FooterDetails).HasMaxLength(500);
@@ -35,6 +36,9 @@ internal sealed class PartyConfiguration : IEntityTypeConfiguration<Party>
         b.Property(x => x.Kind).AsString();
         b.Ignore(x => x.PrimaryEmail);
         b.Ignore(x => x.FirstName);
+        b.Ignore(x => x.PrimaryMobile);
+        b.Property(x => x.PersonId);
+        b.HasIndex(x => x.PersonId);
 
         // Contacts belong to their party (and its tenant filter); they are never queried on their own.
         b.OwnsMany(x => x.Contacts, c =>
@@ -291,6 +295,23 @@ internal sealed class InboundMessageConfiguration : IEntityTypeConfiguration<Inb
             a.Property(x => x.DroppedReason).HasMaxLength(200);
         });
         b.Navigation(x => x.Attachments).UsePropertyAccessMode(PropertyAccessMode.Field);
+    }
+}
+
+internal sealed class OwnerInvitationConfiguration : IEntityTypeConfiguration<OwnerInvitation>
+{
+    public void Configure(EntityTypeBuilder<OwnerInvitation> b)
+    {
+        b.MapTenantOwned();
+        b.Property(x => x.Status).AsString();
+        b.Property(x => x.CreatedAt);
+        b.Property(x => x.SentAt);
+        b.Property(x => x.Address).HasMaxLength(320);
+        b.Property(x => x.Note).HasMaxLength(300);
+        b.HasIndex(x => x.PartyId).IsUnique(); // one invitation per party, ever
+        b.HasIndex("TenantId", nameof(OwnerInvitation.Status));
+        b.HasOne<Party>().WithMany().HasForeignKey(x => x.PartyId).OnDelete(DeleteBehavior.Restrict);
+        b.HasOne<Horse>().WithMany().HasForeignKey(x => x.HorseId).OnDelete(DeleteBehavior.Restrict);
     }
 }
 

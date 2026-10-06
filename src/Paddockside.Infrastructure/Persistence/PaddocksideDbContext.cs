@@ -37,6 +37,8 @@ public sealed class PaddocksideDbContext(DbContextOptions<PaddocksideDbContext> 
 
     public DbSet<InboundMessage> InboundMessages => Set<InboundMessage>();
 
+    public DbSet<OwnerInvitation> OwnerInvitations => Set<OwnerInvitation>();
+
     /// <summary>Read by the query filters. EF Core re-evaluates it for each context instance.</summary>
     private Guid? CurrentTenantId => tenantContext.TenantId;
 
@@ -52,6 +54,7 @@ public sealed class PaddocksideDbContext(DbContextOptions<PaddocksideDbContext> 
     {
         EnsureChangesBelongToCurrentTenant();
         Inbound.HorseInboxes.Issue(this, HorsesGainingNames(), DateTimeOffset.UtcNow);
+        ClientAccess.OwnerInvitations.Queue(this, DateTimeOffset.UtcNow);
         return base.SaveChanges(acceptAllChangesOnSuccess);
     }
 
@@ -59,6 +62,7 @@ public sealed class PaddocksideDbContext(DbContextOptions<PaddocksideDbContext> 
     {
         EnsureChangesBelongToCurrentTenant();
         await Inbound.HorseInboxes.IssueAsync(this, HorsesGainingNames(), DateTimeOffset.UtcNow, cancellationToken);
+        await ClientAccess.OwnerInvitations.QueueAsync(this, DateTimeOffset.UtcNow, cancellationToken);
         return await base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
     }
 

@@ -1,0 +1,43 @@
+@page "/my"
+@page "/my/horses"
+@layout OwnerLayout
+@inherits OwnerPage
+
+@* Owner home (search-reporting.md §3): their horses as cards, each with what is next. *@
+<PageTitle>My horses</PageTitle>
+
+<div class="grid gap-4">
+    <h1 class="text-heading font-heading">My horses</h1>
+    @if (_error is not null)
+    {
+        <Error Message="@_error" />
+    }
+    else if (_horses is null)
+    {
+        <p class="text-text-muted" role="status">Loading…</p>
+    }
+    else if (_horses.Count == 0)
+    {
+        <div class="card"><p>You don't have a share in any horses with @Session.Current?.TenantName at the moment.</p></div>
+    }
+    else
+    {
+        @foreach (var horse in _horses)
+        {
+            <HorseCard Side="Side.Owner" Model="@(new HorseCardModel(horse.Name, horse.SexAge ?? "", null, horse.Next, 0, Subtitle: horse.LastUpdate, Href: $"my/horses/{horse.Id}"))" />
+        }
+    }
+</div>
+
+@code {
+    private List<OwnerHorse>? _horses;
+    private string? _error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!await EnsureSignedInAsync()) return;
+        var result = await Api.MyHorsesAsync();
+        if (result.Succeeded) _horses = result.Value;
+        else _error = result.Error;
+    }
+}

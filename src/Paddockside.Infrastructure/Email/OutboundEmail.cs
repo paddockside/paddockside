@@ -59,6 +59,7 @@ public sealed class EmailDispatcher(
     IEmailSender sender,
     OwnerEmailRenderer renderer,
     IOptions<EmailOptions> options,
+    ClientAccess.ClientSignIn links,
     TimeProvider clock,
     ILogger<EmailDispatcher> logger)
 {
@@ -72,12 +73,19 @@ public sealed class EmailDispatcher(
         var accepted = 0;
         foreach (var tenantId in await tenants.TenantsWithQueuedEmailAsync(20, cancellationToken))
             accepted += await DispatchTenantAsync(tenantId, cancellationToken);
+        if (InvitationsEnabled)
+            foreach (var tenantId in await tenants.TenantsWithQueuedInvitationsAsync(20, cancellationToken))
+                accepted += await DispatchInvitationsAsync(tenantId, cancellationToken);
         return accepted;
     }
 
     /// <summary>Whether any email is still waiting to be sent (and has attempts left).</summary>
     public async Task<bool> HasQueuedAsync(CancellationToken cancellationToken) =>
-        (await tenants.TenantsWithQueuedEmailAsync(1, cancellationToken)).Count > 0;
+        (await tenants.TenantsWithQueuedEmailAsync(1, cancellationToken)).Count > 0
+        || (InvitationsEnabled && (await tenants.TenantsWithQueuedInvitationsAsync(1, cancellationToken)).Count > 0);
+
+    /// <summary>Invitations carry a portal link, so they wait until the portal address is configured.</summary>
+    private bool InvitationsEnabled => options.Value.PortalBaseUrl is { Length: > 0 };
 
     private async Task<int> DispatchTenantAsync(Guid tenantId, CancellationToken cancellationToken)
     {
@@ -137,7 +145,9 @@ public sealed class EmailDispatcher(
                 delivery.AssignRoutingAddress(address);
             }
 
-            var rendered = renderer.Render(tenant, horse, message.EventId is { } eventId ? events.GetValueOrDefault(eventId) : null, message, party);
+            // Each owner's copy carries its own link: it opens this message and signs them in (identity-access.md §4.1).
+            var openLink = await links.IssueDeepLinkAsync(tenant.Id, party.Id, contact.Value, message.Id, message.EventId, cancellationToken);
+            var rendered = renderer.Render(tenant, horse, message.EventId is { } eventId ? events.GetValueOrDefault(eventId) : null, message, party, openLink);
             var result = await sender.SendAsync(new OutboundEmail(
                 options.Value.FromAddress,
                 tenant.Name,
@@ -163,6 +173,56 @@ public sealed class EmailDispatcher(
 
         await db.SaveChangesAsync(cancellationToken);
         logger.LogInformation("Email dispatch for tenant {TenantId}: {Accepted} of {Count} accepted.", tenantId, accepted, batch.Count);
+        return accepted;
+    }
+
+    /// <summary>
+    /// Sends queued owner invitations (identity-access.md §6). A reply to one goes to the horse's own inbox, so it
+    /// reaches staff on that horse rather than bouncing.
+    /// </summary>
+    private async Task<int> DispatchInvitationsAsync(Guid tenantId, CancellationToken cancellationToken)
+    {
+        await using var db = tenants.For(tenantId);
+        var queued = await db.OwnerInvitations.Where(i => i.Status == OwnerInvitationStatus.Queued).OrderBy(i => i.CreatedAt).Take(BatchSize).ToListAsync(cancellationToken);
+        if (queued.Count == 0) return 0;
+
+        var tenant = await db.Tenants.SingleAsync(cancellationToken);
+        var partyIds = queued.Select(i => i.PartyId).ToList();
+        var parties = await db.Parties.Where(p => partyIds.Contains(p.Id)).ToDictionaryAsync(p => p.Id, cancellationToken);
+        var horseIds = queued.Select(i => i.HorseId).Distinct().ToList();
+        var horses = await db.Horses.Where(h => horseIds.Contains(h.Id)).ToDictionaryAsync(h => h.Id, cancellationToken);
+        var inboxes = await db.RoutingAddresses.Where(r => r.Kind == RoutingAddressKind.HorseInbox && horseIds.Contains(r.HorseId)).ToListAsync(cancellationToken);
+
+        var accepted = 0;
+        foreach (var invitation in queued)
+        {
+            var now = clock.GetUtcNow();
+            var party = parties[invitation.PartyId];
+            var horse = horses[invitation.HorseId];
+            if (party.PersonId is not null) { invitation.Skip("Not sent: they already sign in.", now); continue; }
+            if (party.PrimaryEmail is not { } contact) { invitation.Skip("Not sent: no email address on record.", now); continue; }
+            if (!contact.IsDeliverable) { invitation.Skip("Not sent: this address bounced or complained before.", now); continue; }
+            if (await links.IssueInvitationAsync(tenant.Id, party.Id, contact.Value, cancellationToken) is not { } link) continue;
+
+            var replyTo = Inbound.HorseInboxes.Current(horse, inboxes)?.EmailAddress(tenant, options.Value.InboundDomain) ?? options.Value.FromAddress;
+            var rendered = renderer.RenderInvitation(tenant, horse, party, link);
+            var result = await sender.SendAsync(new OutboundEmail(options.Value.FromAddress, tenant.Name, contact.Value, party.DisplayName, replyTo,
+                rendered.Subject, rendered.Html, rendered.Text,
+                new Dictionary<string, string> { ["tenantId"] = tenant.Id.ToString(), ["invitationId"] = invitation.Id.ToString() }), cancellationToken);
+
+            if (result.Accepted)
+            {
+                invitation.MarkSent(contact.Value, now);
+                accepted++;
+            }
+            else if (result.PermanentFailure)
+            {
+                invitation.Skip($"Not sent: {result.Error}", now);
+                party.MarkUndeliverable(contact.Value, now);
+            }
+        }
+
+        await db.SaveChangesAsync(cancellationToken);
         return accepted;
     }
 }

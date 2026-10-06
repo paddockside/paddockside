@@ -1,0 +1,59 @@
+@page "/my/updates"
+@layout OwnerLayout
+@inherits OwnerPage
+@inject IJSRuntime JS
+
+@* The latest updates across all their horses, newest first (search-reporting.md §3 "Owner home" feed). *@
+<PageTitle>Updates</PageTitle>
+
+<div class="grid gap-4">
+    <h1 class="text-heading font-heading">Updates</h1>
+    @if (_error is not null)
+    {
+        <Error Message="@_error" />
+    }
+    else if (_updates is null)
+    {
+        <p class="text-text-muted" role="status">Loading…</p>
+    }
+    else if (_updates.Count == 0)
+    {
+        <div class="card"><p>No updates yet. When there's news about your horses it will be here, and in your email.</p></div>
+    }
+    else
+    {
+        <ol class="grid gap-4">
+            @foreach (var u in _updates)
+            {
+                <li id="item-@u.ItemId" tabindex="-1">
+                    <a href="@(u.EventId is { } e ? $"my/events/{e}#item-{u.ItemId}" : $"my/horses/{u.HorseId}")" class="card grid gap-1 hover:border-border-strong">
+                        <span class="text-small text-text-muted">@u.Horse@(u.Event is null ? null : $" · {u.Event}") · @u.At</span>
+                        <span class="font-strong">@(u.Title ?? u.Kind)</span>
+                        <span>@u.Summary</span>
+                    </a>
+                </li>
+            }
+        </ol>
+    }
+</div>
+
+@code {
+    private List<OwnerUpdate>? _updates;
+    private string? _error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!await EnsureSignedInAsync()) return;
+        var result = await Api.MyUpdatesAsync();
+        if (result.Succeeded) _updates = result.Value;
+        else _error = result.Error;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_updates is not null && new Uri(Navigation.Uri).Fragment is { Length: > 1 } hash && !_scrolled)
+            _scrolled = await JS.InvokeAsync<bool>("paddockside.scrollToItem", hash[1..]);
+    }
+
+    private bool _scrolled;
+}

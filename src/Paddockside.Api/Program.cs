@@ -6,6 +6,7 @@ using Paddockside.Api.Development;
 using Paddockside.Api.Events;
 using Paddockside.Api.Horses;
 using Paddockside.Api.Inbound;
+using Paddockside.Api.Owners;
 using Paddockside.Api.Security;
 using Paddockside.Api.Tenancy;
 using Paddockside.Api.Webhooks;
@@ -32,6 +33,8 @@ builder.Services.AddPaddocksideDatabase(
     ?? throw new InvalidOperationException($"ConnectionStrings:{connectionName} is not configured."));
 builder.Services.AddBreachedPasswordList();
 builder.Services.AddEmail(builder.Configuration);
+if (builder.Environment.IsDevelopment() && string.IsNullOrEmpty(builder.Configuration["Twilio:AccountSid"]))
+    builder.Services.AddSingleton<Paddockside.Application.Messaging.ISmsSender, DevelopmentSmsLog>();
 builder.Services.AddHostedService<EmailDispatchService>();
 builder.Services.AddInbound(builder.Configuration, builder.Environment.ContentRootPath);
 builder.Services.AddHostedService<InboundProcessingService>();
@@ -62,7 +65,10 @@ builder.Services.AddAuthentication(IdentityConstants.ApplicationScheme).AddIdent
 builder.Services.ConfigureApplicationCookie(StaffSessionCookie.Configure);
 builder.Services.Configure<CookieAuthenticationOptions>(IdentityConstants.TwoFactorUserIdScheme, StaffSessionCookie.ConfigurePending);
 
-builder.Services.AddAuthorizationBuilder().AddPolicy(StaffPolicy.Name, StaffPolicy.Build);
+builder.Services.AddAuthorizationBuilder()
+    .AddPolicy(StaffPolicy.Name, StaffPolicy.Build)
+    .AddPolicy(ClientPolicy.Name, ClientPolicy.Build);
+builder.Services.Configure<SecurityStampValidatorOptions>(SessionRefresh.Configure);
 
 // Rate limiting on every sign-in step, per client IP (non-functional.md §2).
 var authRequestsPerMinute = builder.Configuration.GetValue("RateLimits:AuthPerMinute", 10);
@@ -102,6 +108,8 @@ app.MapAuthEndpoints();
 app.MapHorseEndpoints();
 app.MapEventEndpoints();
 app.MapInboundEndpoints();
+app.MapClientAuthEndpoints();
+app.MapOwnerEndpoints();
 app.MapPostmarkWebhooks();
 app.MapFallback("/api/{**rest}", () => Results.NotFound());
 app.MapFallbackToFile("index.html");

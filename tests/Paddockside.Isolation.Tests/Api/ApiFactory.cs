@@ -23,6 +23,11 @@ public sealed class ApiFactory(IsolationDatabase db) : WebApplicationFactory<Pro
     /// <summary>Records every email instead of sending it.</summary>
     public FakeEmailSender Emails { get; } = new();
 
+    /// <summary>Records every text instead of sending it.</summary>
+    public FakeSmsSender Texts { get; } = new();
+
+    public const string PortalBaseUrl = "https://portal.test";
+
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Testing");
@@ -33,10 +38,12 @@ public sealed class ApiFactory(IsolationDatabase db) : WebApplicationFactory<Pro
         builder.UseSetting("Email:DispatchEnabled", "false"); // tests run the dispatcher themselves
         builder.UseSetting("Postmark:WebhookUsername", WebhookUsername);
         builder.UseSetting("Postmark:WebhookPassword", WebhookPassword);
+        builder.UseSetting("Email:PortalBaseUrl", PortalBaseUrl);
         builder.ConfigureTestServices(services =>
         {
             services.AddSingleton<IBreachedPasswordList>(new FakeBreachedList());
             services.AddSingleton<IEmailSender>(Emails);
+            services.AddSingleton<ISmsSender>(Texts);
 
             // Inbound: files in a temp folder, the in-memory queue, and no background processor (tests drain it).
             services.AddSingleton<IInboundStore>(new FileInboundStore(InboundStoreRoot));
@@ -116,6 +123,22 @@ public sealed class FakeEmailSender : IEmailSender
         var id = Guid.NewGuid().ToString();
         _sent.Enqueue((email, id));
         return Task.FromResult(EmailSendResult.Sent(id));
+    }
+}
+
+/// <summary>Accepts every text and keeps it.</summary>
+public sealed class FakeSmsSender : ISmsSender
+{
+    private readonly System.Collections.Concurrent.ConcurrentQueue<(string To, string Body)> _sent = new();
+
+    public bool IsConfigured => true;
+
+    public IReadOnlyList<(string To, string Body)> Sent => _sent.ToList();
+
+    public Task<SmsSendResult> SendAsync(string to, string body, CancellationToken cancellationToken)
+    {
+        _sent.Enqueue((to, body));
+        return Task.FromResult(SmsSendResult.Sent(Guid.NewGuid().ToString()));
     }
 }
 
