@@ -115,19 +115,20 @@ public sealed class InboundEmailTests(IsolationDatabase db, ApiFactoryFixture ap
     [Fact]
     public async Task Mail_to_a_horse_with_no_event_in_window_is_parked_on_the_horse_and_old_names_still_work()
     {
-        // Tenant A's horse has a registered name and a stable name; its race was in 2024, long out of window.
-        var payload = Payload("tenant-a-stable-name@tenanta.in.paddockside.com.au", "vet@clinic.test", "Teeth done", "All fine.");
+        // Bel Esprit was Lot 142 before she was named, and her only race was three months ago: out of window.
+        var seed = await SeedTenantAsync(eventInWindow: false);
+        var payload = Payload($"lot-142@{seed.Slug}.in.paddockside.com.au", "vet@clinic.test", "Teeth done", "All fine.");
 
         await InboundAsync(payload);
         await ProcessQueueAsync();
 
-        await using var a = db.ContextFor(db.A.TenantId);
-        var message = await a.InboundMessages.SingleAsync(m => m.ProviderMessageId == payload.MessageId);
+        await using var check = db.ContextFor(seed.TenantId);
+        var message = await check.InboundMessages.SingleAsync(m => m.ProviderMessageId == payload.MessageId);
         Assert.Equal(InboundState.Placed, message.State);
-        Assert.Equal(db.A.HorseId, message.HorseId);
+        Assert.Equal(seed.HorseId, message.HorseId);
         Assert.Null(message.EventId);
         Assert.Contains("parked on the horse", message.Reason);
-        Assert.Null((await a.StreamItems.SingleAsync(i => i.Id == message.StreamItemId)).EventId);
+        Assert.Null((await check.StreamItems.SingleAsync(i => i.Id == message.StreamItemId)).EventId);
     }
 
     [Fact]
@@ -296,7 +297,7 @@ public sealed class InboundEmailTests(IsolationDatabase db, ApiFactoryFixture ap
         return (await response.Content.ReadFromJsonAsync<Posted>())!.Id;
     }
 
-    /// <summary>A tenant of its own: horse Bel Esprit owned by Ann, trainer Tom on file, one open race start.</summary>
+    /// <summary>A tenant of its own: horse Bel Esprit (once Lot 142) owned by Ann, trainer Tom on file, one open race start.</summary>
     private async Task<Seed> SeedTenantAsync(bool eventInWindow)
     {
         var now = DateTimeOffset.UtcNow;
@@ -307,7 +308,8 @@ public sealed class InboundEmailTests(IsolationDatabase db, ApiFactoryFixture ap
         var tom = new Party(tenant.Id, "Tom Trainer");
         ann.AddEmail($"ann-{suffix}@owners.test");
         tom.AddEmail($"tom-{suffix}@stable.test");
-        var horse = new Horse(tenant.Id, "Bel Esprit", HorseNameKind.Registered, now.AddYears(-1));
+        var horse = new Horse(tenant.Id, "Lot 142", HorseNameKind.SaleLot, now.AddYears(-2));
+        horse.AddName("Bel Esprit", HorseNameKind.Registered, now.AddYears(-1));
         horse.OpenManagementPeriod(now.AddYears(-1));
         horse.AddInterest(ann, syndicate, 1000, now.AddYears(-1));
         var race = new Event(horse, "RaceStart", "Caulfield, Saturday", eventInWindow ? now.AddDays(5) : now.AddDays(-90));

@@ -51,13 +51,29 @@ public sealed class PaddocksideDbContext(DbContextOptions<PaddocksideDbContext> 
     public override int SaveChanges(bool acceptAllChangesOnSuccess)
     {
         EnsureChangesBelongToCurrentTenant();
+        Inbound.HorseInboxes.Issue(this, HorsesGainingNames(), DateTimeOffset.UtcNow);
         return base.SaveChanges(acceptAllChangesOnSuccess);
     }
 
-    public override Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
+    public override async Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
     {
         EnsureChangesBelongToCurrentTenant();
-        return base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+        await Inbound.HorseInboxes.IssueAsync(this, HorsesGainingNames(), DateTimeOffset.UtcNow, cancellationToken);
+        return await base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+    }
+
+    /// <summary>New horses, and horses being given a new name: each needs its inbox address (§3.1).</summary>
+    private List<Horse> HorsesGainingNames()
+    {
+        var renamed = ChangeTracker.Entries<HorseName>()
+            .Where(e => e.State == EntityState.Added)
+            .Select(e => e.Property("HorseId").CurrentValue)
+            .OfType<Guid>()
+            .ToHashSet();
+        return ChangeTracker.Entries<Horse>()
+            .Where(e => e.State == EntityState.Added || renamed.Contains(e.Entity.Id))
+            .Select(e => e.Entity)
+            .ToList();
     }
 
     /// <summary>

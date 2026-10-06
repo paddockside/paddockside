@@ -19,6 +19,13 @@ public sealed class TenantScopedDb(DbContextOptions<PaddocksideDbContext> option
 
     // The cross-tenant reads. Each returns ids and nothing else; all real work then happens through For().
 
+    /// <summary>Every tenant, for start-up housekeeping that then works one tenant at a time.</summary>
+    public async Task<IReadOnlyList<Guid>> AllTenantIdsAsync(CancellationToken cancellationToken)
+    {
+        await using var db = new PaddocksideDbContext(options, new FixedTenantContext(null));
+        return await db.Tenants.IgnoreQueryFilters().Select(t => t.Id).ToListAsync(cancellationToken);
+    }
+
     /// <summary>Which tenant an inbound subdomain (<c>{slug}.in.…</c>) belongs to.</summary>
     public async Task<Guid?> TenantIdForSlugAsync(string slug, CancellationToken cancellationToken)
     {

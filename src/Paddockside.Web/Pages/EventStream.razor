@@ -6,9 +6,25 @@
 <PageTitle>@(_page?.Event.Title ?? "Event") · Paddockside</PageTitle>
 
 @*
-    The event page (search-reporting.md §3, event stream): the event and its stage strip, then every item, newest
-    first (event-page-mockup-notes.md), then the compose box. Staff view.
+    The event page (search-reporting.md §3, event stream; event-page-mockup-notes.md "Timeline model"): the horse's
+    events in a rail on the left, so the timeline is only ever one event deep; then this event and its step strip,
+    every item newest first on one vertical spine (facts, messages with their replies and delivery line, staff-only
+    notes), and the compose box at the bottom. Staff view.
 *@
+<div class="grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-[15rem_minmax(0,1fr)] lg:items-start">
+    @if (_page is not null && _events is { Count: > 1 })
+    {
+        @* Phones: the other events fold away above the timeline. Wide screens: a rail that stays in view. *@
+        <details class="card lg:hidden">
+            <summary class="cursor-pointer font-strong">All events for @_page.HorseName (@_events.Count)</summary>
+            <div class="mt-3">@EventRail</div>
+        </details>
+        <nav class="sticky top-6 hidden lg:block" aria-label="Events for @_page.HorseName">@EventRail</nav>
+    }
+    else if (_page is not null)
+    {
+        <div class="hidden lg:block"></div>
+    }
 <div class="grid grid-cols-[minmax(0,1fr)] gap-6">
     @if (_error is not null && _page is null)
     {
@@ -29,7 +45,7 @@
         <h1 class="sr-only">@_page.Event.Title</h1>
         <EventCard Model="_page.Event.ToCard()" />
 
-        <section class="grid grid-cols-[minmax(0,1fr)] gap-4" aria-label="Updates, newest first">
+        <section class="grid grid-cols-[minmax(0,1fr)] gap-4 border-l-2 border-border-subtle pl-4 sm:pl-6" aria-label="Updates, newest first">
             @if (_page.Items.Count == 0)
             {
                 <div class="card"><p>Nothing posted yet. Facts, messages and notes for this event will appear here.</p></div>
@@ -72,11 +88,29 @@
         </section>
     }
 </div>
+</div>
 
 @code {
     [Parameter] public Guid Id { get; set; }
 
     private EventPage? _page;
+    private List<EventSummary>? _events;
+
+    /// <summary>The horse's events, newest first, this one marked as the current page.</summary>
+    private RenderFragment EventRail => @<ol class="grid gap-1">
+        <li class="px-3 pb-2 text-small font-strong text-text-muted">@_page!.HorseName</li>
+        @foreach (var e in _events!)
+        {
+            var current = e.Id == Id;
+            <li>
+                <a href="events/@e.Id" aria-current="@(current ? "page" : null)"
+                   class="grid gap-0.5 rounded-control px-3 py-2 @(current ? "bg-action-secondary-bg font-strong" : "hover:bg-surface-sunken") @(e.Status is "Closed" or "Cancelled" ? "text-text-muted" : null)">
+                    <span class="@(e.Status == "Cancelled" ? "line-through" : null)">@e.Title</span>
+                    <span class="text-small text-text-muted">@e.Type · @e.KeyDate@(e.Status == "Open" ? null : $" · {e.Status}")</span>
+                </a>
+            </li>
+        }
+    </ol>;
     private string? _error;
     private string? _saved;
     private bool _busy;
@@ -97,8 +131,11 @@
     private async Task Load()
     {
         var result = await Api.EventAsync(Id);
-        if (result.Succeeded) _page = result.Value;
-        else _error = result.Error;
+        if (!result.Succeeded) { _error = result.Error; return; }
+        _page = result.Value;
+
+        var events = await Api.HorseEventsAsync(_page!.HorseId);
+        _events = events.Succeeded ? events.Value : null; // the rail is a convenience; the page works without it
     }
 
     private async Task Send(ComposeDraft draft)

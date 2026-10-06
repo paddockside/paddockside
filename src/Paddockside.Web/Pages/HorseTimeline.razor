@@ -2,6 +2,7 @@
 @inject PaddocksideApi Api
 @inject SessionState Session
 @inject NavigationManager Navigation
+@inject IJSRuntime JS
 
 <PageTitle>@(_horse?.Name ?? "Horse") · Paddockside</PageTitle>
 
@@ -26,6 +27,20 @@
             · @_horse.CurrentOwners current @(_horse.CurrentOwners == 1 ? "owner" : "owners")
         </p>
 
+        @if (_horse.InboxAddress is { } inbox)
+        {
+            @* The horse's own inbox (messaging-channels.md §3.1): give it to the trainer, and mail sent to it lands here. *@
+            <section class="card grid gap-2" aria-labelledby="inbox-heading">
+                <h2 id="inbox-heading" class="text-body font-strong">Email address for @_horse.Name</h2>
+                <p class="text-small text-text-muted">Give this to the trainer and anyone else who sends news about this horse. Mail sent to it lands on the horse's open event, or here on the horse if there isn't one.</p>
+                <div class="flex flex-wrap items-center gap-3">
+                    <code class="break-all rounded-control bg-surface-sunken px-3 py-2">@inbox</code>
+                    <button type="button" class="btn-secondary" @onclick="() => Copy(inbox)">@(_copied ? "Copied" : "Copy")</button>
+                    <span class="sr-only" role="status">@(_copied ? "Email address copied" : null)</span>
+                </div>
+            </section>
+        }
+
         <section class="grid grid-cols-[minmax(0,1fr)] gap-4" aria-labelledby="events-heading">
             <h2 id="events-heading">Events</h2>
             @if (_events is { Count: 0 })
@@ -49,6 +64,13 @@
     private HorseDetail? _horse;
     private List<EventSummary>? _events;
     private string? _error;
+    private bool _copied;
+
+    private async Task Copy(string text)
+    {
+        await JS.InvokeVoidAsync("navigator.clipboard.writeText", text);
+        _copied = true;
+    }
 
     protected override async Task OnParametersSetAsync()
     {

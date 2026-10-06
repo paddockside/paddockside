@@ -35,6 +35,7 @@ builder.Services.AddEmail(builder.Configuration);
 builder.Services.AddHostedService<EmailDispatchService>();
 builder.Services.AddInbound(builder.Configuration, builder.Environment.ContentRootPath);
 builder.Services.AddHostedService<InboundProcessingService>();
+builder.Services.AddHostedService<HorseInboxBackfill>();
 
 // Staff sign-in: password + mandatory TOTP (identity-access.md §4.2).
 builder.Services

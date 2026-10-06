@@ -1,7 +1,10 @@
 using Microsoft.EntityFrameworkCore;
 using Paddockside.Api.Formatting;
 using Paddockside.Api.Security;
+using Microsoft.Extensions.Options;
+using Paddockside.Application.Messaging;
 using Paddockside.Domain;
+using Paddockside.Infrastructure.Inbound;
 using Paddockside.Infrastructure.Persistence;
 using DomainEvent = Paddockside.Domain.Event;
 
@@ -23,7 +26,8 @@ public static class HorseEndpoints
         bool Managed,
         string? ManagedSince,
         int CurrentOwners,
-        string? NextKeyDate);
+        string? NextKeyDate,
+        string? InboxAddress);
 
     public sealed record StepView(string Label, string State, string? Detail, bool ClientVisible);
 
@@ -54,7 +58,7 @@ public static class HorseEndpoints
             .ToList();
     }
 
-    private static async Task<IResult> GetHorse(Guid id, PaddocksideDbContext db, TimeProvider clock, CancellationToken cancellationToken)
+    private static async Task<IResult> GetHorse(Guid id, PaddocksideDbContext db, TimeProvider clock, IOptions<EmailOptions> email, CancellationToken cancellationToken)
     {
         var horse = await LoadHorses(db).SingleOrDefaultAsync(h => h.Id == id, cancellationToken);
         if (horse is null) return Results.NotFound();
@@ -66,6 +70,13 @@ public static class HorseEndpoints
             .Select(e => new { e.KeyDate, e.Title })
             .FirstOrDefaultAsync(cancellationToken);
 
+        // The horse's own email address (messaging-channels.md §3.1), for staff to give to the trainer.
+        var tenant = await db.Tenants.AsNoTracking().SingleAsync(cancellationToken);
+        var addresses = await db.RoutingAddresses.AsNoTracking()
+            .Where(r => r.Kind == RoutingAddressKind.HorseInbox && r.HorseId == id)
+            .ToListAsync(cancellationToken);
+        var inbox = tenant.Slug.Length > 0 ? HorseInboxes.Current(horse, addresses)?.EmailAddress(tenant, email.Value.InboundDomain) : null;
+
         return Results.Ok(new HorseDetail(
             horse.Id,
             horse.Name,
@@ -74,7 +85,8 @@ public static class HorseEndpoints
             horse.CurrentManagementPeriod is not null,
             horse.CurrentManagementPeriod is { } period ? Words.Day(period.From, now) : null,
             CurrentOwners(horse),
-            nextKeyDate is null ? null : $"{Words.Day(nextKeyDate.KeyDate!.Value, now)} · {nextKeyDate.Title}"));
+            nextKeyDate is null ? null : $"{Words.Day(nextKeyDate.KeyDate!.Value, now)} · {nextKeyDate.Title}",
+            inbox));
     }
 
     /// <summary>The horse's events, newest key date first: the horse timeline.</summary>

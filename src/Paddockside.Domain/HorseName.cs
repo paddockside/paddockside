@@ -40,7 +40,7 @@ public sealed class HorseName
     public bool IsCurrent => ValidTo is null;
 
     /// <summary>The names that replace one another; a stable name sits alongside them.</summary>
-    internal bool IsPrimary => Kind is HorseNameKind.SaleLot or HorseNameKind.Registered or HorseNameKind.FormerRegistered;
+    public bool IsPrimary => Kind is HorseNameKind.SaleLot or HorseNameKind.Registered or HorseNameKind.FormerRegistered;
 
     public bool IsValidAt(DateTimeOffset at) => ValidFrom <= at && (ValidTo is null || at < ValidTo);
 

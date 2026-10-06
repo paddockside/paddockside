@@ -26,6 +26,8 @@ public sealed class ApiFactory(IsolationDatabase db) : WebApplicationFactory<Pro
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Testing");
+        // As strict as Development: a singleton holding a scoped service (one request's database) fails at start-up.
+        builder.UseDefaultServiceProvider(options => (options.ValidateScopes, options.ValidateOnBuild) = (true, true));
         builder.UseSetting("ConnectionStrings:Paddockside", db.ConnectionString);
         builder.UseSetting("RateLimits:AuthPerMinute", "100000");
         builder.UseSetting("Email:DispatchEnabled", "false"); // tests run the dispatcher themselves

@@ -14,7 +14,7 @@ public sealed record SessionInfo(string Email, string TenantName, string Role);
 
 public sealed record HorseSummary(Guid Id, string Name, bool Managed, DateTimeOffset? ManagedSince, int CurrentOwners);
 
-public sealed record HorseDetail(Guid Id, string Name, string? SexAge, string? Pedigree, bool Managed, string? ManagedSince, int CurrentOwners, string? NextKeyDate);
+public sealed record HorseDetail(Guid Id, string Name, string? SexAge, string? Pedigree, bool Managed, string? ManagedSince, int CurrentOwners, string? NextKeyDate, string? InboxAddress);
 
 public sealed record StepView(string Label, string State, string? Detail, bool ClientVisible);
 

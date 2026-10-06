@@ -68,4 +68,5 @@ jobs:
         run: dotnet test tests/Paddockside.Domain.Tests --no-build --configuration Release
 
       - name: Pipeline tests
-        run: dotnet test tests/Paddockside.Pipeline.Tests --no-build --configuration Release
+        # The live email loop test (Category=Live) needs a real mailbox and the deployed app; run it by hand (infra/README.md).
+        run: dotnet test tests/Paddockside.Pipeline.Tests --no-build --configuration Release --filter "Category!=Live"

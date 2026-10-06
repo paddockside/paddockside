@@ -114,13 +114,68 @@ az sql server firewall-rule create --subscription paddockside-dev -g rg-paddocks
 
 Then run the API with the `https-azure` launch profile (see the root README).
 
+## Deploying the app (by hand, until the CD pipeline exists)
+
+From the repository root:
+
+```
+dotnet publish src/Paddockside.Api -c Release -o artifacts/publish
+tar.exe -a -c -f artifacts/paddockside-api.zip -C artifacts/publish .
+az webapp deploy -g rg-paddockside-dev -n app-paddockside-dev-cd63cr --src-path artifacts/paddockside-api.zip --type zip
+```
+
+Make the zip with `tar.exe`, not PowerShell's `Compress-Archive`: that writes Windows-style backslash paths, and
+the Linux web app rejects the upload with a bare "Status Code: 400". The deploy takes 3–8 minutes and is quiet
+while it runs. The app reads Key Vault only at start-up, so after changing a secret run
+`az webapp restart -g rg-paddockside-dev -n app-paddockside-dev-cd63cr`.
+
+## The end-to-end email loop test
+
+`tests/Paddockside.Pipeline.Tests/EmailLoopTests.cs` checks the whole email loop against the deployed dev app with
+a real mailbox at the far end:
+1. A staff member sends to a horse's owners.
+2. The email arrives in the mailbox (read over IMAP).
+3. The test replies to it (over SMTP), as a person would.
+4. Within two minutes the reply must show up threaded under the original message on the event.
+
+It is tagged `Live`, so CI skips it; run it by hand after a deploy.
+
+It works in its own tenant, *Paddockside Loop Test* (`looptest`). The first run creates it in the dev database:
+- one owner whose email is your test mailbox;
+- a horse;
+- an open race start;
+- a staff login, whose password and authenticator key are replaced on every run, so no test credential is
+  stored anywhere.
+
+**One-off setup:**
+
+1. **A mailbox you control** that can use IMAP and SMTP with an *app password*. A Gmail account works: turn on
+   2-Step Verification, then create an app password at myaccount.google.com/apppasswords.
+2. **Put the details in Key Vault** (never in the repository):
+   ```
+   az keyvault secret set --vault-name kv-paddockside-dev-cd63 --name Test--ExternalMailbox --value "you@gmail.com"
+   az keyvault secret set --vault-name kv-paddockside-dev-cd63 --name Test--ExternalMailboxPassword --value "APP-PASSWORD"
+   ```
+   Gmail, Outlook.com, iCloud and Yahoo need nothing else. For other providers, also set `Test--ImapHost` and
+   `Test--SmtpHost`. The ports default to 993 and 587; override them with `Test--ImapPort` and `Test--SmtpPort`.
+3. **Postmark must be allowed to send to that mailbox.** While the Postmark account is in test mode it delivers
+   only to verified domains. The test stops at "Sending failed" with Postmark's reason until the account is
+   approved, or until the mailbox is on a domain verified in Postmark.
+
+**Run it:**
+
+1. Sign in with `az login`. Your IP must be in the SQL firewall (above).
+2. From the repository root:
+   ```
+   dotnet test tests/Paddockside.Pipeline.Tests --filter Category=Live --logger "console;verbosity=detailed"
+   ```
+   It prints each stage and how long it took. Environment variables (`Test__ExternalMailbox`, …) override Key
+   Vault, and `Test__BaseUrl` points it at another deployment.
+
 ## Not yet done
 
-- The web app's managed identity has no database user yet. Before the API is deployed there, run as the
-  SQL admin: `CREATE USER [app-paddockside-dev-cd63cr] FROM EXTERNAL PROVIDER;` plus the roles it needs.
-- No code is deployed to the web app; that comes with the CD pipeline.
-- The `KeyVault__Uri` app setting is in `resources.bicep` but has not been deployed yet.
-- Postmark's sending domain `mail.paddockside.com.au` needs its DKIM record (from Postmark) in the DNS zone,
-  and the zone only answers once the registrar's name servers point at Azure.
+- No CD pipeline: deploys are by hand (above).
+- `KeyVault__Uri` was set on the web app with `az webapp config appsettings set`. It is also in `resources.bicep`,
+  so a full redeploy keeps it.
 - The SQL admin is an external identity until the custom-domain member account exists
   (`docs/product/azure-tenant-setup.md` §2); update `main.dev.bicepparam` and redeploy then.
