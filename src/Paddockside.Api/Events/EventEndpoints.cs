@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Paddockside.Api.Formatting;
 using Paddockside.Api.Horses;
 using Paddockside.Api.Security;
+using Paddockside.Application.Messaging;
 using Paddockside.Domain;
 using Paddockside.Infrastructure.Email;
 using Paddockside.Infrastructure.Identity;
@@ -135,6 +136,7 @@ public static class EventEndpoints
         ClaimsPrincipal user,
         PaddocksideDbContext db,
         TimeProvider clock,
+        EmailDispatchSignal emailSignal,
         CancellationToken cancellationToken)
     {
         if (!CanPost.Contains(user.FindFirstValue(SessionClaims.Role)))
@@ -199,6 +201,7 @@ public static class EventEndpoints
         e.RecordActivity();
         if (db.Entry(item).State == EntityState.Detached) db.StreamItems.Add(item);
         await db.SaveChangesAsync(cancellationToken);
+        if (deliveries.Count > 0) emailSignal.Notify();
         return Results.Created($"/api/events/{id}", new Posted(item.Id, deliveries.Count));
     }
 

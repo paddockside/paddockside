@@ -44,6 +44,30 @@ public sealed class EmailOptions
     /// <summary>The background sender drains queued email when true (switched off in tests).</summary>
     public bool DispatchEnabled { get; set; } = true;
 
-    /// <summary>How often the background sender looks for queued email.</summary>
-    public TimeSpan DispatchInterval { get; set; } = TimeSpan.FromSeconds(3);
+    /// <summary>How soon the background sender tries again while email it could not send is still queued.</summary>
+    public TimeSpan RetryInterval { get; set; } = TimeSpan.FromMinutes(1);
+}
+
+/// <summary>
+/// Wakes the background sender when email is queued. The sender never polls: the database is serverless and
+/// pauses when idle, and a query every few seconds would keep it running (and billing) around the clock.
+/// </summary>
+public sealed class EmailDispatchSignal
+{
+    private readonly SemaphoreSlim _signal = new(0, 1);
+
+    public void Notify()
+    {
+        try
+        {
+            _signal.Release();
+        }
+        catch (SemaphoreFullException)
+        {
+            // Already signalled; the next pass picks this up too.
+        }
+    }
+
+    /// <summary>True when signalled, false when the timeout passed first.</summary>
+    public Task<bool> WaitAsync(TimeSpan timeout, CancellationToken cancellationToken) => _signal.WaitAsync(timeout, cancellationToken);
 }

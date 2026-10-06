@@ -47,6 +47,7 @@ public static class DependencyInjection
         });
         services.AddSingleton<OwnerEmailRenderer>();
         services.AddScoped<EmailDispatcher>();
+        services.AddSingleton<EmailDispatchSignal>();
         return services;
     }
 }

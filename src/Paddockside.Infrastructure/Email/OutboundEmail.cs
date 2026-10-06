@@ -75,6 +75,10 @@ public sealed class EmailDispatcher(
         return accepted;
     }
 
+    /// <summary>Whether any email is still waiting to be sent (and has attempts left).</summary>
+    public async Task<bool> HasQueuedAsync(CancellationToken cancellationToken) =>
+        (await tenants.TenantsWithQueuedEmailAsync(1, cancellationToken)).Count > 0;
+
     private async Task<int> DispatchTenantAsync(Guid tenantId, CancellationToken cancellationToken)
     {
         await using var db = tenants.For(tenantId);
