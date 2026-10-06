@@ -57,7 +57,10 @@ Mail to any address under `in.paddockside.com.au` reaches Postmark through the M
 horse's own inbox (tier 2), and `{tenant}@in.paddockside.com.au` the catch-all. In Postmark, under Servers →
 paddockside → **Default Inbound Stream** → Settings:
 
-- **Inbound domain**: `in.paddockside.com.au`
+- **Inbound domain**: `*.in.paddockside.com.au`, with the `*.` included. With plain `in.paddockside.com.au`, Postmark
+  accepts mail for that exact domain only and refuses every tenant subdomain with "454 Relay access denied".
+  A stream has one inbound domain, so the bare catch-all `{tenant}@in.paddockside.com.au` may need a second
+  inbound stream if we want it.
 - **Webhook URL**: `https://<username>:<password>@app-paddockside-dev-cd63cr.azurewebsites.net/api/webhooks/postmark/inbound`,
   with the same webhook username and password as the delivery webhook.
 
