@@ -50,6 +50,32 @@ and Open ticked. The app also ignores any event whose message id does not match 
 Locally, `appsettings.Development.json` uses Postmark's `POSTMARK_API_TEST` token: sends are accepted and
 nothing is delivered. The `https-azure` launch profile reads the real token from the vault.
 
+### The app's address: app.paddockside.com.au
+
+Links in every email point at `https://app.paddockside.com.au` (`Email:PortalBaseUrl`), not at `…azurewebsites.net`.
+That shared Microsoft domain is used heavily for phishing, and spam filters distrust it. The DNS records are in
+`dns.bicep` (`app` CNAME and the `asuid.app` verification TXT). The web app needs the host name and a free
+App Service managed certificate, once:
+
+```
+az webapp config hostname add -g rg-paddockside-dev --webapp-name app-paddockside-dev-cd63cr --hostname app.paddockside.com.au
+az webapp config ssl create -g rg-paddockside-dev -n app-paddockside-dev-cd63cr --hostname app.paddockside.com.au
+az webapp config ssl bind -g rg-paddockside-dev -n app-paddockside-dev-cd63cr --ssl-type SNI --certificate-thumbprint <thumbprint from the previous command>
+```
+
+Do this **before** deploying a build whose `PortalBaseUrl` uses the address. The certificate renews itself.
+
+### Email deliverability (SPF, DKIM, DMARC)
+
+Mail goes out from `updates@mail.paddockside.com.au` through Postmark:
+- **DKIM:** signed with the `…pm._domainkey.mail` key.
+- **SPF:** the Return-Path `pm-bounces.mail` (CNAME to Postmark), so SPF passes and aligns.
+- **DMARC:** published at `_dmarc.paddockside.com.au` in monitoring mode (`p=none`); reports go to Postmark's
+  free DMARC Digests. It covers the Titan mailboxes too; monitoring mode never blocks anything. Tighten it to
+  `p=quarantine` once the weekly digests show every legitimate sender passing.
+
+Before relying on a new kind of email, score it at mail-tester.com: invite or send to the address it gives you.
+
 ### Staff logins: inviting, roles and retiring the dev login
 
 Staff join by invitation (`docs/product/identity-access.md` §5.2, §6).

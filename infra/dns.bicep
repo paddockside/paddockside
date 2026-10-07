@@ -105,6 +105,28 @@ resource postmarkDkim 'Microsoft.Network/dnsZones/TXT@2018-05-01' = {
   }
 }
 
+// The app (staff console and owners' portal) at app.paddockside.com.au, so links in emails point at our own
+// domain rather than azurewebsites.net, which spam filters distrust. asuid.app proves to App Service that we own it.
+resource appHost 'Microsoft.Network/dnsZones/CNAME@2018-05-01' = {
+  parent: zone
+  name: 'app'
+  properties: {
+    TTL: 3600
+    CNAMERecord: { cname: 'app-paddockside-dev-cd63cr.azurewebsites.net' }
+  }
+}
+
+resource appHostVerification 'Microsoft.Network/dnsZones/TXT@2018-05-01' = {
+  parent: zone
+  name: 'asuid.app'
+  properties: {
+    TTL: 3600
+    TXTRecords: [
+      { value: ['11BFB042B5EC5DA5495C0DF00524CD78662E4692D59728123AFBF1762FFD858D'] }
+    ]
+  }
+}
+
 // Inbound email (messaging-channels.md §3.1) goes to Postmark, whose inbound domain is in.paddockside.com.au.
 // `*.in` covers every tenant's subdomain (r-{token}@laureloak.in…, {horse}@laureloak.in…); `in` is the
 // catch-all ({tenant}@in.paddockside.com.au). Adding a tenant needs no DNS change.
