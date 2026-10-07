@@ -39,6 +39,10 @@ public sealed class PaddocksideDbContext(DbContextOptions<PaddocksideDbContext> 
 
     public DbSet<OwnerInvitation> OwnerInvitations => Set<OwnerInvitation>();
 
+    public DbSet<AuditEntry> AuditEntries => Set<AuditEntry>();
+
+    public DbSet<SupportSession> SupportSessions => Set<SupportSession>();
+
     /// <summary>Read by the query filters. EF Core re-evaluates it for each context instance.</summary>
     private Guid? CurrentTenantId => tenantContext.TenantId;
 
@@ -103,6 +107,10 @@ public sealed class PaddocksideDbContext(DbContextOptions<PaddocksideDbContext> 
     private void EnsureChangesBelongToCurrentTenant()
     {
         var current = CurrentTenantId ?? throw new InvalidOperationException("Cannot save changes without an active tenant.");
+
+        // The audit log is append-only (identity-access.md §8): entries are written once and never changed or removed.
+        if (ChangeTracker.Entries<AuditEntry>().Any(e => e.State is EntityState.Modified or EntityState.Deleted))
+            throw new InvalidOperationException("Audit entries cannot be changed or deleted.");
 
         foreach (var entry in ChangeTracker.Entries().Where(e => e.State is EntityState.Added or EntityState.Modified or EntityState.Deleted))
         {

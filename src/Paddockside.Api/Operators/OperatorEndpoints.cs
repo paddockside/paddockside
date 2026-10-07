@@ -67,7 +67,7 @@ public static class OperatorEndpoints
 
     /// <summary>Onboards a tenant: creates it and invites its first tenant admin.</summary>
     private static async Task<IResult> CreateTenant(NewTenant request, ClaimsPrincipal user, TenantScopedDb tenants, StaffInvitations invitations,
-        UserManager<Person> users, CancellationToken cancellationToken)
+        UserManager<Person> users, Audit.AuditLog audit, CancellationToken cancellationToken)
     {
         var name = request.Name?.Trim() ?? "";
         if (name.Length is < 2 or > 200) return Results.Problem(statusCode: StatusCodes.Status400BadRequest, title: "Type the business's name.");
@@ -89,6 +89,8 @@ public static class OperatorEndpoints
 
         var inviter = await users.FindByIdAsync(PersonOf(user).ToString());
         var sent = await invitations.SendAsync(tenant.Id, tenant.Name, address, MemberRole.TenantAdmin, inviter!.Id, "Paddockside", cancellationToken);
+        await audit.RecordAsync(tenant.Id, "tenant.created", $"Paddockside set up {tenant.Name} and invited {address} as its tenant admin", "Tenant", tenant.Id,
+            actor: (inviter.Id, $"Paddockside: {inviter.Email}"), cancellationToken: cancellationToken);
         return Results.Created($"/api/ops/tenants/{tenant.Id}", new TenantCreated(tenant.Id, tenant.Slug, sent.Sent, sent.Problem));
     }
 

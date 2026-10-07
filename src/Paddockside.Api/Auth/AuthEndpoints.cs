@@ -3,6 +3,7 @@ using System.Text.Encodings.Web;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Paddockside.Api.Audit;
 using Paddockside.Api.Security;
 using Paddockside.Infrastructure.Identity;
 using Paddockside.Infrastructure.Persistence;
@@ -51,7 +52,8 @@ public static class AuthEndpoints
 
     public sealed record RecoveryCodes(IReadOnlyList<string> Codes);
 
-    public sealed record SessionInfo(string Email, string TenantName, string Role, bool IsOperator);
+    /// <param name="SupportUntil">Set while an operator is inside the tenant on a support session: when it ends.</param>
+    public sealed record SessionInfo(string Email, string TenantName, string Role, bool IsOperator, string? SupportUntil = null);
 
     private static IResult SignInFailed() =>
         Results.Problem(statusCode: StatusCodes.Status401Unauthorized, title: "That did not match. Check your details and try again.");
@@ -64,14 +66,24 @@ public static class AuthEndpoints
         HttpContext http,
         UserManager<Person> users,
         SignInManager<Person> signIn,
-        PaddocksideIdentityDbContext identity)
+        PaddocksideIdentityDbContext identity,
+        AuditLog audit)
     {
         var person = await users.FindByEmailAsync(request.Email.Trim());
         if (person is null) return SignInFailed();
 
         var result = await signIn.CheckPasswordSignInAsync(person, request.Password, lockoutOnFailure: true);
-        if (result.IsLockedOut) return LockedOut();
-        if (!result.Succeeded) return SignInFailed();
+        if (result.IsLockedOut)
+        {
+            await AuditStaffAsync(audit, identity, person, "auth.locked-out", "Locked out for 15 minutes after repeated wrong passwords");
+            return LockedOut();
+        }
+
+        if (!result.Succeeded)
+        {
+            await AuditStaffAsync(audit, identity, person, "auth.sign-in-failed", "Sign-in refused: wrong password");
+            return SignInFailed();
+        }
 
         // Password sign-in is for staff and operators; owners sign in without a password (§4.1).
         if (!person.IsOperator && await identity.ActiveStaffMembershipAsync(person.Id) is null) return SignInFailed();
@@ -80,22 +92,31 @@ public static class AuthEndpoints
         return Results.Ok(new NextStep(person.TwoFactorEnabled ? "totp" : "enrol"));
     }
 
-    private static async Task<IResult> SignInWithAuthenticatorCode(CodeRequest request, SignInManager<Person> signIn)
+    private static async Task<IResult> SignInWithAuthenticatorCode(CodeRequest request, SignInManager<Person> signIn, PaddocksideIdentityDbContext identity, AuditLog audit)
     {
         var person = await signIn.GetTwoFactorAuthenticationUserAsync();
         if (person is null || !person.TwoFactorEnabled) return SignInFailed();
 
         var result = await signIn.TwoFactorAuthenticatorSignInAsync(Normalise(request.Code), isPersistent: true, rememberClient: false);
+        if (result.Succeeded) await AuditStaffAsync(audit, identity, person, "auth.signed-in", "Signed in with password and authenticator");
         return result.Succeeded ? Results.NoContent() : result.IsLockedOut ? LockedOut() : SignInFailed();
     }
 
-    private static async Task<IResult> SignInWithRecoveryCode(CodeRequest request, SignInManager<Person> signIn)
+    private static async Task<IResult> SignInWithRecoveryCode(CodeRequest request, SignInManager<Person> signIn, PaddocksideIdentityDbContext identity, AuditLog audit)
     {
         var person = await signIn.GetTwoFactorAuthenticationUserAsync();
         if (person is null || !person.TwoFactorEnabled) return SignInFailed();
 
         var result = await signIn.TwoFactorRecoveryCodeSignInAsync(request.Code.Replace(" ", string.Empty));
+        if (result.Succeeded) await AuditStaffAsync(audit, identity, person, "auth.signed-in", "Signed in with password and a recovery code");
         return result.Succeeded ? Results.NoContent() : result.IsLockedOut ? LockedOut() : SignInFailed();
+    }
+
+    /// <summary>Records a staff sign-in event in the tenant they act in; an operator with no tenant has no tenant log.</summary>
+    private static async Task AuditStaffAsync(AuditLog audit, PaddocksideIdentityDbContext identity, Person person, string action, string summary)
+    {
+        if (await identity.ActiveStaffMembershipAsync(person.Id) is { } membership)
+            await audit.RecordAsync(membership.TenantId, action, summary, "Person", person.Id, actor: (person.Id, person.Email ?? person.UserName ?? "Unknown"));
     }
 
     /// <summary>
@@ -127,7 +148,9 @@ public static class AuthEndpoints
         CodeRequest request,
         HttpContext http,
         UserManager<Person> users,
-        SignInManager<Person> signIn)
+        SignInManager<Person> signIn,
+        PaddocksideIdentityDbContext identity,
+        AuditLog audit)
     {
         var person = await signIn.GetTwoFactorAuthenticationUserAsync();
         if (person is null) return Results.Unauthorized();
@@ -141,11 +164,14 @@ public static class AuthEndpoints
 
         await http.SignOutAsync(IdentityConstants.TwoFactorUserIdScheme);
         await signIn.SignInWithClaimsAsync(person, isPersistent: true, [new Claim("amr", "mfa")]);
+        await AuditStaffAsync(audit, identity, person, "auth.signed-in", "Set up their authenticator and signed in");
         return Results.Ok(new RecoveryCodes(codes.ToList()));
     }
 
-    private static async Task<IResult> SignOut(HttpContext http)
+    private static async Task<IResult> SignOut(HttpContext http, AuditLog audit)
     {
+        if (Guid.TryParse(http.User.FindFirstValue(SessionClaims.Tenant), out var tenantId))
+            await audit.RecordAsync(tenantId, "auth.signed-out", "Signed out");
         await http.SignOutAsync(IdentityConstants.ApplicationScheme);
         await http.SignOutAsync(IdentityConstants.TwoFactorUserIdScheme);
         return Results.NoContent();
@@ -156,11 +182,16 @@ public static class AuthEndpoints
         var tenant = await db.Tenants.AsNoTracking().SingleOrDefaultAsync();
         if (tenant is null) return Results.Forbid();
 
+        var supportUntil = Guid.TryParse(user.FindFirstValue(SessionClaims.SupportSession), out var sessionId)
+            ? await db.SupportSessions.AsNoTracking().Where(s => s.Id == sessionId).Select(s => s.ExpiresAt).SingleOrDefaultAsync()
+            : null;
+
         return Results.Ok(new SessionInfo(
             user.FindFirstValue(ClaimTypes.Email) ?? user.Identity!.Name!,
             tenant.Name,
             user.FindFirstValue(SessionClaims.Role)!,
-            user.FindFirstValue(SessionClaims.Operator) == "true"));
+            user.FindFirstValue(SessionClaims.Operator) == "true",
+            supportUntil is { } until ? Formatting.Words.Time(until) : null));
     }
 
     /// <summary>The same principal SignInManager uses for "password checked, second factor pending".</summary>

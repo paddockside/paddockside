@@ -1,6 +1,7 @@
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Identity;
+using Paddockside.Api.Audit;
 using Paddockside.Api.Auth;
 using Paddockside.Api.Development;
 using Paddockside.Api.Events;
@@ -41,6 +42,7 @@ builder.Services.AddHostedService<EmailDispatchService>();
 builder.Services.AddInbound(builder.Configuration, builder.Environment.ContentRootPath);
 builder.Services.AddHostedService<InboundProcessingService>();
 builder.Services.AddHostedService<HorseInboxBackfill>();
+builder.Services.AddScoped<Paddockside.Api.Audit.AuditLog>();
 
 // Staff sign-in: password + mandatory TOTP (identity-access.md §4.2).
 builder.Services
@@ -106,6 +108,7 @@ app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseMiddleware<RequireApiRequestHeader>();
+app.UseMiddleware<SupportSessionGuard>();
 
 app.MapAuthEndpoints();
 app.MapHorseEndpoints();
@@ -115,6 +118,8 @@ app.MapClientAuthEndpoints();
 app.MapOwnerEndpoints();
 app.MapMemberEndpoints();
 app.MapOperatorEndpoints();
+app.MapSupportSessionEndpoints();
+app.MapAuditEndpoints();
 app.MapPostmarkWebhooks();
 app.MapFallback("/api/{**rest}", () => Results.NotFound());
 app.MapFallbackToFile("index.html");

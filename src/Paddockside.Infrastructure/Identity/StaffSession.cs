@@ -21,6 +21,9 @@ public static class SessionClaims
 
     /// <summary>Set ("true") for the product's operators (identity-access.md §7). Carries no tenant.</summary>
     public const string Operator = "paddockside:operator";
+
+    /// <summary>Set while an operator is inside a tenant through an approved support session: the session id.</summary>
+    public const string SupportSession = "paddockside:support";
 }
 
 /// <summary>Finds the membership a staff sign-in acts under.</summary>

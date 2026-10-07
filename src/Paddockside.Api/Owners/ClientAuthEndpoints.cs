@@ -62,6 +62,9 @@ public static class ClientAuthEndpoints
 
         var success = outcome.Success!;
         await ClientSession.SignInAsync(http, success.Person, success.TenantId, success.PartyId, method);
+        await http.RequestServices.GetRequiredService<Audit.AuditLog>().RecordAsync(success.TenantId, "auth.owner-signed-in",
+            method == "otp" ? "Owner signed in with a code" : "Owner signed in with an emailed link", "Party", success.PartyId,
+            actor: (success.Person.Id, success.Person.Email ?? success.Person.PhoneNumber ?? "Owner"));
         return Results.Ok(new Signed(success.Destination));
     }
 }

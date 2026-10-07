@@ -91,7 +91,9 @@ public sealed class IsolationDatabase : IAsyncLifetime
         inbound.Park("Seeded.", "Going well.", null, bought.AddMonths(6));
 
         await using var context = ContextFor(tenant.Id);
-        context.AddRange(tenant, ann, dee, eve, syndicate, external, horse, raceStart, update, personal, note, inbound);
+        var audit = new AuditEntry(tenant.Id, bought, AuditActorKind.System, null, "System", "tenant.seeded", $"{name} seeded for the isolation suite");
+        var support = new SupportSession(tenant.Id, Guid.NewGuid(), "Paddockside support: seed", "Seeded request", SupportSession.DefaultDuration, bought);
+        context.AddRange(tenant, ann, dee, eve, syndicate, external, horse, raceStart, update, personal, note, inbound, audit, support);
         context.AddRange(routing);
         context.AddRange(deliveries);
         await context.SaveChangesAsync();

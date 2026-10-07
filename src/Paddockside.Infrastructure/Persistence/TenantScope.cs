@@ -80,6 +80,20 @@ public sealed class TenantScopedDb(DbContextOptions<PaddocksideDbContext> option
             .ToList();
     }
 
+    /// <summary>An operator's own support sessions, in every tenant, newest first (identity-access.md §7).</summary>
+    public async Task<IReadOnlyList<(Guid TenantId, string TenantName, Domain.SupportSession Session)>> SupportSessionsForOperatorAsync(
+        Guid operatorPersonId, CancellationToken cancellationToken)
+    {
+        await using var db = new PaddocksideDbContext(options, new FixedTenantContext(null));
+        var rows = await (from s in db.SupportSessions.IgnoreQueryFilters()
+                          join t in db.Tenants.IgnoreQueryFilters() on s.TenantId equals t.Id
+                          where s.OperatorPersonId == operatorPersonId
+                          orderby s.RequestedAt descending
+                          select new { t.Id, t.Name, Session = s })
+            .AsNoTracking().Take(50).ToListAsync(cancellationToken);
+        return rows.Select(r => (r.Id, r.Name, r.Session)).ToList();
+    }
+
     /// <summary>Every tenant, for start-up housekeeping that then works one tenant at a time.</summary>
     public async Task<IReadOnlyList<Guid>> AllTenantIdsAsync(CancellationToken cancellationToken)
     {

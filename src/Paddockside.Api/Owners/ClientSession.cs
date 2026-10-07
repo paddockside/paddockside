@@ -117,6 +117,9 @@ public static class SessionRefresh
 {
     private static readonly string[] OwnerClaims = [SessionClaims.Tenant, SessionClaims.Role, SessionClaims.AudienceClass, SessionClaims.Party];
 
+    /// <summary>An operator inside a tenant on a support session stays there (as a Viewer) until they leave or it ends.</summary>
+    private static readonly string[] SupportClaims = [SessionClaims.Tenant, SessionClaims.Role, SessionClaims.AudienceClass, SessionClaims.SupportSession];
+
     public static void Configure(SecurityStampValidatorOptions options)
     {
         // Checked every minute, so a suspended member loses access within a minute (identity-access.md §6).
@@ -132,13 +135,13 @@ public static class SessionRefresh
         foreach (var amr in current.FindAll("amr").Where(c => !fresh.HasClaim("amr", c.Value)))
             fresh.AddClaim(new Claim("amr", amr.Value));
 
-        if (current.FindFirst(SessionClaims.AudienceClass)?.Value == nameof(AudienceClass.Client))
+        var keep = current.HasClaim(c => c.Type == SessionClaims.SupportSession) ? SupportClaims
+            : current.FindFirst(SessionClaims.AudienceClass)?.Value == nameof(AudienceClass.Client) ? OwnerClaims
+            : [];
+        foreach (var type in keep)
         {
-            foreach (var type in OwnerClaims)
-            {
-                foreach (var stale in fresh.FindAll(type).ToList()) fresh.RemoveClaim(stale);
-                foreach (var kept in current.FindAll(type)) fresh.AddClaim(new Claim(type, kept.Value));
-            }
+            foreach (var stale in fresh.FindAll(type).ToList()) fresh.RemoveClaim(stale);
+            foreach (var kept in current.FindAll(type)) fresh.AddClaim(new Claim(type, kept.Value));
         }
 
         return Task.CompletedTask;

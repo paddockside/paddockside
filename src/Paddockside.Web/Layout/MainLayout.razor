@@ -1,21 +1,23 @@
 @inherits LayoutComponentBase
 @implements IDisposable
 @inject SessionState Session
+@inject PaddocksideApi Api
 @inject NavigationManager Navigation
 
-<div class="grid min-h-screen grid-cols-[minmax(0,1fr)] grid-rows-[auto_1fr]">
+<div class="grid min-h-screen grid-cols-[minmax(0,1fr)] grid-rows-[auto_auto_1fr]">
     <AppHeader TenantName="@Session.Current?.TenantName">
         <Actions>
             @if (Session.Current is not null)
             {
-                <nav aria-label="Main" class="flex items-center gap-4">
+                <nav aria-label="Main" class="flex flex-wrap items-center gap-x-4 gap-y-2">
                     <a href="horses" class="btn-link">Horses</a>
                     <a href="inbound" class="btn-link">Inbound mail</a>
                     @if (Session.Current.Role == "TenantAdmin")
                     {
                         <a href="members" class="btn-link">Members</a>
+                        <a href="audit" class="btn-link">Audit log</a>
                     }
-                    @if (Session.Current.IsOperator)
+                    @if (Session.Current.IsOperator && Session.Current.SupportUntil is null)
                     {
                         <a href="ops" class="btn-link">Operator console</a>
                     }
@@ -24,6 +26,19 @@
             }
         </Actions>
     </AppHeader>
+
+    @if (Session.Current?.SupportUntil is { } until)
+    {
+        @* An operator inside a tenant: never mistakable for the tenant's own staff (identity-access.md §7). *@
+        <div class="flex flex-wrap items-center gap-3 bg-status-warning-bg px-4 py-3 text-status-warning-fg sm:px-6" role="status">
+            <span class="font-strong">Paddockside support session: you are viewing @Session.Current.TenantName read-only until @until. Everything you open is in their audit log.</span>
+            <button type="button" class="btn-secondary ml-auto" @onclick="LeaveSupport">Leave</button>
+        </div>
+    }
+    else
+    {
+        <div></div>
+    }
 
     <main class="mx-auto w-full max-w-5xl px-4 py-6 sm:px-6 sm:py-8">
         @Body
@@ -39,6 +54,12 @@
     {
         await Session.SignOutAsync();
         Navigation.NavigateTo("sign-in");
+    }
+
+    private async Task LeaveSupport()
+    {
+        await Api.LeaveSupportAsync();
+        Navigation.NavigateTo("ops", forceLoad: true);
     }
 
     public void Dispose() => Session.Changed -= Refresh;

@@ -70,6 +70,55 @@
             </div>
         </section>
 
+        <section class="card grid gap-4" aria-labelledby="support-heading">
+            <h2 id="support-heading">Support access</h2>
+            <p class="text-small text-text-muted">
+                To look inside a business, ask its admins. Nothing opens until one of them approves; then you can read, not change,
+                until the time runs out, and everything you open goes in their audit log.
+            </p>
+            <form class="grid gap-4 sm:grid-cols-[1fr_8rem]" @onsubmit="AskAsync" @onsubmit:preventDefault>
+                <div class="grid gap-2">
+                    <label for="support-tenant" class="font-strong">Business</label>
+                    <select id="support-tenant" class="min-h-control rounded-control border border-border-strong bg-surface-raised px-3" @bind="_supportTenant">
+                        <option value="">Choose…</option>
+                        @foreach (var t in _tenants)
+                        {
+                            <option value="@t.Id">@t.Name</option>
+                        }
+                    </select>
+                </div>
+                <div class="grid gap-2">
+                    <label for="support-hours" class="font-strong">Hours</label>
+                    <input id="support-hours" type="number" min="1" max="24" class="min-h-control rounded-control border border-border-strong bg-surface-raised px-4" @bind="_supportHours" />
+                </div>
+                <div class="grid gap-2 sm:col-span-2">
+                    <label for="support-reason" class="font-strong">Why (their admin reads this)</label>
+                    <input id="support-reason" class="min-h-control rounded-control border border-border-strong bg-surface-raised px-4" @bind="_supportReason" />
+                </div>
+                <button type="submit" class="btn-secondary justify-self-start" disabled="@_busy">Ask for access</button>
+            </form>
+
+            @if (_sessions is { Count: > 0 })
+            {
+                <ul class="grid gap-3">
+                    @foreach (var s in _sessions)
+                    {
+                        <li class="flex flex-wrap items-center gap-3 border-t border-border-subtle pt-3">
+                            <span class="grid">
+                                <span class="font-strong">@s.Tenant</span>
+                                <span class="text-small text-text-muted">@s.Reason · @(s.Status switch { "Requested" => "waiting for their approval", "Active" => $"approved until {s.Until}", "Declined" => $"declined by {s.DecidedBy}", "Ended" => $"ended by {s.EndedBy}", _ => "expired" })</span>
+                            </span>
+                            @if (s.Status == "Active")
+                            {
+                                <button type="button" class="btn-primary ml-auto" disabled="@_busy" @onclick="() => EnterAsync(s)">Enter (read-only)</button>
+                                <button type="button" class="btn-secondary" disabled="@_busy" @onclick="() => EndAsync(s)">End</button>
+                            }
+                        </li>
+                    }
+                </ul>
+            }
+        </section>
+
         <section class="card grid gap-4" aria-labelledby="onboard-heading">
             <h2 id="onboard-heading">Onboard a business</h2>
             <form class="grid gap-4 sm:grid-cols-2" @onsubmit="CreateAsync" @onsubmit:preventDefault>
@@ -120,6 +169,10 @@
 @code {
     private List<TenantRow>? _tenants;
     private OperatorsPage? _operators;
+    private List<SupportView>? _sessions;
+    private string? _supportTenant;
+    private string? _supportReason;
+    private int _supportHours = 2;
     private string? _error;
     private string? _notice;
     private string? _name;
@@ -146,6 +199,8 @@
         else _error = tenants.Error;
         var operators = await Api.OperatorsAsync();
         if (operators.Succeeded) _operators = operators.Value;
+        var sessions = await Api.MySupportSessionsAsync();
+        if (sessions.Succeeded) _sessions = sessions.Value;
     }
 
     private Task CreateAsync() => Run(async () =>
@@ -164,6 +219,29 @@
         if (!result.Succeeded) { _error = result.Error; return; }
         _notice = result.Value!.InvitationSent ? $"{_operatorEmail} has been invited as an operator." : result.Value.Problem;
         _operatorEmail = null;
+    });
+
+    private Task AskAsync() => Run(async () =>
+    {
+        if (!Guid.TryParse(_supportTenant, out var tenantId)) { _error = "Choose the business."; return; }
+        var result = await Api.AskForSupportAsync(tenantId, _supportReason ?? "", _supportHours);
+        if (!result.Succeeded) { _error = result.Error; return; }
+        _notice = $"Asked {result.Value!.Tenant}. Their admins have been emailed; you can go in once one of them approves.";
+        (_supportTenant, _supportReason) = (null, null);
+    });
+
+    private async Task EnterAsync(SupportView session)
+    {
+        var result = await Api.EnterSupportAsync(session.TenantId, session.Id);
+        if (result.Succeeded) Navigation.NavigateTo("horses", forceLoad: true);
+        else _error = result.Error;
+    }
+
+    private Task EndAsync(SupportView session) => Run(async () =>
+    {
+        var result = await Api.EndSupportAsync(session.TenantId, session.Id);
+        if (result.Succeeded) _notice = $"Ended your access to {session.Tenant}.";
+        else _error = result.Error;
     });
 
     private async Task Run(Func<Task> change)

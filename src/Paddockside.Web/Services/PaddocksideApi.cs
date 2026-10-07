@@ -10,7 +10,7 @@ public sealed record EnrolmentDetails(string SharedKey, string AuthenticatorUri,
 
 public sealed record RecoveryCodes(IReadOnlyList<string> Codes);
 
-public sealed record SessionInfo(string Email, string TenantName, string Role, bool IsOperator = false);
+public sealed record SessionInfo(string Email, string TenantName, string Role, bool IsOperator = false, string? SupportUntil = null);
 
 public sealed record HorseSummary(Guid Id, string Name, bool Managed, DateTimeOffset? ManagedSince, int CurrentOwners);
 
@@ -67,6 +67,15 @@ public sealed record InboundView(
     Guid? EventId,
     string? Event,
     List<AttachmentView> Attachments);
+
+// ---- Support sessions and the audit log ------------------------------------------------------------------------
+
+public sealed record SupportView(Guid Id, Guid TenantId, string Tenant, string Operator, string Reason, string Status,
+    string Requested, string? Decided, string? DecidedBy, string? Until, string? EndedBy);
+
+public sealed record AuditView(Guid Id, string At, string Who, string ActorKind, string Action, string Summary, string? From, string? Device, string? Before, string? After);
+
+public sealed record AuditPage(List<AuditView> Entries, string? Older);
 
 // ---- Operator console ----------------------------------------------------------------------------------------
 
@@ -163,6 +172,26 @@ public sealed class PaddocksideApi(HttpClient http)
     public Task<ApiResult<List<InboundView>>> InboundAsync(string state) => GetAsync<List<InboundView>>($"api/inbound?state={Uri.EscapeDataString(state)}");
 
     public Task<ApiResult<InboundCounts>> InboundCountsAsync() => GetAsync<InboundCounts>("api/inbound/counts");
+
+    // ---- Support sessions and the audit log ----------------------------------------------------------------------
+
+    public Task<ApiResult<List<SupportView>>> TenantSupportAsync() => GetAsync<List<SupportView>>("api/support");
+
+    public Task<ApiResult<object>> AnswerSupportAsync(Guid id, string answer) => PostAsync<object>($"api/support/{id}/{answer}", new { });
+
+    public Task<ApiResult<List<SupportView>>> MySupportSessionsAsync() => GetAsync<List<SupportView>>("api/ops/support");
+
+    public Task<ApiResult<SupportView>> AskForSupportAsync(Guid tenantId, string reason, int hours) =>
+        PostAsync<SupportView>($"api/ops/tenants/{tenantId}/support", new { reason, hours });
+
+    public Task<ApiResult<object>> EnterSupportAsync(Guid tenantId, Guid id) => PostAsync<object>($"api/ops/support/{tenantId}/{id}/enter", new { });
+
+    public Task<ApiResult<object>> EndSupportAsync(Guid tenantId, Guid id) => PostAsync<object>($"api/ops/support/{tenantId}/{id}/end", new { });
+
+    public Task<ApiResult<object>> LeaveSupportAsync() => PostAsync<object>("api/ops/support/exit", new { });
+
+    public Task<ApiResult<AuditPage>> AuditAsync(string? q, string? action, string? before) =>
+        GetAsync<AuditPage>($"api/audit?q={Uri.EscapeDataString(q ?? "")}&action={Uri.EscapeDataString(action ?? "")}{(before is null ? "" : $"&before={Uri.EscapeDataString(before)}")}");
 
     // ---- Operator console ------------------------------------------------------------------------------------------
 

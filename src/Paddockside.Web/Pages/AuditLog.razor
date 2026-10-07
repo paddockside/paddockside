@@ -1,0 +1,120 @@
+@page "/audit"
+@inject PaddocksideApi Api
+@inject SessionState Session
+@inject NavigationManager Navigation
+
+@*
+    The audit log, for tenant admins (identity-access.md §8): sign-ins, member and role changes, and everything
+    Paddockside support does inside the account. Newest first, searchable, downloadable. Nothing here can be
+    edited or deleted.
+*@
+<PageTitle>Audit log · Paddockside</PageTitle>
+
+<div class="grid grid-cols-[minmax(0,1fr)] gap-6">
+    <h1>Audit log</h1>
+    <p class="text-text-muted">Every sign-in, every change to members and roles, and everything Paddockside support looks at. Entries can't be changed or deleted.</p>
+
+    <form class="flex flex-wrap items-end gap-3" @onsubmit="SearchAsync" @onsubmit:preventDefault>
+        <div class="grid gap-2">
+            <label for="audit-q" class="font-strong">Search</label>
+            <input id="audit-q" class="min-h-control rounded-control border border-border-strong bg-surface-raised px-4" @bind="_q" placeholder="A name, an address, a word" />
+        </div>
+        <div class="grid gap-2">
+            <label for="audit-action" class="font-strong">Show</label>
+            <select id="audit-action" class="min-h-control rounded-control border border-border-strong bg-surface-raised px-3" @bind="Action">
+                <option value="">Everything</option>
+                <option value="auth">Sign-ins</option>
+                <option value="member">Members and roles</option>
+                <option value="support">Paddockside support</option>
+            </select>
+        </div>
+        <button type="submit" class="btn-secondary">Search</button>
+        <a class="btn-link ml-auto" href="@ExportLink" download>Download as a spreadsheet (CSV)</a>
+    </form>
+
+    @if (_error is not null)
+    {
+        <Error Message="@_error" />
+    }
+    else if (_entries is null)
+    {
+        <p class="text-text-muted" role="status">Loading…</p>
+    }
+    else if (_entries.Count == 0)
+    {
+        <div class="card"><p>Nothing matches.</p></div>
+    }
+    else
+    {
+        <ol class="card grid gap-3">
+            @foreach (var e in _entries)
+            {
+                <li class="grid gap-1 border-b border-border-subtle pb-3 last:border-b-0 last:pb-0">
+                    <div class="flex flex-wrap items-baseline gap-2">
+                        <span class="font-strong">@e.Who</span>
+                        @if (e.ActorKind == "Operator")
+                        {
+                            <span class="badge bg-status-warning-bg text-status-warning-fg">Paddockside support</span>
+                        }
+                        <span class="ml-auto text-small text-text-muted">@e.At</span>
+                    </div>
+                    <p>@e.Summary</p>
+                    <p class="text-small text-text-muted">
+                        @e.Action@(e.Before is null && e.After is null ? null : $" · {e.Before ?? "–"} → {e.After ?? "–"}")@(e.From is null ? null : $" · from {e.From}")
+                    </p>
+                </li>
+            }
+        </ol>
+        @if (_older is not null)
+        {
+            <button type="button" class="btn-secondary justify-self-start" disabled="@_busy" @onclick="OlderAsync">Show older entries</button>
+        }
+    }
+</div>
+
+@code {
+    [SupplyParameterFromQuery(Name = "action")] public string? Action { get; set; }
+
+    private string? _q;
+    private List<AuditView>? _entries;
+    private string? _older;
+    private string? _error;
+    private bool _busy;
+
+    private string ExportLink => $"api/audit/export.csv?q={Uri.EscapeDataString(_q ?? "")}&action={Uri.EscapeDataString(Action ?? "")}";
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (Session.Current is null && await Session.RefreshAsync() is null)
+        {
+            Navigation.NavigateTo("sign-in");
+            return;
+        }
+
+        await SearchAsync();
+    }
+
+    private async Task SearchAsync()
+    {
+        _error = null;
+        var result = await Api.AuditAsync(_q, Action, null);
+        if (!result.Succeeded) { _error = result.Error; return; }
+        (_entries, _older) = (result.Value!.Entries, result.Value.Older);
+    }
+
+    private async Task OlderAsync()
+    {
+        _busy = true;
+        try
+        {
+            var result = await Api.AuditAsync(_q, Action, _older);
+            if (!result.Succeeded) { _error = result.Error; return; }
+            _entries!.AddRange(result.Value!.Entries);
+            _older = result.Value.Older;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}

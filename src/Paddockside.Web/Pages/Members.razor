@@ -112,11 +112,47 @@
             </ul>
             <p class="text-small text-text-muted">Suspending ends their access within a minute; what they posted stays. There is always at least one tenant admin.</p>
         </section>
+
+        @if (_support is { Count: > 0 })
+        {
+            <section class="grid gap-3" aria-labelledby="support-heading">
+                <h2 id="support-heading">Paddockside support access</h2>
+                <p class="text-small text-text-muted">
+                    Paddockside's support team can see inside your account only when you approve it, only to read, and only for the time
+                    shown. Everything they look at is in your <a href="audit?action=support" class="underline underline-offset-4">audit log</a>.
+                </p>
+                <ul class="card grid gap-3">
+                    @foreach (var s in _support)
+                    {
+                        <li class="grid gap-2 border-b border-border-subtle pb-3 last:border-b-0 last:pb-0">
+                            <div class="flex flex-wrap items-center gap-2">
+                                <span class="font-strong">@s.Operator</span>
+                                <span class="badge @(s.Status == "Active" ? "bg-status-warning-bg text-status-warning-fg" : "bg-action-secondary-bg text-text-muted")">@SupportStatus(s)</span>
+                                <span class="ml-auto text-small text-text-muted">asked @s.Requested</span>
+                            </div>
+                            <p>@s.Reason</p>
+                            @if (s.Status == "Requested")
+                            {
+                                <div class="flex flex-wrap gap-3">
+                                    <button type="button" class="btn-primary" disabled="@_busy" @onclick='() => AnswerAsync(s, "approve")'>Approve</button>
+                                    <button type="button" class="btn-secondary" disabled="@_busy" @onclick='() => AnswerAsync(s, "decline")'>Decline</button>
+                                </div>
+                            }
+                            else if (s.Status == "Active")
+                            {
+                                <button type="button" class="btn-secondary justify-self-start" disabled="@_busy" @onclick='() => AnswerAsync(s, "end")'>End it now</button>
+                            }
+                        </li>
+                    }
+                </ul>
+            </section>
+        }
     }
 </div>
 
 @code {
     private MembersPage? _page;
+    private List<SupportView>? _support;
     private string? _error;
     private string? _notice;
     private string? _email;
@@ -139,6 +175,8 @@
         var result = await Api.MembersAsync();
         if (result.Succeeded) _page = result.Value;
         else _error = result.Error;
+        var support = await Api.TenantSupportAsync();
+        if (support.Succeeded) _support = support.Value;
     }
 
     private Task InviteAsync() => Run(async () =>
@@ -176,6 +214,27 @@
         if (result.Succeeded) _notice = $"{member.Email} can sign in again.";
         else _error = result.Error;
     });
+
+    private Task AnswerAsync(SupportView session, string answer) => Run(async () =>
+    {
+        var result = await Api.AnswerSupportAsync(session.Id, answer);
+        if (!result.Succeeded) { _error = result.Error; return; }
+        _notice = answer switch
+        {
+            "approve" => $"Approved. {session.Operator} can read your account until the time shown, and you can end it at any time.",
+            "decline" => "Declined. Paddockside support cannot see inside your account.",
+            _ => "Ended. Paddockside support no longer has access.",
+        };
+    });
+
+    private static string SupportStatus(SupportView s) => s.Status switch
+    {
+        "Requested" => "Waiting for you",
+        "Active" => $"Can read until {s.Until}",
+        "Declined" => $"Declined by {s.DecidedBy}",
+        "Ended" => $"Ended by {s.EndedBy}",
+        _ => "Expired",
+    };
 
     /// <summary>Runs a change, then reloads, so the list always shows what the server holds.</summary>
     private async Task Run(Func<Task> change)

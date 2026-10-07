@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using Paddockside.Api.Audit;
 using Paddockside.Api.Auth;
 using Paddockside.Api.Formatting;
 using Paddockside.Api.Security;
@@ -49,8 +50,8 @@ public static class MemberEndpoints
         members.MapPost("/invitations", Invite);
         members.MapPost("/invitations/{id:guid}/revoke", Revoke);
         members.MapPost("/{id:guid}/role", ChangeRole);
-        members.MapPost("/{id:guid}/suspend", (Guid id, ClaimsPrincipal user, PaddocksideIdentityDbContext identity, CancellationToken ct) => SetStatus(id, MembershipStatus.Suspended, user, identity, ct));
-        members.MapPost("/{id:guid}/reactivate", (Guid id, ClaimsPrincipal user, PaddocksideIdentityDbContext identity, CancellationToken ct) => SetStatus(id, MembershipStatus.Active, user, identity, ct));
+        members.MapPost("/{id:guid}/suspend", (Guid id, ClaimsPrincipal user, PaddocksideIdentityDbContext identity, AuditLog audit, CancellationToken ct) => SetStatus(id, MembershipStatus.Suspended, user, identity, audit, ct));
+        members.MapPost("/{id:guid}/reactivate", (Guid id, ClaimsPrincipal user, PaddocksideIdentityDbContext identity, AuditLog audit, CancellationToken ct) => SetStatus(id, MembershipStatus.Active, user, identity, audit, ct));
 
         var join = app.MapGroup("/api/join").AllowAnonymous().RequireRateLimiting(AuthEndpoints.RateLimitPolicy);
         join.MapPost("/inspect", Inspect);
@@ -104,6 +105,7 @@ public static class MemberEndpoints
         UserManager<Person> users,
         StaffInvitations invitations,
         IOptions<EmailOptions> options,
+        AuditLog audit,
         CancellationToken cancellationToken)
     {
         if (!IsAdmin(user)) return AdminsOnly();
@@ -124,10 +126,11 @@ public static class MemberEndpoints
 
         var inviter = await users.FindByIdAsync(PersonOf(user).ToString());
         var sent = await invitations.SendAsync(tenantId, tenant.Name, address, role, inviter!.Id, inviter.Email ?? inviter.UserName ?? "A tenant admin", cancellationToken);
+        await audit.RecordAsync(tenantId, "member.invited", $"Invited {address} as {MemberRoles.Label(role)}", "Invitation", sent.Id, newValue: MemberRoles.Label(role), cancellationToken: cancellationToken);
         return Results.Created($"/api/members/invitations/{sent.Id}", new Invited(sent.Id, sent.Sent, sent.Problem));
     }
 
-    private static async Task<IResult> Revoke(Guid id, ClaimsPrincipal user, PaddocksideIdentityDbContext identity, TimeProvider clock, CancellationToken cancellationToken)
+    private static async Task<IResult> Revoke(Guid id, ClaimsPrincipal user, PaddocksideIdentityDbContext identity, TimeProvider clock, AuditLog audit, CancellationToken cancellationToken)
     {
         if (!IsAdmin(user)) return AdminsOnly();
         var invitation = await identity.StaffInvitations.SingleOrDefaultAsync(i => i.Id == id && i.TenantId == TenantOf(user), cancellationToken);
@@ -135,10 +138,11 @@ public static class MemberEndpoints
         if (invitation.AcceptedAt is not null) return Refused("That invitation was already accepted.");
         invitation.RevokedAt ??= clock.GetUtcNow();
         await identity.SaveChangesAsync(cancellationToken);
+        await audit.RecordAsync(TenantOf(user), "member.invitation-cancelled", $"Cancelled the invitation to {invitation.Email}", "Invitation", invitation.Id, cancellationToken: cancellationToken);
         return Results.NoContent();
     }
 
-    private static async Task<IResult> ChangeRole(Guid id, RoleRequest request, ClaimsPrincipal user, PaddocksideIdentityDbContext identity, CancellationToken cancellationToken)
+    private static async Task<IResult> ChangeRole(Guid id, RoleRequest request, ClaimsPrincipal user, PaddocksideIdentityDbContext identity, AuditLog audit, CancellationToken cancellationToken)
     {
         if (!IsAdmin(user)) return AdminsOnly();
         if (!Enum.TryParse<MemberRole>(request.Role, out var role) || !MemberRoles.StaffRoles.Contains(role))
@@ -149,13 +153,16 @@ public static class MemberEndpoints
         if (membership.Role == MemberRole.TenantAdmin && role != MemberRole.TenantAdmin && await IsLastAdminAsync(identity, membership, cancellationToken))
             return Refused("This is the only tenant admin. Make someone else a tenant admin first.");
 
+        var before = membership.Role;
         membership.Role = role;
         await identity.SaveChangesAsync(cancellationToken);
+        await audit.RecordAsync(membership.TenantId, "member.role-changed", $"Changed {await EmailOfAsync(identity, membership.PersonId)} from {MemberRoles.Label(before)} to {MemberRoles.Label(role)}",
+            "Membership", membership.Id, MemberRoles.Label(before), MemberRoles.Label(role), cancellationToken: cancellationToken);
         return Results.NoContent();
     }
 
     /// <summary>Suspension ends their staff access within a minute (sessions are rechecked every minute).</summary>
-    private static async Task<IResult> SetStatus(Guid id, MembershipStatus status, ClaimsPrincipal user, PaddocksideIdentityDbContext identity, CancellationToken cancellationToken)
+    private static async Task<IResult> SetStatus(Guid id, MembershipStatus status, ClaimsPrincipal user, PaddocksideIdentityDbContext identity, AuditLog audit, CancellationToken cancellationToken)
     {
         if (!IsAdmin(user)) return AdminsOnly();
         var membership = await StaffMembershipAsync(identity, id, TenantOf(user), cancellationToken);
@@ -167,10 +174,17 @@ public static class MemberEndpoints
                 return Refused("This is the only tenant admin. Make someone else a tenant admin first.");
         }
 
+        var before = membership.Status;
         membership.Status = status;
         await identity.SaveChangesAsync(cancellationToken);
+        await audit.RecordAsync(membership.TenantId, status == MembershipStatus.Suspended ? "member.suspended" : "member.reactivated",
+            $"{(status == MembershipStatus.Suspended ? "Suspended" : "Reactivated")} {await EmailOfAsync(identity, membership.PersonId)}",
+            "Membership", membership.Id, before.ToString(), status.ToString(), cancellationToken: cancellationToken);
         return Results.NoContent();
     }
+
+    private static async Task<string> EmailOfAsync(PaddocksideIdentityDbContext identity, Guid personId) =>
+        await identity.Users.Where(p => p.Id == personId).Select(p => p.Email).SingleOrDefaultAsync() ?? "a member";
 
     private static Task<Membership?> StaffMembershipAsync(PaddocksideIdentityDbContext identity, Guid id, Guid tenantId, CancellationToken cancellationToken) =>
         identity.Memberships.SingleOrDefaultAsync(m => m.Id == id && m.TenantId == tenantId
@@ -261,6 +275,10 @@ public static class MemberEndpoints
 
         (invitation.AcceptedAt, invitation.AcceptedByPersonId) = (now, person.Id);
         await identity.SaveChangesAsync(cancellationToken);
+        if (invitation.TenantId is { } joined)
+            await http.RequestServices.GetRequiredService<AuditLog>().RecordAsync(joined, "member.joined",
+                $"{person.Email} accepted the invitation and joined as {MemberRoles.Label(invitation.Role)}", "Person", person.Id,
+                actor: (person.Id, person.Email ?? "New member"), cancellationToken: cancellationToken);
 
         await http.SignInAsync(IdentityConstants.TwoFactorUserIdScheme, AuthEndpoints.PendingSecondFactor(person));
         return Results.Ok(new AuthEndpoints.NextStep(person.TwoFactorEnabled ? "totp" : "enrol"));

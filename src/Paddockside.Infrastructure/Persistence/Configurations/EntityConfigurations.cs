@@ -315,6 +315,49 @@ internal sealed class OwnerInvitationConfiguration : IEntityTypeConfiguration<Ow
     }
 }
 
+internal sealed class AuditEntryConfiguration : IEntityTypeConfiguration<AuditEntry>
+{
+    public void Configure(EntityTypeBuilder<AuditEntry> b)
+    {
+        b.MapTenantOwned();
+        b.Property(x => x.At);
+        b.Property(x => x.ActorKind).AsString();
+        b.Property(x => x.ActorPersonId);
+        b.Property(x => x.ActorName).HasMaxLength(320);
+        b.Property(x => x.Action).HasMaxLength(64);
+        b.Property(x => x.Summary).HasMaxLength(1000);
+        b.Property(x => x.EntityType).HasMaxLength(64);
+        b.Property(x => x.EntityId);
+        b.Property(x => x.OldValue).HasMaxLength(1000);
+        b.Property(x => x.NewValue).HasMaxLength(1000);
+        b.Property(x => x.IpAddress).HasMaxLength(64);
+        b.Property(x => x.Device).HasMaxLength(300);
+        b.HasIndex("TenantId", nameof(AuditEntry.At));
+        b.HasIndex("TenantId", nameof(AuditEntry.Action), nameof(AuditEntry.At));
+    }
+}
+
+internal sealed class SupportSessionConfiguration : IEntityTypeConfiguration<SupportSession>
+{
+    public void Configure(EntityTypeBuilder<SupportSession> b)
+    {
+        b.MapTenantOwned();
+        b.Property(x => x.OperatorPersonId);
+        b.Property(x => x.OperatorName).HasMaxLength(320);
+        b.Property(x => x.Reason).HasMaxLength(1000);
+        b.Property(x => x.Duration);
+        b.Property(x => x.RequestedAt);
+        b.Property(x => x.DecidedAt);
+        b.Property(x => x.DecidedBy).HasMaxLength(320);
+        b.Property(x => x.Approved);
+        b.Property(x => x.ExpiresAt);
+        b.Property(x => x.EndedAt);
+        b.Property(x => x.EndedBy).HasMaxLength(320);
+        b.HasIndex("TenantId", nameof(SupportSession.RequestedAt));
+        b.HasIndex(x => x.OperatorPersonId);
+    }
+}
+
 internal static class ConfigurationExtensions
 {
     /// <summary>Key, tenant column, tenant index and tenant foreign key — the shape every aggregate shares.</summary>

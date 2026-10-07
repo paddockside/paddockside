@@ -88,8 +88,19 @@ What the console shows, for every business, is account and health only:
 - email over the last 30 days: sent, delivered, bounced and waiting;
 - the inbound queue.
 
-Operators never see a business's horses, owners or messages. That will need a support session the business
-approves, which is still to come.
+Operators never see a business's horses, owners or messages, except through a **support session**:
+1. In the console, under **Support access**, the operator asks a business for access, with a reason and a number
+   of hours (at most 24). The business's Tenant admins are emailed.
+2. An admin approves or declines it on **Members**, under "Paddockside support access".
+3. Once it's approved, the operator clicks **Enter (read-only)** and sees the business as a Viewer until it
+   expires. A banner says so throughout.
+4. Anything that would change data is refused, and every page viewed goes into the business's audit log.
+5. Either side can end it early, and the next request after that is refused.
+
+**Audit log.** Tenant admins have an **Audit log** page: sign-ins and failed sign-ins, sign-outs, member
+invitations, role changes, suspensions, and every support-session step. It shows who did each thing, when, from
+which IP address, and old and new values where something changed. It can be searched and downloaded as CSV.
+Entries are append-only: the code refuses to change or delete them.
 
 The console onboards a business: it creates the business and invites its first Tenant admin. It also invites
 further operators.
