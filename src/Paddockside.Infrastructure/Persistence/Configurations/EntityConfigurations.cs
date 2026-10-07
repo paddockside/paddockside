@@ -353,6 +353,8 @@ internal sealed class SupportSessionConfiguration : IEntityTypeConfiguration<Sup
         b.Property(x => x.ExpiresAt);
         b.Property(x => x.EndedAt);
         b.Property(x => x.EndedBy).HasMaxLength(320);
+        b.Property(x => x.Emergency);
+        b.Property(x => x.SecondOperatorPersonId);
         b.HasIndex("TenantId", nameof(SupportSession.RequestedAt));
         b.HasIndex(x => x.OperatorPersonId);
     }

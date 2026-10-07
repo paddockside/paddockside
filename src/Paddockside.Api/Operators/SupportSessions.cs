@@ -20,16 +20,18 @@ namespace Paddockside.Api.Operators;
 /// </summary>
 public static class SupportSessions
 {
-    public sealed record SupportRequest(string Reason, int Hours);
+    public sealed record SupportRequest(string Reason, int Hours, bool Emergency = false);
 
     public sealed record SupportView(Guid Id, Guid TenantId, string Tenant, string Operator, string Reason, string Status,
-        string Requested, string? Decided, string? DecidedBy, string? Until, string? EndedBy);
+        string Requested, string? Decided, string? DecidedBy, string? Until, string? EndedBy, bool Emergency);
 
     public static void MapSupportSessionEndpoints(this IEndpointRouteBuilder app)
     {
         var ops = app.MapGroup("/api/ops").RequireAuthorization(OperatorPolicy.Name);
         ops.MapPost("/tenants/{tenantId:guid}/support", Request);
         ops.MapGet("/support", OperatorList);
+        ops.MapGet("/support/emergency", PendingEmergencies);
+        ops.MapPost("/support/{tenantId:guid}/{id:guid}/second", SecondOperator);
         ops.MapPost("/support/{tenantId:guid}/{id:guid}/enter", Enter);
         ops.MapPost("/support/{tenantId:guid}/{id:guid}/end", (Guid tenantId, Guid id, ClaimsPrincipal user, TenantScopedDb tenants, AuditLog audit, TimeProvider clock, CancellationToken ct) =>
             EndAsync(tenantId, id, OperatorName(user), mustBeOperator: PersonOf(user), tenants, audit, clock, ct));
@@ -60,7 +62,7 @@ public static class SupportSessions
     private static SupportView View(SupportSession s, string tenantName, DateTimeOffset now) => new(
         s.Id, s.TenantId, tenantName, s.OperatorName, s.Reason, s.StatusAt(now).ToString(),
         Words.DayAndTime(s.RequestedAt, now), s.DecidedAt is { } d ? Words.DayAndTime(d, now) : null, s.DecidedBy,
-        s.ExpiresAt is { } e ? Words.DayAndTime(e, now) : null, s.EndedBy);
+        s.ExpiresAt is { } e ? Words.DayAndTime(e, now) : null, s.EndedBy, s.Emergency);
 
     // ---- the operator's side -----------------------------------------------------------------------------------
 
@@ -73,28 +75,82 @@ public static class SupportSessions
 
         await using var db = tenants.For(tenantId);
         if (await db.Tenants.SingleOrDefaultAsync(cancellationToken) is not { } tenant) return Results.NotFound();
-        var session = new SupportSession(tenantId, PersonOf(user), OperatorName(user), request.Reason, TimeSpan.FromHours(hours), clock.GetUtcNow());
+        var session = new SupportSession(tenantId, PersonOf(user), OperatorName(user), request.Reason, TimeSpan.FromHours(hours), clock.GetUtcNow(), request.Emergency);
         db.SupportSessions.Add(session);
         await db.SaveChangesAsync(cancellationToken);
-        await audit.RecordAsync(tenantId, "support.requested", $"{session.OperatorName} asked for {hours} hours' access: {session.Reason}", "SupportSession", session.Id, cancellationToken: cancellationToken);
 
-        // Tell the tenant's admins: they approve from Members.
+        if (session.Emergency)
+        {
+            // No admin to ask: a second operator approves, and the tenant is told when it starts (SecondOperator).
+            await audit.RecordAsync(tenantId, "support.emergency-requested",
+                $"{session.OperatorName} asked for {Words.Hours(hours)} of emergency access (no admin could be reached): {session.Reason}", "SupportSession", session.Id, kind: AuditActorKind.Operator, cancellationToken: cancellationToken);
+            return Results.Created($"/api/ops/support/{tenantId}/{session.Id}", View(session, tenant.Name, clock.GetUtcNow()));
+        }
+
+        await audit.RecordAsync(tenantId, "support.requested", $"{session.OperatorName} asked for {Words.Hours(hours)} of access: {session.Reason}", "SupportSession", session.Id, kind: AuditActorKind.Operator, cancellationToken: cancellationToken);
+        var link = $"{options.Value.PortalBaseUrl?.TrimEnd('/')}/members";
+        await EmailAdminsAsync(identity, email, options.Value, tenantId, $"Paddockside support has asked to view {tenant.Name}",
+            $"{session.OperatorName} has asked to view {tenant.Name}'s account for {Words.Hours(hours)}, to help with:\n\n{session.Reason}\n\n" +
+            $"Nothing happens unless you approve it. Approve or decline it on the Members page: {link}\n\n" +
+            "While it lasts they can read but not change anything, everything they look at is recorded in your audit log, and you can end it at any time.",
+            "support-request", cancellationToken);
+        return Results.Created($"/api/ops/support/{tenantId}/{session.Id}", View(session, tenant.Name, clock.GetUtcNow()));
+    }
+
+    /// <summary>Emergency requests from other operators, waiting for a second operator (identity-access.md §7).</summary>
+    private static async Task<IResult> PendingEmergencies(ClaimsPrincipal user, TenantScopedDb tenants, TimeProvider clock, CancellationToken cancellationToken)
+    {
+        var now = clock.GetUtcNow();
+        var me = PersonOf(user);
+        var pending = await tenants.PendingEmergencySessionsAsync(cancellationToken);
+        return Results.Ok(pending.Where(p => p.Session.OperatorPersonId != me).Select(p => View(p.Session, p.TenantName, now)).ToList());
+    }
+
+    /// <summary>
+    /// The second operator approves emergency access. It starts now, and the tenant's admins are told at once, with
+    /// both operators named, so access without them is never silent.
+    /// </summary>
+    private static async Task<IResult> SecondOperator(Guid tenantId, Guid id, ClaimsPrincipal user, TenantScopedDb tenants, PaddocksideIdentityDbContext identity,
+        IEmailSender email, IOptions<EmailOptions> options, AuditLog audit, TimeProvider clock, CancellationToken cancellationToken)
+    {
+        await using var db = tenants.For(tenantId);
+        var session = await db.SupportSessions.SingleOrDefaultAsync(s => s.Id == id, cancellationToken);
+        var tenant = await db.Tenants.SingleOrDefaultAsync(cancellationToken);
+        if (session is null || tenant is null) return Results.NotFound();
+        try
+        {
+            session.ApproveAsSecondOperator(PersonOf(user), OperatorName(user), clock.GetUtcNow());
+        }
+        catch (DomainException ex)
+        {
+            return Results.Problem(statusCode: StatusCodes.Status409Conflict, title: ex.Message);
+        }
+
+        await db.SaveChangesAsync(cancellationToken);
+        await audit.RecordAsync(tenantId, "support.emergency-approved",
+            $"{OperatorName(user)} approved {session.OperatorName}'s emergency access until {Words.Moment(session.ExpiresAt!.Value)}", "SupportSession", session.Id,
+            kind: AuditActorKind.Operator, cancellationToken: cancellationToken);
+
+        await EmailAdminsAsync(identity, email, options.Value, tenantId, $"Paddockside has opened emergency access to {tenant.Name}",
+            $"We could not reach an admin at {tenant.Name}, so two of Paddockside's operators have opened emergency access to your account.\n\n" +
+            $"Reason: {session.Reason}\nAsked by: {session.OperatorName}\nApproved by: {OperatorName(user)}\nUntil: {Words.Moment(session.ExpiresAt!.Value)} (Sydney time)\n\n" +
+            "They can read but not change anything, and everything they look at is recorded in your audit log. " +
+            $"You can end it now on the Members page: {options.Value.PortalBaseUrl?.TrimEnd('/')}/members",
+            "support-emergency", cancellationToken);
+        return Results.NoContent();
+    }
+
+    private static async Task EmailAdminsAsync(PaddocksideIdentityDbContext identity, IEmailSender email, EmailOptions options, Guid tenantId,
+        string subject, string text, string purpose, CancellationToken cancellationToken)
+    {
         var admins = await (from m in identity.Memberships
                             join p in identity.Users on m.PersonId equals p.Id
                             where m.TenantId == tenantId && m.Role == MemberRole.TenantAdmin && m.Status == MembershipStatus.Active
                             select p.Email).ToListAsync(cancellationToken);
-        var link = $"{options.Value.PortalBaseUrl?.TrimEnd('/')}/members";
+        var html = $"<p>{System.Net.WebUtility.HtmlEncode(text).Replace("\n", "<br>")}</p>";
         foreach (var admin in admins.OfType<string>())
-        {
-            var text = $"{session.OperatorName} has asked to view {tenant.Name}'s account for {hours} hours, to help with:\n\n{session.Reason}\n\n" +
-                       $"Nothing happens unless you approve it. Approve or decline it on the Members page: {link}\n\n" +
-                       "While it lasts they can read but not change anything, everything they look at is recorded in your audit log, and you can end it at any time.";
-            var html = $"<p>{System.Net.WebUtility.HtmlEncode(text).Replace("\n", "<br>")}</p>";
-            await email.SendAsync(new OutboundEmail(options.Value.FromAddress, Senders.Product, admin, string.Empty, options.Value.FromAddress,
-                $"Paddockside support has asked to view {tenant.Name}", html, text, new Dictionary<string, string> { ["purpose"] = "support-request" }, TrackOpens: false), cancellationToken);
-        }
-
-        return Results.Created($"/api/ops/support/{tenantId}/{session.Id}", View(session, tenant.Name, clock.GetUtcNow()));
+            await email.SendAsync(new OutboundEmail(options.FromAddress, Senders.Product, admin, string.Empty, options.FromAddress,
+                subject, html, text, new Dictionary<string, string> { ["purpose"] = purpose }, TrackOpens: false), cancellationToken);
     }
 
     private static async Task<IResult> OperatorList(ClaimsPrincipal user, TenantScopedDb tenants, TimeProvider clock, CancellationToken cancellationToken)
@@ -126,8 +182,8 @@ public static class SupportSessions
         identity.AddClaim(new Claim("amr", "mfa"));
         await http.SignInAsync(IdentityConstants.ApplicationScheme, principal, new AuthenticationProperties { IsPersistent = true });
 
-        await audit.RecordAsync(tenantId, "support.entered", $"{session.OperatorName} entered the account (read-only) until {session.ExpiresAt:yyyy-MM-dd HH:mm} UTC",
-            "SupportSession", session.Id, actor: (person!.Id, session.OperatorName), cancellationToken: cancellationToken);
+        await audit.RecordAsync(tenantId, "support.entered", $"{session.OperatorName} entered the account (read-only) until {Words.Moment(session.ExpiresAt!.Value)}",
+            "SupportSession", session.Id, actor: (person!.Id, session.OperatorName), kind: AuditActorKind.Operator, cancellationToken: cancellationToken);
         return Results.NoContent();
     }
 
@@ -166,7 +222,7 @@ public static class SupportSessions
         else session.Decline(by, now);
         await db.SaveChangesAsync(cancellationToken);
         await audit.RecordAsync(session.TenantId, approve ? "support.approved" : "support.declined",
-            approve ? $"Approved {session.OperatorName}'s access until {session.ExpiresAt:yyyy-MM-dd HH:mm} UTC" : $"Declined {session.OperatorName}'s request",
+            approve ? $"Approved {session.OperatorName}'s access until {Words.Moment(session.ExpiresAt!.Value)}" : $"Declined {session.OperatorName}'s request",
             "SupportSession", session.Id, cancellationToken: cancellationToken);
         return Results.NoContent();
     }
@@ -178,7 +234,8 @@ public static class SupportSessions
         if (session is null || (mustBeOperator is { } op && session.OperatorPersonId != op)) return Results.NotFound();
         session.End(by, clock.GetUtcNow());
         await db.SaveChangesAsync(cancellationToken);
-        await audit.RecordAsync(tenantId, "support.ended", $"{by} ended the support session", "SupportSession", session.Id, cancellationToken: cancellationToken);
+        await audit.RecordAsync(tenantId, "support.ended", $"{by} ended the support session", "SupportSession", session.Id,
+            kind: mustBeOperator is null ? null : AuditActorKind.Operator, cancellationToken: cancellationToken);
         return Results.NoContent();
     }
 }

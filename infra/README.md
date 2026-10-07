@@ -97,6 +97,12 @@ Operators never see a business's horses, owners or messages, except through a **
 4. Anything that would change data is refused, and every page viewed goes into the business's audit log.
 5. Either side can end it early, and the next request after that is refused.
 
+**Emergency access**, for a business whose admins can't be reached, means ticking "Emergency" on the request.
+- A **second, different operator** must approve it, from "Emergency access waiting for a second operator" in
+  their console. Their admins are not asked.
+- The admins are emailed the moment it starts, with both operators named.
+- From then on it's an ordinary session: read-only, logged, and the admins can end it.
+
 **Audit log.** Tenant admins have an **Audit log** page: sign-ins and failed sign-ins, sign-outs, member
 invitations, role changes, suspensions, and every support-session step. It shows who did each thing, when, from
 which IP address, and old and new values where something changed. It can be searched and downloaded as CSV.
@@ -114,7 +120,9 @@ dotnet run --project tools/Paddockside.Ops -- list-operators
 dotnet run --project tools/Paddockside.Ops -- revoke-operator someone@example.com
 ```
 
-A change takes effect within a minute. The last operator cannot be revoked.
+A change takes effect within a minute. The last operator cannot be revoked. The tool prints the database it is
+about to change; check that line. To work on a local database, set `ConnectionStrings__Paddockside`, which always
+wins over Key Vault.
 
 ### Staff logins: inviting, roles and retiring the dev login
 
@@ -132,8 +140,9 @@ On the Azure dev site, set up your own logins and retire the demo one:
 4. In **Members**, **Suspend** `kate@laurel-oak.test`. Its password is in the repository, so it must not stay
    usable on a site others can reach.
 
-A person with staff roles in two businesses currently acts in the one they joined first; switching between
-businesses is still to come.
+A person who is staff in two businesses signs in to the one they joined first. **Switch organisation** in the
+header moves them to the other. It changes the session, never the web address. The choice holds until they sign
+out, or until their membership there is suspended.
 
 ### Owner sign-in (email links and text codes)
 

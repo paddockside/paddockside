@@ -120,10 +120,10 @@ public static class SessionRefresh
     /// <summary>An operator inside a tenant on a support session stays there (as a Viewer) until they leave or it ends.</summary>
     private static readonly string[] SupportClaims = [SessionClaims.Tenant, SessionClaims.Role, SessionClaims.AudienceClass, SessionClaims.SupportSession];
 
-    public static void Configure(SecurityStampValidatorOptions options)
+    /// <param name="interval">Normally a minute, so a suspended member loses access within a minute (identity-access.md §6).</param>
+    public static void Configure(SecurityStampValidatorOptions options, TimeSpan interval)
     {
-        // Checked every minute, so a suspended member loses access within a minute (identity-access.md §6).
-        options.ValidationInterval = TimeSpan.FromMinutes(1);
+        options.ValidationInterval = interval;
         options.OnRefreshingPrincipal = Refresh;
     }
 

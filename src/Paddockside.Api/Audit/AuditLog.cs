@@ -13,12 +13,14 @@ namespace Paddockside.Api.Audit;
 public sealed class AuditLog(TenantScopedDb tenants, IHttpContextAccessor accessor, TimeProvider clock)
 {
     public async Task RecordAsync(Guid tenantId, string action, string summary, string? entityType = null, Guid? entityId = null,
-        string? oldValue = null, string? newValue = null, (Guid? Id, string Name)? actor = null, CancellationToken cancellationToken = default)
+        string? oldValue = null, string? newValue = null, (Guid? Id, string Name)? actor = null, AuditActorKind? kind = null,
+        CancellationToken cancellationToken = default)
     {
         var http = accessor.HttpContext;
-        var (kind, personId, name) = actor is { } given ? (KindOf(http?.User), given.Id, given.Name) : Actor(http?.User);
+        var (actorKind, personId, name) = actor is { } given ? (KindOf(http?.User), given.Id, given.Name) : Actor(http?.User);
+        actorKind = kind ?? actorKind;
         await using var db = tenants.For(tenantId);
-        db.AuditEntries.Add(new AuditEntry(tenantId, clock.GetUtcNow(), kind, personId, name, action, summary, entityType, entityId,
+        db.AuditEntries.Add(new AuditEntry(tenantId, clock.GetUtcNow(), actorKind, personId, name, action, summary, entityType, entityId,
             Trim(oldValue, 1000), Trim(newValue, 1000), IpAddress(http), Trim(http?.Request.Headers.UserAgent.ToString(), 300)));
         await db.SaveChangesAsync(cancellationToken);
     }

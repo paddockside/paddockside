@@ -68,10 +68,12 @@ public sealed record InboundView(
     string? Event,
     List<AttachmentView> Attachments);
 
+public sealed record StaffTenantOption(Guid Id, string Name, string Role, bool Current);
+
 // ---- Support sessions and the audit log ------------------------------------------------------------------------
 
 public sealed record SupportView(Guid Id, Guid TenantId, string Tenant, string Operator, string Reason, string Status,
-    string Requested, string? Decided, string? DecidedBy, string? Until, string? EndedBy);
+    string Requested, string? Decided, string? DecidedBy, string? Until, string? EndedBy, bool Emergency = false);
 
 public sealed record AuditView(Guid Id, string At, string Who, string ActorKind, string Action, string Summary, string? From, string? Device, string? Before, string? After);
 
@@ -173,6 +175,10 @@ public sealed class PaddocksideApi(HttpClient http)
 
     public Task<ApiResult<InboundCounts>> InboundCountsAsync() => GetAsync<InboundCounts>("api/inbound/counts");
 
+    public Task<ApiResult<List<StaffTenantOption>>> StaffTenantsAsync() => GetAsync<List<StaffTenantOption>>("api/auth/tenants");
+
+    public Task<ApiResult<object>> SwitchStaffTenantAsync(Guid tenantId) => PostAsync<object>("api/auth/switch", new { tenantId });
+
     // ---- Support sessions and the audit log ----------------------------------------------------------------------
 
     public Task<ApiResult<List<SupportView>>> TenantSupportAsync() => GetAsync<List<SupportView>>("api/support");
@@ -181,8 +187,12 @@ public sealed class PaddocksideApi(HttpClient http)
 
     public Task<ApiResult<List<SupportView>>> MySupportSessionsAsync() => GetAsync<List<SupportView>>("api/ops/support");
 
-    public Task<ApiResult<SupportView>> AskForSupportAsync(Guid tenantId, string reason, int hours) =>
-        PostAsync<SupportView>($"api/ops/tenants/{tenantId}/support", new { reason, hours });
+    public Task<ApiResult<SupportView>> AskForSupportAsync(Guid tenantId, string reason, int hours, bool emergency = false) =>
+        PostAsync<SupportView>($"api/ops/tenants/{tenantId}/support", new { reason, hours, emergency });
+
+    public Task<ApiResult<List<SupportView>>> PendingEmergenciesAsync() => GetAsync<List<SupportView>>("api/ops/support/emergency");
+
+    public Task<ApiResult<object>> SecondEmergencyAsync(Guid tenantId, Guid id) => PostAsync<object>($"api/ops/support/{tenantId}/{id}/second", new { });
 
     public Task<ApiResult<object>> EnterSupportAsync(Guid tenantId, Guid id) => PostAsync<object>($"api/ops/support/{tenantId}/{id}/enter", new { });
 

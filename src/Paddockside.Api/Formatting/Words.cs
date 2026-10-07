@@ -31,6 +31,13 @@ public static class Words
 
     public static string Time(DateTimeOffset at) => Local(at).ToString("h:mm tt", Culture).ToLowerInvariant();
 
+    /// <summary>A fixed moment in words, for records read later ("Thursday 8 October, 9:07 am"): never "today".</summary>
+    public static string Moment(DateTimeOffset at) =>
+        $"{Local(at).ToString("dddd d MMMM", Culture)}, {Time(at)}";
+
+    /// <summary>"1 hour", "4 hours".</summary>
+    public static string Hours(double hours) => hours == 1 ? "1 hour" : $"{hours:0.#} hours";
+
     /// <summary>"Today, 9:40 am", "Yesterday, 5:30 pm", or the day and time.</summary>
     public static string Recently(DateTimeOffset at, DateTimeOffset now)
     {

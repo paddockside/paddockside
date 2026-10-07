@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Paddockside.Api.Audit;
 using Paddockside.Api.Security;
+using Paddockside.Domain;
 using Paddockside.Infrastructure.Identity;
 using Paddockside.Infrastructure.Persistence;
 using QRCoder;
@@ -39,6 +40,8 @@ public static class AuthEndpoints
         auth.MapPost("/enrolment", CompleteEnrolment);
         auth.MapPost("/sign-out", (Delegate)SignOut);
         app.MapGet("/api/auth/me", Me).RequireAuthorization(StaffPolicy.Name);
+        app.MapGet("/api/auth/tenants", StaffTenants).RequireAuthorization(StaffPolicy.Name);
+        app.MapPost("/api/auth/switch", SwitchTenant).RequireAuthorization(StaffPolicy.Name);
     }
 
     public sealed record PasswordRequest(string Email, string Password);
@@ -193,6 +196,55 @@ public static class AuthEndpoints
             user.FindFirstValue(SessionClaims.Operator) == "true",
             supportUntil is { } until ? Formatting.Words.Time(until) : null));
     }
+
+    public sealed record StaffTenantOption(Guid Id, string Name, string Role, bool Current);
+
+    public sealed record SwitchRequest(Guid TenantId);
+
+    /// <summary>The tenants this person is active staff in (identity-access.md §3): the switcher lists the others.</summary>
+    private static async Task<IResult> StaffTenants(ClaimsPrincipal user, PaddocksideIdentityDbContext identity, TenantScopedDb tenants, CancellationToken cancellationToken)
+    {
+        if (user.HasClaim(c => c.Type == SessionClaims.SupportSession)) return Results.Ok(Array.Empty<StaffTenantOption>());
+        var personId = Guid.Parse(user.FindFirstValue(ClaimTypes.NameIdentifier)!);
+        var current = user.FindFirstValue(SessionClaims.Tenant);
+        var options = new List<StaffTenantOption>();
+        foreach (var m in await ActiveStaffMembershipsAsync(identity, personId, cancellationToken))
+        {
+            await using var db = tenants.For(m.TenantId);
+            if (await db.Tenants.AsNoTracking().SingleOrDefaultAsync(cancellationToken) is { } t)
+                options.Add(new StaffTenantOption(t.Id, t.Name, MemberRoles.Label(m.Role), t.Id.ToString() == current));
+        }
+
+        return Results.Ok(options.OrderBy(o => o.Name).ToList());
+    }
+
+    /// <summary>Moves the session to another tenant the person is staff in. The session changes; the URL does not.</summary>
+    private static async Task<IResult> SwitchTenant(SwitchRequest request, ClaimsPrincipal user, HttpContext http, PaddocksideIdentityDbContext identity,
+        SignInManager<Person> signIn, AuditLog audit, CancellationToken cancellationToken)
+    {
+        if (user.HasClaim(c => c.Type == SessionClaims.SupportSession))
+            return Results.Problem(statusCode: StatusCodes.Status409Conflict, title: "Leave the support session first.");
+        var personId = Guid.Parse(user.FindFirstValue(ClaimTypes.NameIdentifier)!);
+        var membership = (await ActiveStaffMembershipsAsync(identity, personId, cancellationToken)).SingleOrDefault(m => m.TenantId == request.TenantId);
+        if (membership is null) return Results.NotFound();
+
+        var person = await identity.Users.SingleAsync(p => p.Id == personId, cancellationToken);
+        var principal = await signIn.CreateUserPrincipalAsync(person);
+        var claims = (ClaimsIdentity)principal.Identity!;
+        StaffTenant.Apply(claims, membership);
+        claims.AddClaim(new Claim("amr", "mfa"));
+        await http.SignInAsync(IdentityConstants.ApplicationScheme, principal, new AuthenticationProperties { IsPersistent = true });
+        await audit.RecordAsync(membership.TenantId, "auth.switched-in", "Switched into this organisation", "Person", personId,
+            actor: (personId, person.Email ?? person.UserName ?? "Unknown"), cancellationToken: cancellationToken);
+        return Results.NoContent();
+    }
+
+    private static Task<List<Membership>> ActiveStaffMembershipsAsync(PaddocksideIdentityDbContext identity, Guid personId, CancellationToken cancellationToken) =>
+        identity.Memberships.AsNoTracking()
+            .Where(m => m.PersonId == personId && m.Status == MembershipStatus.Active
+                && (m.Role == MemberRole.Viewer || m.Role == MemberRole.Coordinator || m.Role == MemberRole.Manager || m.Role == MemberRole.TenantAdmin))
+            .OrderBy(m => m.CreatedAt)
+            .ToListAsync(cancellationToken);
 
     /// <summary>The same principal SignInManager uses for "password checked, second factor pending".</summary>
     internal static ClaimsPrincipal PendingSecondFactor(Person person) =>

@@ -127,6 +127,10 @@
                         <li class="grid gap-2 border-b border-border-subtle pb-3 last:border-b-0 last:pb-0">
                             <div class="flex flex-wrap items-center gap-2">
                                 <span class="font-strong">@s.Operator</span>
+                                @if (s.Emergency)
+                                {
+                                    <span class="badge bg-status-danger-bg text-status-danger-fg">Emergency</span>
+                                }
                                 <span class="badge @(s.Status == "Active" ? "bg-status-warning-bg text-status-warning-fg" : "bg-action-secondary-bg text-text-muted")">@SupportStatus(s)</span>
                                 <span class="ml-auto text-small text-text-muted">asked @s.Requested</span>
                             </div>

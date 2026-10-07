@@ -90,7 +90,7 @@ public static class OperatorEndpoints
         var inviter = await users.FindByIdAsync(PersonOf(user).ToString());
         var sent = await invitations.SendAsync(tenant.Id, tenant.Name, address, MemberRole.TenantAdmin, inviter!.Id, "Paddockside", cancellationToken);
         await audit.RecordAsync(tenant.Id, "tenant.created", $"Paddockside set up {tenant.Name} and invited {address} as its tenant admin", "Tenant", tenant.Id,
-            actor: (inviter.Id, $"Paddockside: {inviter.Email}"), cancellationToken: cancellationToken);
+            actor: (inviter.Id, $"Paddockside: {inviter.Email}"), kind: AuditActorKind.Operator, cancellationToken: cancellationToken);
         return Results.Created($"/api/ops/tenants/{tenant.Id}", new TenantCreated(tenant.Id, tenant.Slug, sent.Sent, sent.Problem));
     }
 

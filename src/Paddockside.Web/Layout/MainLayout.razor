@@ -5,7 +5,7 @@
 @inject NavigationManager Navigation
 
 <div class="grid min-h-screen grid-cols-[minmax(0,1fr)] grid-rows-[auto_auto_1fr]">
-    <AppHeader TenantName="@Session.Current?.TenantName">
+    <AppHeader TenantName="@Session.Current?.TenantName" OtherTenants="_otherTenants" OnSwitchTenant="SwitchTenant">
         <Actions>
             @if (Session.Current is not null)
             {
@@ -46,9 +46,31 @@
 </div>
 
 @code {
+    private IReadOnlyList<TenantOption> _otherTenants = [];
+
     protected override void OnInitialized() => Session.Changed += Refresh;
 
-    private void Refresh() => InvokeAsync(StateHasChanged);
+    private void Refresh() => InvokeAsync(async () =>
+    {
+        await LoadOtherTenantsAsync();
+        StateHasChanged();
+    });
+
+    /// <summary>The other organisations this person is staff in; the switcher shows only when there are some (identity-access.md §3).</summary>
+    private async Task LoadOtherTenantsAsync()
+    {
+        if (Session.Current is null || Session.Current.SupportUntil is not null) { _otherTenants = []; return; }
+        var result = await Api.StaffTenantsAsync();
+        _otherTenants = result.Succeeded
+            ? result.Value!.Where(t => !t.Current).Select(t => new TenantOption(t.Id.ToString(), t.Name)).ToList()
+            : [];
+    }
+
+    private async Task SwitchTenant(TenantOption tenant)
+    {
+        var result = await Api.SwitchStaffTenantAsync(Guid.Parse(tenant.Id));
+        if (result.Succeeded) Navigation.NavigateTo("horses", forceLoad: true);
+    }
 
     private async Task SignOut()
     {

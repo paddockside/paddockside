@@ -73,7 +73,9 @@ builder.Services.AddAuthorizationBuilder()
     .AddPolicy(StaffPolicy.Name, StaffPolicy.Build)
     .AddPolicy(ClientPolicy.Name, ClientPolicy.Build)
     .AddPolicy(OperatorPolicy.Name, OperatorPolicy.Build);
-builder.Services.Configure<SecurityStampValidatorOptions>(SessionRefresh.Configure);
+builder.Services.Configure<SecurityStampValidatorOptions>(options =>
+    SessionRefresh.Configure(options, TimeSpan.FromSeconds(builder.Configuration.GetValue("Sessions:CheckSeconds", 60))));
+builder.Services.AddScoped<ISecurityStampValidator, SessionStampValidator>();
 
 // Rate limiting on every sign-in step, per client IP (non-functional.md §2).
 var authRequestsPerMinute = builder.Configuration.GetValue("RateLimits:AuthPerMinute", 10);

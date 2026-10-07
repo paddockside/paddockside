@@ -75,6 +75,40 @@ public sealed class SupportAndAuditTests(IsolationDatabase db, ApiFactoryFixture
     }
 
     [Fact]
+    public async Task Emergency_access_needs_a_second_operator_and_tells_the_tenant_when_it_starts()
+    {
+        var (tenantId, admin) = await NewTenantAsync();
+        var (first, _) = await Api.SignedInOperatorAsync();
+        var (second, _) = await Api.SignedInOperatorAsync();
+        var adminEmailsBefore = Api.Emails.Sent.Count(e => e.Email.Metadata.GetValueOrDefault("purpose") is "support-request" or "support-emergency");
+
+        var requested = await first.PostApiAsync($"/api/ops/tenants/{tenantId}/support", new { reason = "Owners report missing results; admin on leave", hours = 4, emergency = true });
+        var session = (await requested.Content.ReadFromJsonAsync<SupportView>())!;
+        Assert.Equal(adminEmailsBefore, Api.Emails.Sent.Count(e => e.Email.Metadata.GetValueOrDefault("purpose") is "support-request" or "support-emergency")); // nothing yet
+
+        // Not by the operator who asked; not usable until approved.
+        Assert.Equal(HttpStatusCode.Conflict, (await first.PostApiAsync($"/api/ops/support/{tenantId}/{session.Id}/second", new { })).StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, (await first.PostApiAsync($"/api/ops/support/{tenantId}/{session.Id}/enter", new { })).StatusCode);
+
+        // The second operator sees it waiting, and approves it: it starts, and the tenant is told.
+        Assert.Contains(await second.GetFromJsonAsync<List<SupportView>>("/api/ops/support/emergency") ?? [], s => s.Id == session.Id);
+        Assert.DoesNotContain(await first.GetFromJsonAsync<List<SupportView>>("/api/ops/support/emergency") ?? [], s => s.Id == session.Id);
+        Assert.Equal(HttpStatusCode.NoContent, (await second.PostApiAsync($"/api/ops/support/{tenantId}/{session.Id}/second", new { })).StatusCode);
+        Assert.Contains(Api.Emails.Sent, e => e.Email.Metadata.GetValueOrDefault("purpose") == "support-emergency" && e.Email.TextBody.Contains("Approved by"));
+
+        Assert.Equal(HttpStatusCode.NoContent, (await first.PostApiAsync($"/api/ops/support/{tenantId}/{session.Id}/enter", new { })).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await first.GetAsync("/api/horses")).StatusCode);
+
+        // The tenant's admin can still end it, and the log has the whole story.
+        Assert.Equal(HttpStatusCode.NoContent, (await admin.PostApiAsync($"/api/support/{session.Id}/end", new { })).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await first.GetAsync("/api/horses")).StatusCode);
+        var log = (await admin.GetFromJsonAsync<AuditPage>("/api/audit?action=support"))!.Entries.Select(e => e.Action).ToList();
+        Assert.Contains("support.emergency-requested", log);
+        Assert.Contains("support.emergency-approved", log);
+        Assert.Contains("support.ended", log);
+    }
+
+    [Fact]
     public async Task Sign_ins_failures_and_role_changes_are_logged_for_the_tenant_admin()
     {
         var (tenantId, admin) = await NewTenantAsync();

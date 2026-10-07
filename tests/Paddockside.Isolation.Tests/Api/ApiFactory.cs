@@ -39,6 +39,8 @@ public sealed class ApiFactory(IsolationDatabase db) : WebApplicationFactory<Pro
         builder.UseSetting("Postmark:WebhookUsername", WebhookUsername);
         builder.UseSetting("Postmark:WebhookPassword", WebhookPassword);
         builder.UseSetting("Email:PortalBaseUrl", PortalBaseUrl);
+        // Recheck every session on every request, so each test also proves sessions survive the check unchanged.
+        builder.UseSetting("Sessions:CheckSeconds", "0");
         builder.ConfigureTestServices(services =>
         {
             services.AddSingleton<IBreachedPasswordList>(new FakeBreachedList());

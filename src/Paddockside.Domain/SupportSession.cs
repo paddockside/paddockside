@@ -14,6 +14,10 @@ public enum SupportSessionStatus
 /// reason and a duration (default 2 hours, at most 24), approved by one of the tenant's admins, ended early by
 /// either side. While active the operator sees the tenant as a Viewer, and everything they view is in the tenant's
 /// audit log.
+/// <para>
+/// Emergency access, for a tenant with no reachable admin: the request needs a second, different operator instead
+/// of a tenant admin, and the tenant is told by email when it starts.
+/// </para>
 /// </summary>
 public sealed class SupportSession
 {
@@ -23,7 +27,7 @@ public sealed class SupportSession
     /// <summary>For EF Core materialisation.</summary>
     private SupportSession() => (OperatorName, Reason) = (null!, null!);
 
-    public SupportSession(Guid tenantId, Guid operatorPersonId, string operatorName, string reason, TimeSpan duration, DateTimeOffset at)
+    public SupportSession(Guid tenantId, Guid operatorPersonId, string operatorName, string reason, TimeSpan duration, DateTimeOffset at, bool emergency = false)
     {
         if (string.IsNullOrWhiteSpace(reason)) throw new DomainException("Say why you need access; the tenant admin reads it before approving.");
         if (duration <= TimeSpan.Zero || duration > MaxDuration) throw new DomainException("A support session lasts at most 24 hours.");
@@ -33,7 +37,14 @@ public sealed class SupportSession
         Reason = reason.Trim();
         Duration = duration;
         RequestedAt = at;
+        Emergency = emergency;
     }
+
+    /// <summary>No tenant admin could be reached: a second operator approves instead (identity-access.md §7).</summary>
+    public bool Emergency { get; }
+
+    /// <summary>For emergency access: the second operator who approved it.</summary>
+    public Guid? SecondOperatorPersonId { get; private set; }
 
     public Guid Id { get; } = Guid.CreateVersion7();
 
@@ -77,6 +88,15 @@ public sealed class SupportSession
     {
         if (DecidedAt is not null) throw new DomainException("This request has already been answered.");
         (Approved, DecidedAt, DecidedBy, ExpiresAt) = (true, at, by, at + Duration);
+    }
+
+    /// <summary>Emergency access approved by a second operator — never the one who asked.</summary>
+    public void ApproveAsSecondOperator(Guid operatorPersonId, string by, DateTimeOffset at)
+    {
+        if (!Emergency) throw new DomainException("Only emergency access is approved by a second operator; ask the tenant's admins.");
+        if (operatorPersonId == OperatorPersonId) throw new DomainException("A second, different operator must approve emergency access.");
+        Approve(by, at);
+        SecondOperatorPersonId = operatorPersonId;
     }
 
     public void Decline(string by, DateTimeOffset at)

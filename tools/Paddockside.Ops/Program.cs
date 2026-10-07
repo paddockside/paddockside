@@ -14,11 +14,19 @@ using Paddockside.Infrastructure.Identity;
 // first operator exists, invite others from the operator console instead.
 
 Environment.SetEnvironmentVariable("AZURE_TOKEN_CREDENTIALS", "dev");
-var config = new ConfigurationBuilder()
-    .AddEnvironmentVariables()
-    .AddAzureKeyVault(new Uri(Environment.GetEnvironmentVariable("PADDOCKSIDE_KEYVAULT") ?? "https://kv-paddockside-dev-cd63.vault.azure.net/"), new DefaultAzureCredential())
-    .Build();
-var connection = config.GetConnectionString("Paddockside") ?? throw new InvalidOperationException("No ConnectionStrings:Paddockside.");
+// An explicit ConnectionStrings__Paddockside wins outright; Key Vault is only consulted without one. (Added after the
+// environment, Key Vault overrode it, and a "local" run changed the Azure database.)
+var connection = Environment.GetEnvironmentVariable("ConnectionStrings__Paddockside");
+if (string.IsNullOrEmpty(connection))
+{
+    var vault = new ConfigurationBuilder()
+        .AddAzureKeyVault(new Uri(Environment.GetEnvironmentVariable("PADDOCKSIDE_KEYVAULT") ?? "https://kv-paddockside-dev-cd63.vault.azure.net/"), new DefaultAzureCredential())
+        .Build();
+    connection = vault.GetConnectionString("Paddockside") ?? throw new InvalidOperationException("No ConnectionStrings:Paddockside.");
+}
+
+var target = new Microsoft.Data.SqlClient.SqlConnectionStringBuilder(connection);
+Console.WriteLine($"Database: {target.DataSource} / {target.InitialCatalog}");
 
 await using var identity = new PaddocksideIdentityDbContext(
     new DbContextOptionsBuilder<PaddocksideIdentityDbContext>().UseSqlServer(connection, sql => sql.EnableRetryOnFailure()).Options);

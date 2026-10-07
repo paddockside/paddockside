@@ -95,8 +95,32 @@
                     <label for="support-reason" class="font-strong">Why (their admin reads this)</label>
                     <input id="support-reason" class="min-h-control rounded-control border border-border-strong bg-surface-raised px-4" @bind="_supportReason" />
                 </div>
+                <label class="flex items-start gap-3 sm:col-span-2">
+                    <input type="checkbox" class="mt-1 size-5" @bind="_supportEmergency" />
+                    <span class="grid">
+                        <span class="font-strong">Emergency: no admin at the business can be reached</span>
+                        <span class="text-small text-text-muted">A second operator approves instead of their admin, and their admins are emailed the moment it starts.</span>
+                    </span>
+                </label>
                 <button type="submit" class="btn-secondary justify-self-start" disabled="@_busy">Ask for access</button>
             </form>
+
+            @if (_emergencies is { Count: > 0 })
+            {
+                <div class="grid gap-3 rounded-control bg-status-warning-bg p-4 text-status-warning-fg">
+                    <h3 class="font-strong">Emergency access waiting for a second operator</h3>
+                    @foreach (var s in _emergencies)
+                    {
+                        <div class="flex flex-wrap items-center gap-3">
+                            <span class="grid">
+                                <span class="font-strong">@s.Tenant · asked by @s.Operator</span>
+                                <span class="text-small">@s.Reason</span>
+                            </span>
+                            <button type="button" class="btn-primary ml-auto" disabled="@_busy" @onclick="() => SecondAsync(s)">Approve as second operator</button>
+                        </div>
+                    }
+                </div>
+            }
 
             @if (_sessions is { Count: > 0 })
             {
@@ -105,8 +129,8 @@
                     {
                         <li class="flex flex-wrap items-center gap-3 border-t border-border-subtle pt-3">
                             <span class="grid">
-                                <span class="font-strong">@s.Tenant</span>
-                                <span class="text-small text-text-muted">@s.Reason · @(s.Status switch { "Requested" => "waiting for their approval", "Active" => $"approved until {s.Until}", "Declined" => $"declined by {s.DecidedBy}", "Ended" => $"ended by {s.EndedBy}", _ => "expired" })</span>
+                                <span class="font-strong">@s.Tenant@(s.Emergency ? " · emergency" : null)</span>
+                                <span class="text-small text-text-muted">@s.Reason · @(s.Status switch { "Requested" => s.Emergency ? "waiting for a second operator" : "waiting for their approval", "Active" => $"approved until {s.Until}", "Declined" => $"declined by {s.DecidedBy}", "Ended" => $"ended by {s.EndedBy}", _ => "expired" })</span>
                             </span>
                             @if (s.Status == "Active")
                             {
@@ -173,6 +197,8 @@
     private string? _supportTenant;
     private string? _supportReason;
     private int _supportHours = 2;
+    private bool _supportEmergency;
+    private List<SupportView>? _emergencies;
     private string? _error;
     private string? _notice;
     private string? _name;
@@ -201,6 +227,8 @@
         if (operators.Succeeded) _operators = operators.Value;
         var sessions = await Api.MySupportSessionsAsync();
         if (sessions.Succeeded) _sessions = sessions.Value;
+        var emergencies = await Api.PendingEmergenciesAsync();
+        if (emergencies.Succeeded) _emergencies = emergencies.Value;
     }
 
     private Task CreateAsync() => Run(async () =>
@@ -224,10 +252,19 @@
     private Task AskAsync() => Run(async () =>
     {
         if (!Guid.TryParse(_supportTenant, out var tenantId)) { _error = "Choose the business."; return; }
-        var result = await Api.AskForSupportAsync(tenantId, _supportReason ?? "", _supportHours);
+        var result = await Api.AskForSupportAsync(tenantId, _supportReason ?? "", _supportHours, _supportEmergency);
         if (!result.Succeeded) { _error = result.Error; return; }
-        _notice = $"Asked {result.Value!.Tenant}. Their admins have been emailed; you can go in once one of them approves.";
-        (_supportTenant, _supportReason) = (null, null);
+        _notice = _supportEmergency
+            ? $"Emergency access to {result.Value!.Tenant} requested. Another operator must approve it; their admins are emailed when it starts."
+            : $"Asked {result.Value!.Tenant}. Their admins have been emailed; you can go in once one of them approves.";
+        (_supportTenant, _supportReason, _supportEmergency) = (null, null, false);
+    });
+
+    private Task SecondAsync(SupportView session) => Run(async () =>
+    {
+        var result = await Api.SecondEmergencyAsync(session.TenantId, session.Id);
+        if (result.Succeeded) _notice = $"Approved. {session.Operator} can now enter {session.Tenant}, and its admins have been told.";
+        else _error = result.Error;
     });
 
     private async Task EnterAsync(SupportView session)
