@@ -16,6 +16,12 @@ public sealed class Person : IdentityUser<Guid>
     }
 
     public List<Membership> Memberships { get; } = [];
+
+    /// <summary>
+    /// One of us, the product operator (identity-access.md §7): signs in to the operator console, which shows tenants'
+    /// metadata only, never their horses, parties or messages. Granted from the command line, never from the app.
+    /// </summary>
+    public bool IsOperator { get; set; }
 }
 
 public enum MembershipStatus

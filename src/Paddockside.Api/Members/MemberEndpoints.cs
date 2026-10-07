@@ -102,10 +102,8 @@ public static class MemberEndpoints
         PaddocksideIdentityDbContext identity,
         PaddocksideDbContext db,
         UserManager<Person> users,
-        IEmailSender email,
-        OwnerEmailRenderer renderer,
+        StaffInvitations invitations,
         IOptions<EmailOptions> options,
-        TimeProvider clock,
         CancellationToken cancellationToken)
     {
         if (!IsAdmin(user)) return AdminsOnly();
@@ -114,7 +112,7 @@ public static class MemberEndpoints
         var address = request.Email?.Trim() ?? "";
         if (address.Length is < 3 or > 320 || !address.Contains('@') || address.StartsWith('@') || address.EndsWith('@'))
             return Results.Problem(statusCode: StatusCodes.Status400BadRequest, title: "Type the email address the invitation should go to.");
-        if (options.Value.PortalBaseUrl is not { Length: > 0 } baseUrl)
+        if (options.Value.PortalBaseUrl is not { Length: > 0 })
             return Results.Problem(statusCode: StatusCodes.Status503ServiceUnavailable, title: "Invitations need the portal address configured (Email:PortalBaseUrl).");
 
         var tenantId = TenantOf(user);
@@ -124,34 +122,9 @@ public static class MemberEndpoints
                 && (m.Role == MemberRole.Viewer || m.Role == MemberRole.Coordinator || m.Role == MemberRole.Manager || m.Role == MemberRole.TenantAdmin), cancellationToken))
             return Refused($"{address} is already a member. Change their role in the list instead.");
 
-        // Inviting again replaces the earlier invitation: only the newest link works.
-        var now = clock.GetUtcNow();
-        foreach (var earlier in await identity.StaffInvitations.Where(i => i.TenantId == tenantId && i.Email == address && i.AcceptedAt == null && i.RevokedAt == null).ToListAsync(cancellationToken))
-            earlier.RevokedAt = now;
-
         var inviter = await users.FindByIdAsync(PersonOf(user).ToString());
-        var token = SignInToken.NewLinkToken();
-        var invitation = new StaffInvitation
-        {
-            TenantId = tenantId,
-            TenantName = tenant.Name,
-            Email = address,
-            Role = role,
-            InvitedByPersonId = inviter!.Id,
-            InvitedByName = inviter.Email ?? inviter.UserName ?? "A tenant admin",
-            TokenHash = SignInToken.Hash(token),
-            CreatedAt = now,
-            ExpiresAt = now + StaffInvitation.Lifetime,
-        };
-        identity.StaffInvitations.Add(invitation);
-        await identity.SaveChangesAsync(cancellationToken);
-
-        var rendered = renderer.RenderStaffInvitation(tenant.Name, invitation.InvitedByName, role, $"{baseUrl.TrimEnd('/')}/join#{token}");
-        var result = await email.SendAsync(new OutboundEmail(options.Value.FromAddress, Senders.For(tenant.Name), address, string.Empty, invitation.InvitedByName,
-            rendered.Subject, rendered.Html, rendered.Text, new Dictionary<string, string> { ["purpose"] = "staff-invitation" }, TrackOpens: false), cancellationToken);
-
-        return Results.Created($"/api/members/invitations/{invitation.Id}",
-            new Invited(invitation.Id, result.Accepted, result.Accepted ? null : $"The email was not sent: {result.Error}. Cancel it and try again."));
+        var sent = await invitations.SendAsync(tenantId, tenant.Name, address, role, inviter!.Id, inviter.Email ?? inviter.UserName ?? "A tenant admin", cancellationToken);
+        return Results.Created($"/api/members/invitations/{sent.Id}", new Invited(sent.Id, sent.Sent, sent.Problem));
     }
 
     private static async Task<IResult> Revoke(Guid id, ClaimsPrincipal user, PaddocksideIdentityDbContext identity, TimeProvider clock, CancellationToken cancellationToken)
@@ -224,7 +197,10 @@ public static class MemberEndpoints
         if (await OpenInvitationAsync(identity, request.Token, clock.GetUtcNow(), cancellationToken) is not { } invitation) return Gone();
         var person = await users.FindByEmailAsync(invitation.Email);
         var needs = person is not null && await users.HasPasswordAsync(person) ? "existing-password" : "new-password";
-        return Results.Ok(new JoinDetails(invitation.TenantName, invitation.Email, MemberRoles.Label(invitation.Role), MemberRoles.Describe(invitation.Role), invitation.InvitedByName, needs));
+        return invitation.ForOperator
+            ? Results.Ok(new JoinDetails("Paddockside", invitation.Email, "Operator",
+                "Runs Paddockside itself: sees each business's account and health, never their horses, owners or messages.", invitation.InvitedByName, needs))
+            : Results.Ok(new JoinDetails(invitation.TenantName, invitation.Email, MemberRoles.Label(invitation.Role), MemberRoles.Describe(invitation.Role), invitation.InvitedByName, needs));
     }
 
     /// <summary>
@@ -267,12 +243,21 @@ public static class MemberEndpoints
             await users.UpdateAsync(person);
         }
 
-        var membership = await identity.Memberships.SingleOrDefaultAsync(m => m.PersonId == person.Id && m.TenantId == invitation.TenantId
-            && (m.Role == MemberRole.Viewer || m.Role == MemberRole.Coordinator || m.Role == MemberRole.Manager || m.Role == MemberRole.TenantAdmin), cancellationToken);
-        if (membership is null)
-            identity.Memberships.Add(new Membership { PersonId = person.Id, TenantId = invitation.TenantId, Role = invitation.Role, InvitedByPersonId = invitation.InvitedByPersonId, AcceptedAt = now });
+        if (invitation.ForOperator)
+        {
+            // An operator joins the product, not a tenant: a flag on the person, no membership.
+            person.IsOperator = true;
+            await users.UpdateAsync(person);
+        }
         else
-            (membership.Role, membership.Status, membership.AcceptedAt) = (invitation.Role, MembershipStatus.Active, membership.AcceptedAt ?? now);
+        {
+            var membership = await identity.Memberships.SingleOrDefaultAsync(m => m.PersonId == person.Id && m.TenantId == invitation.TenantId
+                && (m.Role == MemberRole.Viewer || m.Role == MemberRole.Coordinator || m.Role == MemberRole.Manager || m.Role == MemberRole.TenantAdmin), cancellationToken);
+            if (membership is null)
+                identity.Memberships.Add(new Membership { PersonId = person.Id, TenantId = invitation.TenantId!.Value, Role = invitation.Role, InvitedByPersonId = invitation.InvitedByPersonId, AcceptedAt = now });
+            else
+                (membership.Role, membership.Status, membership.AcceptedAt) = (invitation.Role, MembershipStatus.Active, membership.AcceptedAt ?? now);
+        }
 
         (invitation.AcceptedAt, invitation.AcceptedByPersonId) = (now, person.Id);
         await identity.SaveChangesAsync(cancellationToken);

@@ -51,7 +51,7 @@ public static class AuthEndpoints
 
     public sealed record RecoveryCodes(IReadOnlyList<string> Codes);
 
-    public sealed record SessionInfo(string Email, string TenantName, string Role);
+    public sealed record SessionInfo(string Email, string TenantName, string Role, bool IsOperator);
 
     private static IResult SignInFailed() =>
         Results.Problem(statusCode: StatusCodes.Status401Unauthorized, title: "That did not match. Check your details and try again.");
@@ -73,8 +73,8 @@ public static class AuthEndpoints
         if (result.IsLockedOut) return LockedOut();
         if (!result.Succeeded) return SignInFailed();
 
-        // Password sign-in is for staff only; owners sign in without a password (§4.1).
-        if (await identity.ActiveStaffMembershipAsync(person.Id) is null) return SignInFailed();
+        // Password sign-in is for staff and operators; owners sign in without a password (§4.1).
+        if (!person.IsOperator && await identity.ActiveStaffMembershipAsync(person.Id) is null) return SignInFailed();
 
         await http.SignInAsync(IdentityConstants.TwoFactorUserIdScheme, PendingSecondFactor(person));
         return Results.Ok(new NextStep(person.TwoFactorEnabled ? "totp" : "enrol"));
@@ -159,7 +159,8 @@ public static class AuthEndpoints
         return Results.Ok(new SessionInfo(
             user.FindFirstValue(ClaimTypes.Email) ?? user.Identity!.Name!,
             tenant.Name,
-            user.FindFirstValue(SessionClaims.Role)!));
+            user.FindFirstValue(SessionClaims.Role)!,
+            user.FindFirstValue(SessionClaims.Operator) == "true"));
     }
 
     /// <summary>The same principal SignInManager uses for "password checked, second factor pending".</summary>

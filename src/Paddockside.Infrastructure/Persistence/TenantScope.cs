@@ -45,6 +45,41 @@ public sealed class TenantScopedDb(DbContextOptions<PaddocksideDbContext> option
             .ToListAsync(cancellationToken);
     }
 
+    /// <summary>
+    /// The operator console's view of every tenant (identity-access.md §7): its name and counts, nothing more. No
+    /// horse, party, message or media content leaves here — only how many, and how email is faring.
+    /// </summary>
+    public async Task<IReadOnlyList<TenantOverview>> TenantOverviewsAsync(DateTimeOffset since, CancellationToken cancellationToken)
+    {
+        await using var db = new PaddocksideDbContext(options, new FixedTenantContext(null));
+        var tenants = await db.Tenants.IgnoreQueryFilters().Select(t => new { t.Id, t.Name, t.Slug }).ToListAsync(cancellationToken);
+        var horses = await db.Horses.IgnoreQueryFilters().GroupBy(h => h.TenantId).Select(g => new { g.Key, Count = g.Count() }).ToDictionaryAsync(g => g.Key, g => g.Count, cancellationToken);
+        var email = await db.Deliveries.IgnoreQueryFilters()
+            .Where(d => d.Channel == Domain.DeliveryChannel.Email && (d.Status == Domain.DeliveryStatus.Queued || d.StatusAt >= since))
+            .GroupBy(d => new { d.TenantId, d.Status })
+            .Select(g => new { g.Key.TenantId, g.Key.Status, Count = g.Count() })
+            .ToListAsync(cancellationToken);
+        var inbound = await db.InboundMessages.IgnoreQueryFilters()
+            .Where(m => m.State == Domain.InboundState.Pending || m.State == Domain.InboundState.Held)
+            .GroupBy(m => new { m.TenantId, m.State })
+            .Select(g => new { g.Key.TenantId, g.Key.State, Count = g.Count() })
+            .ToListAsync(cancellationToken);
+
+        int Email(Guid tenant, params Domain.DeliveryStatus[] statuses) => email.Where(e => e.TenantId == tenant && statuses.Contains(e.Status)).Sum(e => e.Count);
+        int Inbound(Guid tenant, Domain.InboundState state) => inbound.Where(i => i.TenantId == tenant && i.State == state).Sum(i => i.Count);
+
+        return tenants.Select(t => new TenantOverview(
+                t.Id, t.Name, t.Slug, horses.GetValueOrDefault(t.Id),
+                Email(t.Id, Domain.DeliveryStatus.Sent, Domain.DeliveryStatus.Delivered, Domain.DeliveryStatus.Opened, Domain.DeliveryStatus.Replied, Domain.DeliveryStatus.Bounced),
+                Email(t.Id, Domain.DeliveryStatus.Delivered, Domain.DeliveryStatus.Opened, Domain.DeliveryStatus.Replied),
+                Email(t.Id, Domain.DeliveryStatus.Bounced),
+                Email(t.Id, Domain.DeliveryStatus.Queued),
+                Inbound(t.Id, Domain.InboundState.Pending),
+                Inbound(t.Id, Domain.InboundState.Held)))
+            .OrderBy(t => t.Name)
+            .ToList();
+    }
+
     /// <summary>Every tenant, for start-up housekeeping that then works one tenant at a time.</summary>
     public async Task<IReadOnlyList<Guid>> AllTenantIdsAsync(CancellationToken cancellationToken)
     {
@@ -86,3 +121,16 @@ public sealed class TenantScopedDb(DbContextOptions<PaddocksideDbContext> option
             .ToListAsync(cancellationToken);
     }
 }
+
+/// <summary>One tenant as the operator console sees it: account and health, never content.</summary>
+public sealed record TenantOverview(
+    Guid Id,
+    string Name,
+    string Slug,
+    int Horses,
+    int EmailsSent,
+    int EmailsDelivered,
+    int EmailsBounced,
+    int EmailsWaiting,
+    int InboundPending,
+    int InboundHeld);

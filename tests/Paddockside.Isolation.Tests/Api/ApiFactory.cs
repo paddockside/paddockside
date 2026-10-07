@@ -95,6 +95,25 @@ public sealed class ApiFactory(IsolationDatabase db) : WebApplicationFactory<Pro
         return browser;
     }
 
+    /// <summary>A browser signed in as a new operator with no tenant membership at all, authenticator enrolled.</summary>
+    public async Task<(HttpClient Browser, string Email)> SignedInOperatorAsync()
+    {
+        var email = $"operator-{Guid.NewGuid():N}@paddockside.test";
+        var password = $"test-{Convert.ToHexString(RandomNumberGenerator.GetBytes(8))}";
+        await using (var scope = Services.CreateAsyncScope())
+        {
+            var users = scope.ServiceProvider.GetRequiredService<UserManager<Person>>();
+            var created = await users.CreateAsync(new Person { UserName = email, Email = email, EmailConfirmed = true, IsOperator = true }, password);
+            Assert.True(created.Succeeded, string.Join("; ", created.Errors.Select(e => e.Description)));
+        }
+
+        var browser = Browser();
+        (await browser.PostApiAsync("/api/auth/password", new { email, password })).EnsureSuccessStatusCode();
+        var enrolment = await browser.GetFromJsonAsync<EnrolmentDetails>("/api/auth/enrolment");
+        (await browser.PostApiAsync("/api/auth/enrolment", new { code = Totp.Code(Totp.SecretFrom(enrolment!.AuthenticatorUri)) })).EnsureSuccessStatusCode();
+        return (browser, email);
+    }
+
     private sealed record EnrolmentDetails(string AuthenticatorUri);
 
     private sealed class FakeBreachedList : IBreachedPasswordList

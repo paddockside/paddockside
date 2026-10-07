@@ -3,7 +3,7 @@ using Paddockside.Domain;
 namespace Paddockside.Infrastructure.Identity;
 
 /// <summary>
-/// An invitation to join a tenant's staff (identity-access.md §6): it names the tenant and the role, is a link
+/// An invitation to join a tenant's staff, or to become an operator (no tenant) (identity-access.md §6): it names the tenant and the role, is a link
 /// valid 14 days, single use. Accepting it creates the person if new and the membership. Product-level, like the
 /// person it creates; only the hash of the link's token is stored.
 /// </summary>
@@ -13,7 +13,11 @@ public sealed class StaffInvitation
 
     public Guid Id { get; init; } = Guid.CreateVersion7();
 
-    public Guid TenantId { get; init; }
+    /// <summary>The tenant joined; null for an operator invitation.</summary>
+    public Guid? TenantId { get; init; }
+
+    /// <summary>Joining the product's operators rather than a tenant's staff.</summary>
+    public bool ForOperator { get; init; }
 
     /// <summary>Kept so the invitation can be shown before anyone is signed in to that tenant.</summary>
     public string TenantName { get; init; } = "";

@@ -1,0 +1,182 @@
+@page "/ops"
+@layout OpsLayout
+@inject PaddocksideApi Api
+@inject NavigationManager Navigation
+
+@*
+    The operator console (identity-access.md §7). Each business's account and health — size, members, email and
+    inbound queues — and nothing inside it: no horses, owners or messages. Onboarding a business creates it and
+    invites its first tenant admin.
+*@
+<PageTitle>Operator console · Paddockside</PageTitle>
+
+<div class="grid grid-cols-[minmax(0,1fr)] gap-8">
+    @if (_error is not null)
+    {
+        <Error Message="@_error" />
+    }
+    @if (_notice is not null)
+    {
+        <p class="rounded-control bg-status-success-bg px-4 py-3 text-status-success-fg" role="status">@_notice</p>
+    }
+
+    @if (_tenants is not null)
+    {
+        <section class="grid gap-3" aria-labelledby="tenants-heading">
+            <h1 id="tenants-heading">Businesses</h1>
+            <p class="text-text-muted">Account and health only. What is inside a business stays with it.</p>
+            <div class="card overflow-x-auto">
+                <table class="w-full border-collapse text-small tabular-nums">
+                    <caption class="sr-only">Every business on Paddockside, with its size and email health over the last 30 days</caption>
+                    <thead>
+                        <tr class="border-b border-border-subtle text-left text-text-muted">
+                            <th scope="col" class="py-2 pr-4 font-strong">Business</th>
+                            <th scope="col" class="py-2 pr-4 font-strong">Since</th>
+                            <th scope="col" class="py-2 pr-4 font-strong">Horses</th>
+                            <th scope="col" class="py-2 pr-4 font-strong">Staff</th>
+                            <th scope="col" class="py-2 pr-4 font-strong">Owners signed in</th>
+                            <th scope="col" class="py-2 pr-4 font-strong">Email (30 days)</th>
+                            <th scope="col" class="py-2 font-strong">Inbound</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var t in _tenants)
+                        {
+                            <tr class="border-b border-border-subtle align-top last:border-b-0">
+                                <td class="py-2 pr-4">
+                                    <span class="font-strong">@t.Name</span><br />
+                                    <span class="text-text-muted">@(t.Slug.Length > 0 ? $"{t.Slug}.in.paddockside.com.au" : "no short name")</span>
+                                </td>
+                                <td class="py-2 pr-4">@t.Created</td>
+                                <td class="py-2 pr-4">@t.Horses</td>
+                                <td class="py-2 pr-4">@t.Staff@(t.InvitationsWaiting > 0 ? $" (+{t.InvitationsWaiting} invited)" : null)</td>
+                                <td class="py-2 pr-4">@t.OwnersSignedIn</td>
+                                <td class="py-2 pr-4">
+                                    @t.EmailsSent sent · @t.EmailsDelivered delivered
+                                    @if (t.EmailsBounced > 0)
+                                    {
+                                        <span class="font-strong text-status-danger-fg"> · @t.EmailsBounced bounced</span>
+                                    }
+                                    @if (t.EmailsWaiting > 0)
+                                    {
+                                        <span class="font-strong text-status-warning-fg"> · @t.EmailsWaiting waiting</span>
+                                    }
+                                </td>
+                                <td class="py-2">@t.InboundPending to place@(t.InboundHeld > 0 ? $" · {t.InboundHeld} held" : null)</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <section class="card grid gap-4" aria-labelledby="onboard-heading">
+            <h2 id="onboard-heading">Onboard a business</h2>
+            <form class="grid gap-4 sm:grid-cols-2" @onsubmit="CreateAsync" @onsubmit:preventDefault>
+                <div class="grid gap-2">
+                    <label for="tenant-name" class="font-strong">Business name</label>
+                    <input id="tenant-name" class="min-h-control rounded-control border border-border-strong bg-surface-raised px-4" @bind="_name" />
+                </div>
+                <div class="grid gap-2">
+                    <label for="tenant-slug" class="font-strong">Short name</label>
+                    <input id="tenant-slug" class="min-h-control rounded-control border border-border-strong bg-surface-raised px-4" @bind="_slug" placeholder="e.g. laureloak" />
+                    <span class="text-small text-text-muted">Letters and digits; their email addresses end in this. Leave it empty to make one from the name.</span>
+                </div>
+                <div class="grid gap-2 sm:col-span-2">
+                    <label for="tenant-admin" class="font-strong">Email address of their first tenant admin</label>
+                    <input id="tenant-admin" type="email" class="min-h-control rounded-control border border-border-strong bg-surface-raised px-4" @bind="_adminEmail" />
+                </div>
+                <button type="submit" class="btn-primary justify-self-start" disabled="@_busy">Create and send the invitation</button>
+            </form>
+        </section>
+    }
+
+    @if (_operators is not null)
+    {
+        <section class="grid gap-3" aria-labelledby="operators-heading">
+            <h2 id="operators-heading">Operators</h2>
+            <ul class="card grid gap-2">
+                @foreach (var o in _operators.Operators)
+                {
+                    <li>@o.Email@(o.IsYou ? " (you)" : null)</li>
+                }
+                @foreach (var invited in _operators.Invited)
+                {
+                    <li class="text-text-muted">@invited (invited, not yet accepted)</li>
+                }
+            </ul>
+            <form class="flex flex-wrap items-end gap-3" @onsubmit="InviteOperatorAsync" @onsubmit:preventDefault>
+                <div class="grid gap-2">
+                    <label for="operator-email" class="font-strong">Invite an operator</label>
+                    <input id="operator-email" type="email" class="min-h-control rounded-control border border-border-strong bg-surface-raised px-4" @bind="_operatorEmail" />
+                </div>
+                <button type="submit" class="btn-secondary" disabled="@_busy">Send invitation</button>
+            </form>
+            <p class="text-small text-text-muted">Operators see what this page shows, for every business. Only invite Paddockside's own people.</p>
+        </section>
+    }
+</div>
+
+@code {
+    private List<TenantRow>? _tenants;
+    private OperatorsPage? _operators;
+    private string? _error;
+    private string? _notice;
+    private string? _name;
+    private string? _slug;
+    private string? _adminEmail;
+    private string? _operatorEmail;
+    private bool _busy;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!(await Api.OperatorMeAsync()).Succeeded)
+        {
+            Navigation.NavigateTo("sign-in");
+            return;
+        }
+
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        var tenants = await Api.OperatorTenantsAsync();
+        if (tenants.Succeeded) _tenants = tenants.Value;
+        else _error = tenants.Error;
+        var operators = await Api.OperatorsAsync();
+        if (operators.Succeeded) _operators = operators.Value;
+    }
+
+    private Task CreateAsync() => Run(async () =>
+    {
+        var result = await Api.CreateTenantAsync(_name ?? "", _slug, _adminEmail ?? "");
+        if (!result.Succeeded) { _error = result.Error; return; }
+        _notice = result.Value!.InvitationSent
+            ? $"{_name} is set up as '{result.Value.Slug}', and {_adminEmail} has been invited as its tenant admin."
+            : $"{_name} is set up, but {result.Value.Problem}";
+        (_name, _slug, _adminEmail) = (null, null, null);
+    });
+
+    private Task InviteOperatorAsync() => Run(async () =>
+    {
+        var result = await Api.InviteOperatorAsync(_operatorEmail ?? "");
+        if (!result.Succeeded) { _error = result.Error; return; }
+        _notice = result.Value!.InvitationSent ? $"{_operatorEmail} has been invited as an operator." : result.Value.Problem;
+        _operatorEmail = null;
+    });
+
+    private async Task Run(Func<Task> change)
+    {
+        (_busy, _error, _notice) = (true, null, null);
+        try
+        {
+            await change();
+            await LoadAsync();
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}

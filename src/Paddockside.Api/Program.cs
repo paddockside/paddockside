@@ -7,6 +7,7 @@ using Paddockside.Api.Events;
 using Paddockside.Api.Horses;
 using Paddockside.Api.Inbound;
 using Paddockside.Api.Members;
+using Paddockside.Api.Operators;
 using Paddockside.Api.Owners;
 using Paddockside.Api.Security;
 using Paddockside.Api.Tenancy;
@@ -68,7 +69,8 @@ builder.Services.Configure<CookieAuthenticationOptions>(IdentityConstants.TwoFac
 
 builder.Services.AddAuthorizationBuilder()
     .AddPolicy(StaffPolicy.Name, StaffPolicy.Build)
-    .AddPolicy(ClientPolicy.Name, ClientPolicy.Build);
+    .AddPolicy(ClientPolicy.Name, ClientPolicy.Build)
+    .AddPolicy(OperatorPolicy.Name, OperatorPolicy.Build);
 builder.Services.Configure<SecurityStampValidatorOptions>(SessionRefresh.Configure);
 
 // Rate limiting on every sign-in step, per client IP (non-functional.md §2).
@@ -112,6 +114,7 @@ app.MapInboundEndpoints();
 app.MapClientAuthEndpoints();
 app.MapOwnerEndpoints();
 app.MapMemberEndpoints();
+app.MapOperatorEndpoints();
 app.MapPostmarkWebhooks();
 app.MapFallback("/api/{**rest}", () => Results.NotFound());
 app.MapFallbackToFile("index.html");

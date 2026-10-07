@@ -61,6 +61,7 @@ public static class DependencyInjection
             http.Timeout = TimeSpan.FromSeconds(15);
         });
         services.AddScoped<ClientAccess.ClientSignIn>();
+        services.AddScoped<Identity.StaffInvitations>();
         return services;
     }
 

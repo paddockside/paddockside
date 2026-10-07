@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text;
+using Paddockside.Application.Messaging;
 using Paddockside.Domain;
 using T = Paddockside.Infrastructure.Email.EmailTokens;
 
@@ -95,18 +96,23 @@ public sealed class OwnerEmailRenderer
             TextFrame(text.ToString(), null, tenant.Name, tenant.FooterDetails, why));
     }
 
-    /// <summary>An invitation to join a tenant's staff (identity-access.md §6).</summary>
-    public RenderedEmail RenderStaffInvitation(string tenantName, string inviterName, MemberRole role, string link)
+    /// <summary>
+    /// An invitation to join a tenant's staff, or Paddockside's operators when <paramref name="tenantName"/> is the
+    /// product (identity-access.md §6, §7).
+    /// </summary>
+    public RenderedEmail RenderStaffInvitation(string tenantName, string inviterName, string roleLabel, string roleDescription, string link)
     {
-        var lead = $"{inviterName} has invited you to join {tenantName} on Paddockside as {MemberRoles.Label(role)}.";
+        var lead = tenantName == Senders.Product
+            ? $"{inviterName} has invited you to join Paddockside as {roleLabel}."
+            : $"{inviterName} has invited you to join {tenantName} on Paddockside as {roleLabel}.";
         var html = new StringBuilder()
             .Append(Heading($"Join {tenantName}"))
             .Append(Paragraph(lead))
-            .Append(Muted(MemberRoles.Describe(role)))
+            .Append(Muted(roleDescription))
             .Append(Button(link, "View the invitation"))
             .Append(Destination(link))
             .Append(Muted("The invitation works once and for 14 days. If you were not expecting it, ignore this email."));
-        var text = $"{lead}\n\n{MemberRoles.Describe(role)}\n\nView the invitation: {link}\n\nThe invitation works once and for 14 days.\n";
+        var text = $"{lead}\n\n{roleDescription}\n\nView the invitation: {link}\n\nThe invitation works once and for 14 days.\n";
         var why = $"You are receiving this because {inviterName} invited this address to {tenantName}.";
         return new RenderedEmail($"Join {tenantName} on Paddockside",
             Frame(tenantName, null, null, $"Join {tenantName}", lead, html.ToString(), null, why),

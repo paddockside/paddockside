@@ -84,6 +84,20 @@ public static class StaffPolicy
 }
 
 /// <summary>
+/// The operator console (identity-access.md §7): a full sign-in (second factor passed) by a person flagged as an
+/// operator. Tenant-free: operator endpoints read tenants' metadata only, never their data.
+/// </summary>
+public static class OperatorPolicy
+{
+    public const string Name = "Operator";
+
+    public static void Build(AuthorizationPolicyBuilder policy) => policy
+        .RequireAuthenticatedUser()
+        .RequireClaim("amr", "mfa")
+        .RequireClaim(SessionClaims.Operator, "true");
+}
+
+/// <summary>
 /// Cross-site request forgery guard for the JSON API: state-changing requests must carry a custom header,
 /// which a browser will not send cross-origin without a CORS preflight this API never grants. Works with the
 /// SameSite=Strict cookie as a second layer (non-functional.md §2).

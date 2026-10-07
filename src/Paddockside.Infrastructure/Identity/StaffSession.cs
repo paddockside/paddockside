@@ -18,6 +18,9 @@ public static class SessionClaims
 
     /// <summary>Clients: the party they act as in the active tenant (identity-access.md §3).</summary>
     public const string Party = "paddockside:party";
+
+    /// <summary>Set ("true") for the product's operators (identity-access.md §7). Carries no tenant.</summary>
+    public const string Operator = "paddockside:operator";
 }
 
 /// <summary>Finds the membership a staff sign-in acts under.</summary>
@@ -51,6 +54,8 @@ public sealed class StaffClaimsPrincipalFactory(
             identity.AddClaim(new Claim(SessionClaims.Role, membership.Role.ToString()));
             identity.AddClaim(new Claim(SessionClaims.AudienceClass, membership.Class.ToString()));
         }
+
+        if (user.IsOperator) identity.AddClaim(new Claim(SessionClaims.Operator, "true"));
 
         return identity;
     }

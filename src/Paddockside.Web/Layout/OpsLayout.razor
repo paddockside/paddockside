@@ -1,0 +1,28 @@
+@inherits LayoutComponentBase
+@inject PaddocksideApi Api
+@inject NavigationManager Navigation
+
+@*
+    The operator console's frame (identity-access.md §7): plainly Paddockside's own, never a tenant's, so nobody
+    mistakes it for a business's screens.
+*@
+<div class="grid min-h-screen grid-cols-[minmax(0,1fr)] grid-rows-[auto_1fr]">
+    <header class="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b border-border-subtle bg-surface-default px-4 py-3 sm:px-6">
+        <span class="text-title font-heading">Paddockside · Operator console</span>
+        <nav aria-label="Main" class="flex flex-wrap items-center gap-x-4 gap-y-2">
+            <a href="horses" class="btn-link">Staff side</a>
+            <button type="button" class="btn-secondary" @onclick="SignOut">Sign out</button>
+        </nav>
+    </header>
+    <main class="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6 sm:py-8">
+        @Body
+    </main>
+</div>
+
+@code {
+    private async Task SignOut()
+    {
+        await Api.SignOutAsync();
+        Navigation.NavigateTo("sign-in");
+    }
+}

@@ -10,7 +10,7 @@ public sealed record EnrolmentDetails(string SharedKey, string AuthenticatorUri,
 
 public sealed record RecoveryCodes(IReadOnlyList<string> Codes);
 
-public sealed record SessionInfo(string Email, string TenantName, string Role);
+public sealed record SessionInfo(string Email, string TenantName, string Role, bool IsOperator = false);
 
 public sealed record HorseSummary(Guid Id, string Name, bool Managed, DateTimeOffset? ManagedSince, int CurrentOwners);
 
@@ -67,6 +67,20 @@ public sealed record InboundView(
     Guid? EventId,
     string? Event,
     List<AttachmentView> Attachments);
+
+// ---- Operator console ----------------------------------------------------------------------------------------
+
+public sealed record OperatorMe(string Email);
+
+public sealed record TenantRow(
+    Guid Id, string Name, string Slug, string Created, int Horses, int Staff, int OwnersSignedIn, int InvitationsWaiting,
+    int EmailsSent, int EmailsDelivered, int EmailsBounced, int EmailsWaiting, int InboundPending, int InboundHeld);
+
+public sealed record OperatorRow(string Email, bool IsYou);
+
+public sealed record OperatorsPage(List<OperatorRow> Operators, List<string> Invited);
+
+public sealed record TenantCreated(Guid Id, string Slug, bool InvitationSent, string? Problem);
 
 // ---- Members (tenant admins) and joining ------------------------------------------------------------------------
 
@@ -149,6 +163,19 @@ public sealed class PaddocksideApi(HttpClient http)
     public Task<ApiResult<List<InboundView>>> InboundAsync(string state) => GetAsync<List<InboundView>>($"api/inbound?state={Uri.EscapeDataString(state)}");
 
     public Task<ApiResult<InboundCounts>> InboundCountsAsync() => GetAsync<InboundCounts>("api/inbound/counts");
+
+    // ---- Operator console ------------------------------------------------------------------------------------------
+
+    public Task<ApiResult<OperatorMe>> OperatorMeAsync() => GetAsync<OperatorMe>("api/ops/me");
+
+    public Task<ApiResult<List<TenantRow>>> OperatorTenantsAsync() => GetAsync<List<TenantRow>>("api/ops/tenants");
+
+    public Task<ApiResult<TenantCreated>> CreateTenantAsync(string name, string? slug, string adminEmail) =>
+        PostAsync<TenantCreated>("api/ops/tenants", new { name, slug, adminEmail });
+
+    public Task<ApiResult<OperatorsPage>> OperatorsAsync() => GetAsync<OperatorsPage>("api/ops/operators");
+
+    public Task<ApiResult<TenantCreated>> InviteOperatorAsync(string email) => PostAsync<TenantCreated>("api/ops/operators/invitations", new { email });
 
     // ---- Members and joining -----------------------------------------------------------------------------------
 

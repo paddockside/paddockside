@@ -180,10 +180,10 @@
         Go(Step.SaveRecoveryCodes);
     });
 
+    /// <summary>Staff go to their horses; an operator with no business membership goes to the operator console.</summary>
     private async Task Finish()
     {
-        await Session.RefreshAsync();
-        Navigation.NavigateTo("horses");
+        Navigation.NavigateTo(await Session.RefreshAsync() is null ? "ops" : "horses");
     }
 
     private async Task Run(Func<Task> action)

@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Paddockside.Infrastructure.Identity;
 
@@ -11,9 +12,11 @@ using Paddockside.Infrastructure.Identity;
 namespace Paddockside.Infrastructure.Identity.Migrations
 {
     [DbContext(typeof(PaddocksideIdentityDbContext))]
-    partial class PaddocksideIdentityDbContextModelSnapshot : ModelSnapshot
+    [Migration("20261007190723_Operators")]
+    partial class Operators
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder

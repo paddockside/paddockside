@@ -76,6 +76,35 @@ Mail goes out from `updates@mail.paddockside.com.au` through Postmark:
 
 Before relying on a new kind of email, score it at mail-tester.com: invite or send to the address it gives you.
 
+### Operators (Paddockside's own staff)
+
+Operators run Paddockside itself (`docs/product/identity-access.md` §7) and work from the **Operator console** at
+`/ops`.
+
+What the console shows, for every business, is account and health only:
+- name, short name and when it was created;
+- how many horses it manages;
+- staff, owners who have signed in, and invitations waiting;
+- email over the last 30 days: sent, delivered, bounced and waiting;
+- the inbound queue.
+
+Operators never see a business's horses, owners or messages. That will need a support session the business
+approves, which is still to come.
+
+The console onboards a business: it creates the business and invites its first Tenant admin. It also invites
+further operators.
+
+Operators sign in like staff, with a password and an authenticator. The **first** operator can only be made from
+the command line, never from the app. That person needs an existing Paddockside sign-in. With `az login` done:
+
+```
+dotnet run --project tools/Paddockside.Ops -- grant-operator you@example.com
+dotnet run --project tools/Paddockside.Ops -- list-operators
+dotnet run --project tools/Paddockside.Ops -- revoke-operator someone@example.com
+```
+
+A change takes effect within a minute. The last operator cannot be revoked.
+
 ### Staff logins: inviting, roles and retiring the dev login
 
 Staff join by invitation (`docs/product/identity-access.md` §5.2, §6).

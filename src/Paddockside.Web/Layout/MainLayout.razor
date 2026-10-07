@@ -15,6 +15,10 @@
                     {
                         <a href="members" class="btn-link">Members</a>
                     }
+                    @if (Session.Current.IsOperator)
+                    {
+                        <a href="ops" class="btn-link">Operator console</a>
+                    }
                 </nav>
                 <button type="button" class="btn-secondary" @onclick="SignOut">Sign out</button>
             }
