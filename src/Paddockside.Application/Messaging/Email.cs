@@ -77,3 +77,25 @@ public sealed class EmailDispatchSignal
     /// <summary>True when signalled, false when the timeout passed first.</summary>
     public Task<bool> WaitAsync(TimeSpan timeout, CancellationToken cancellationToken) => _signal.WaitAsync(timeout, cancellationToken);
 }
+
+/// <summary>Facts about email addresses that matter to whether mail is trusted.</summary>
+public static class EmailAddresses
+{
+    private static readonly string[] ReservedTopLevel = ["test", "example", "invalid", "localhost"];
+    private static readonly string[] ReservedDomains = ["example.com", "example.net", "example.org"];
+
+    /// <summary>
+    /// False for the reserved domains (RFC 2606/6761) that can never receive mail, such as the demo data's
+    /// "@laurel-oak.test". A Reply-To on one of those makes careful spam filters treat the whole email as forged.
+    /// </summary>
+    public static bool CanReceive(string? address)
+    {
+        var trimmed = address?.Trim() ?? "";
+        var at = trimmed.LastIndexOf('@');
+        if (at <= 0 || at == trimmed.Length - 1) return false;
+
+        var domain = trimmed[(at + 1)..].TrimEnd('.').ToLowerInvariant();
+        var topLevel = domain[(domain.LastIndexOf('.') + 1)..];
+        return !ReservedTopLevel.Contains(topLevel) && !ReservedDomains.Any(d => domain == d || domain.EndsWith("." + d, StringComparison.Ordinal));
+    }
+}

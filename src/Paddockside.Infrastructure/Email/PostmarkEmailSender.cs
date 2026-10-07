@@ -49,7 +49,8 @@ public sealed class PostmarkEmailSender(HttpClient http, IOptions<PostmarkOption
             Content = JsonContent.Create(new PostmarkEmail(
                 Mailbox(email.FromName, email.FromAddress),
                 Mailbox(email.ToName, email.ToAddress),
-                email.ReplyTo,
+                // A reply address that can never exist (the demo's .test domain) is left off: filters treat it as forgery.
+                EmailAddresses.CanReceive(email.ReplyTo) ? email.ReplyTo : null,
                 email.Subject,
                 email.HtmlBody,
                 email.TextBody,
@@ -87,7 +88,7 @@ public sealed class PostmarkEmailSender(HttpClient http, IOptions<PostmarkOption
     private sealed record PostmarkEmail(
         string From,
         string To,
-        string ReplyTo,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? ReplyTo,
         string Subject,
         string HtmlBody,
         string TextBody,
