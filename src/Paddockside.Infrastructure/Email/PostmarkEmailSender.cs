@@ -55,7 +55,7 @@ public sealed class PostmarkEmailSender(HttpClient http, IOptions<PostmarkOption
                 email.HtmlBody,
                 email.TextBody,
                 options.Value.MessageStream,
-                TrackOpens: true,
+                email.TrackOpens,
                 email.Metadata)),
         };
         request.Headers.Add("X-Postmark-Server-Token", options.Value.ServerToken);

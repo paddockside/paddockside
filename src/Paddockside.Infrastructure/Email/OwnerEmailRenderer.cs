@@ -55,8 +55,9 @@ public sealed class OwnerEmailRenderer
     {
         var html = new StringBuilder()
             .Append(Heading("Sign in to the owners' portal"))
-            .Append(Paragraph($"Tap the button to sign in. It works once, for the next {minutes} minutes."))
-            .Append(Button(link, "Sign me in"))
+            .Append(Paragraph($"You asked to sign in. The button works once, for the next {minutes} minutes."))
+            .Append(Button(link, "Open the owners' portal"))
+            .Append(Destination(link))
             .Append(Paragraph("Reading this on a different device? Type this code on the screen where you asked for it:"))
             .Append($"<p style=\"margin:0 0 {T.Space4};font-size:{T.TextSizeDisplay};line-height:{T.LeadingDisplay};font-weight:700;letter-spacing:6px;\">{E(code)}</p>")
             .Append(Muted("If you did not ask to sign in, ignore this email. Nobody can use it without this inbox."));
@@ -76,12 +77,13 @@ public sealed class OwnerEmailRenderer
         {
             $"You are now an owner of {horse.Name} with {tenant.Name}.",
             "You do not need to do anything: updates, race details and results come to you by email, and you can reply to any of them.",
-            "If you would like everything in one place, the owners' portal shows each horse and every update. There is no password; the button signs you in.",
+            "If you would like everything in one place, the owners' portal shows each horse and every update.",
         };
 
         var html = new StringBuilder().Append(Heading($"Welcome to {horse.Name}")).Append(Paragraph($"Hi {recipient.FirstName},"));
         foreach (var line in lines) html.Append(Paragraph(line));
-        html.Append(Button(link, "Open the owners' portal")).Append(Muted("The button works once and for 14 days. After that, any email from us has a fresh one."));
+        html.Append(Button(link, "Open the owners' portal")).Append(Destination(link))
+            .Append(Muted("The button works once and for 14 days. After that, any email from us has a fresh one."));
 
         var text = new StringBuilder().AppendLine($"Hi {recipient.FirstName},").AppendLine();
         foreach (var line in lines) text.AppendLine(line).AppendLine();
@@ -101,11 +103,10 @@ public sealed class OwnerEmailRenderer
             .Append(Heading($"Join {tenantName}"))
             .Append(Paragraph(lead))
             .Append(Muted(MemberRoles.Describe(role)))
-            .Append(Button(link, "Accept the invitation"))
-            .Append(Paragraph("You will choose a password, then set up an authenticator app on your phone: every staff sign-in needs both."))
+            .Append(Button(link, "View the invitation"))
+            .Append(Destination(link))
             .Append(Muted("The invitation works once and for 14 days. If you were not expecting it, ignore this email."));
-        var text = $"{lead}\n\n{MemberRoles.Describe(role)}\n\nAccept the invitation: {link}\n\n" +
-                   "You will choose a password, then set up an authenticator app on your phone.\nThe invitation works once and for 14 days.\n";
+        var text = $"{lead}\n\n{MemberRoles.Describe(role)}\n\nView the invitation: {link}\n\nThe invitation works once and for 14 days.\n";
         var why = $"You are receiving this because {inviterName} invited this address to {tenantName}.";
         return new RenderedEmail($"Join {tenantName} on Paddockside",
             Frame(tenantName, null, null, $"Join {tenantName}", lead, html.ToString(), null, why),
@@ -126,6 +127,15 @@ public sealed class OwnerEmailRenderer
         $"<h1 style=\"margin:0 0 {T.Space4};font-size:{T.TextSizeTitle};line-height:{T.LeadingTitle};font-weight:700;\">{E(text)}</h1>";
 
     private static string Muted(string text) => $"<p style=\"margin:0 0 {T.Space4};color:{T.ColorTextMuted};\">{E(text)}</p>";
+
+    /// <summary>
+    /// Under a button: the site it opens, in plain text. A link whose destination is shown (and matches) is a trust
+    /// signal to phishing filters and to people; the secret part of the link is not printed.
+    /// </summary>
+    private static string Destination(string href) =>
+        Uri.TryCreate(href, UriKind.Absolute, out var uri)
+            ? $"<p style=\"margin:-{T.Space4} 0 {T.Space6};font-size:{T.TextSizeSmall};line-height:{T.LeadingSmall};color:{T.ColorTextMuted};\">The button opens {E(uri.Host)}</p>"
+            : "";
 
     /// <summary>A 48 px button: a link styled as one, which every mail client renders.</summary>
     private static string Button(string href, string label) =>

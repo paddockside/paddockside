@@ -41,7 +41,7 @@ public sealed partial class OutboundEmailTests(IsolationDatabase db, ApiFactoryF
         Assert.All(sent, s =>
         {
             Assert.Equal("updates@mail.paddockside.com.au", s.Email.FromAddress);
-            Assert.Equal(tenant.Name, s.Email.FromName);
+            Assert.Equal($"{tenant.Name} via Paddockside", s.Email.FromName); // the tenant, honestly via our domain
             var reply = ReplyAddress().Match(s.Email.ReplyTo);
             Assert.True(reply.Success, s.Email.ReplyTo);
             Assert.Equal(tenant.Slug, reply.Groups["slug"].Value);

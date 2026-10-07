@@ -44,6 +44,9 @@ public sealed partial class MemberTests(IsolationDatabase db, ApiFactoryFixture 
         var invited = await admin.PostApiAsync("/api/members/invitations", new { email = address, role = "Coordinator" });
         Assert.Equal(HttpStatusCode.Created, invited.StatusCode);
         var token = TokenSentTo(address);
+        var invitation = Api.Emails.Sent.Last(e => e.Email.ToAddress == address).Email;
+        Assert.False(invitation.TrackOpens);
+        Assert.DoesNotContain("password", invitation.TextBody, StringComparison.OrdinalIgnoreCase); // login-bait wording stays on the page
 
         using var browser = Api.Browser();
         var details = await (await browser.PostApiAsync("/api/join/inspect", new { token })).Content.ReadFromJsonAsync<JoinDetails>();

@@ -74,8 +74,8 @@ public sealed class ClientSignIn(
 
         var sender = await SenderAsync(parties, cancellationToken);
         var rendered = renderer.RenderSignIn(sender.Name, sender.LogoUrl, sender.FooterDetails, PortalLink(link), code, (int)EmailLinkLifetime.TotalMinutes);
-        var result = await email.SendAsync(new OutboundEmail(emailOptions.Value.FromAddress, sender.Name, normalised, string.Empty, emailOptions.Value.FromAddress,
-            rendered.Subject, rendered.Html, rendered.Text, new Dictionary<string, string> { ["purpose"] = "sign-in" }), cancellationToken);
+        var result = await email.SendAsync(new OutboundEmail(emailOptions.Value.FromAddress, Senders.For(sender.Name), normalised, string.Empty, emailOptions.Value.FromAddress,
+            rendered.Subject, rendered.Html, rendered.Text, new Dictionary<string, string> { ["purpose"] = "sign-in" }, TrackOpens: false), cancellationToken);
         if (!result.Accepted) logger.LogWarning("Sign-in email to a known address was not accepted: {Error}", result.Error);
     }
 

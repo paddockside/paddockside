@@ -11,7 +11,21 @@ public sealed record OutboundEmail(
     string Subject,
     string HtmlBody,
     string TextBody,
-    IReadOnlyDictionary<string, string> Metadata);
+    IReadOnlyDictionary<string, string> Metadata,
+    bool TrackOpens = true);
+
+/// <summary>
+/// Who an email says it is from. The tenant sends through Paddockside's domain, so the name says both:
+/// "Laurel Oak Bloodstock via Paddockside". A tenant's name alone on another organisation's domain is the pattern
+/// phishing filters look for (Microsoft scored our invitations "high confidence phish" for it).
+/// </summary>
+public static class Senders
+{
+    public const string Product = "Paddockside";
+
+    public static string For(string? tenantName) =>
+        string.IsNullOrWhiteSpace(tenantName) || tenantName == Product ? Product : $"{tenantName} via {Product}";
+}
 
 /// <summary>What the provider said. A permanent failure will never succeed on retry (e.g. an inactive address).</summary>
 public sealed record EmailSendResult(bool Accepted, string? ProviderMessageId, bool PermanentFailure, string? Error)

@@ -150,7 +150,7 @@ public sealed class EmailDispatcher(
             var rendered = renderer.Render(tenant, horse, message.EventId is { } eventId ? events.GetValueOrDefault(eventId) : null, message, party, openLink);
             var result = await sender.SendAsync(new OutboundEmail(
                 options.Value.FromAddress,
-                tenant.Name,
+                Senders.For(tenant.Name),
                 contact.Value,
                 party.DisplayName,
                 address.EmailAddress(tenant, options.Value.InboundDomain),
@@ -206,9 +206,10 @@ public sealed class EmailDispatcher(
 
             var replyTo = Inbound.HorseInboxes.Current(horse, inboxes)?.EmailAddress(tenant, options.Value.InboundDomain) ?? options.Value.FromAddress;
             var rendered = renderer.RenderInvitation(tenant, horse, party, link);
-            var result = await sender.SendAsync(new OutboundEmail(options.Value.FromAddress, tenant.Name, contact.Value, party.DisplayName, replyTo,
+            // No open-tracking pixel on anything carrying a sign-in link: a hidden tracker there reads as phishing.
+            var result = await sender.SendAsync(new OutboundEmail(options.Value.FromAddress, Senders.For(tenant.Name), contact.Value, party.DisplayName, replyTo,
                 rendered.Subject, rendered.Html, rendered.Text,
-                new Dictionary<string, string> { ["tenantId"] = tenant.Id.ToString(), ["invitationId"] = invitation.Id.ToString() }), cancellationToken);
+                new Dictionary<string, string> { ["tenantId"] = tenant.Id.ToString(), ["invitationId"] = invitation.Id.ToString() }, TrackOpens: false), cancellationToken);
 
             if (result.Accepted)
             {

@@ -49,6 +49,10 @@ public sealed partial class OwnerSignInTests(IsolationDatabase db, ApiFactoryFix
 
         // Opened on the phone, not the laptop that asked: the link works anywhere, once.
         var token = LatestLinkTo(seed.AnnEmail);
+        var signInEmail = Api.Emails.Sent.Last(e => e.Email.ToAddress == seed.AnnEmail && e.Email.Metadata.GetValueOrDefault("purpose") == "sign-in").Email;
+        Assert.False(signInEmail.TrackOpens); // no hidden tracker on a sign-in email: it reads as phishing
+        Assert.Equal($"{seed.TenantName} via Paddockside", signInEmail.FromName);
+        Assert.Contains("The button opens portal.test", signInEmail.HtmlBody);
         using var phone = Api.Browser();
         var signed = await phone.PostApiAsync("/api/client-auth/link", new { token });
         Assert.Equal(HttpStatusCode.OK, signed.StatusCode);

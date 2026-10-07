@@ -147,8 +147,8 @@ public static class MemberEndpoints
         await identity.SaveChangesAsync(cancellationToken);
 
         var rendered = renderer.RenderStaffInvitation(tenant.Name, invitation.InvitedByName, role, $"{baseUrl.TrimEnd('/')}/join#{token}");
-        var result = await email.SendAsync(new OutboundEmail(options.Value.FromAddress, tenant.Name, address, string.Empty, invitation.InvitedByName,
-            rendered.Subject, rendered.Html, rendered.Text, new Dictionary<string, string> { ["purpose"] = "staff-invitation" }), cancellationToken);
+        var result = await email.SendAsync(new OutboundEmail(options.Value.FromAddress, Senders.For(tenant.Name), address, string.Empty, invitation.InvitedByName,
+            rendered.Subject, rendered.Html, rendered.Text, new Dictionary<string, string> { ["purpose"] = "staff-invitation" }, TrackOpens: false), cancellationToken);
 
         return Results.Created($"/api/members/invitations/{invitation.Id}",
             new Invited(invitation.Id, result.Accepted, result.Accepted ? null : $"The email was not sent: {result.Error}. Cancel it and try again."));
