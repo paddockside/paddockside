@@ -105,6 +105,20 @@ resource postmarkDkim 'Microsoft.Network/dnsZones/TXT@2018-05-01' = {
   }
 }
 
+// DMARC in monitoring mode (p=none): tells receivers the domain is managed and sends their reports to Postmark's
+// DMARC Digests. Covers the Titan mailboxes too; it never blocks mail. Tighten to p=quarantine once the digests
+// show every legitimate sender passing.
+resource dmarc 'Microsoft.Network/dnsZones/TXT@2018-05-01' = {
+  parent: zone
+  name: '_dmarc'
+  properties: {
+    TTL: 3600
+    TXTRecords: [
+      { value: ['v=DMARC1; p=none; pct=100; rua=mailto:re+mdguvklnczs@dmarc.postmarkapp.com; sp=none; aspf=r;'] }
+    ]
+  }
+}
+
 // The app (staff console and owners' portal) at app.paddockside.com.au, so links in emails point at our own
 // domain rather than azurewebsites.net, which spam filters distrust. asuid.app proves to App Service that we own it.
 resource appHost 'Microsoft.Network/dnsZones/CNAME@2018-05-01' = {
