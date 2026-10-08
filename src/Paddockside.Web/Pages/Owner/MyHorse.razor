@@ -5,7 +5,7 @@
 @* One horse: its events, newest first, each opening its updates. Only the steps owners follow are shown. *@
 <PageTitle>@(_name ?? "Horse")</PageTitle>
 
-<div class="grid gap-4">
+<div class="grid grid-cols-[minmax(0,1fr)] gap-4">
     <a href="my/horses" class="btn-link justify-self-start">← My horses</a>
     <h1 class="text-heading font-heading">@_name</h1>
     @if (_error is not null)

@@ -19,6 +19,7 @@ internal sealed class TenantConfiguration : IEntityTypeConfiguration<Tenant>
         b.Property(x => x.Name).HasMaxLength(200);
         b.Property(x => x.PriorManagementPeriodsVisible);
         b.Property(x => x.InviteOwnersOnFirstInterest).HasDefaultValue(true);
+        b.Property(x => x.OwnersSeeCoOwners);
         b.Property(x => x.Slug).HasMaxLength(30);
         b.Property(x => x.LogoUrl).HasMaxLength(500);
         b.Property(x => x.FooterDetails).HasMaxLength(500);
@@ -224,6 +225,18 @@ internal sealed class DeliveryConfiguration : IEntityTypeConfiguration<Delivery>
         b.HasIndex(x => new { x.StreamItemId, x.PartyId, x.Channel }).IsUnique();
         b.HasIndex(x => new { x.TenantId, x.Status, x.Channel });
         b.HasIndex(x => x.ProviderMessageId);
+    }
+}
+
+internal sealed class ItemReadConfiguration : IEntityTypeConfiguration<ItemRead>
+{
+    public void Configure(EntityTypeBuilder<ItemRead> b)
+    {
+        b.MapTenantOwned();
+        b.Property(x => x.ReadAt);
+        b.HasOne<StreamItem>().WithMany().HasForeignKey(x => x.StreamItemId).OnDelete(DeleteBehavior.Restrict);
+        b.HasOne<Party>().WithMany().HasForeignKey(x => x.PartyId).OnDelete(DeleteBehavior.Restrict);
+        b.HasIndex(x => new { x.PartyId, x.StreamItemId }).IsUnique();
     }
 }
 

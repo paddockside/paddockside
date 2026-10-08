@@ -33,6 +33,8 @@ public sealed class PaddocksideDbContext(DbContextOptions<PaddocksideDbContext> 
 
     public DbSet<Delivery> Deliveries => Set<Delivery>();
 
+    public DbSet<ItemRead> ItemReads => Set<ItemRead>();
+
     public DbSet<RoutingAddress> RoutingAddresses => Set<RoutingAddress>();
 
     public DbSet<InboundMessage> InboundMessages => Set<InboundMessage>();

@@ -3,41 +3,83 @@
 @layout OwnerLayout
 @inherits OwnerPage
 
-@* Owner home (search-reporting.md §3): their horses as cards, each with what is next. *@
+@*
+    Owner home (search-reporting.md §3): their horses as cards — photo, what's next, how much is new — then the
+    latest things they can see across all of them. Everything opens the event it belongs to.
+*@
 <PageTitle>My horses</PageTitle>
 
-<div class="grid gap-4">
-    <h1 class="text-heading font-heading">My horses</h1>
-    @if (_error is not null)
-    {
-        <Error Message="@_error" />
-    }
-    else if (_horses is null)
-    {
-        <p class="text-text-muted" role="status">Loading…</p>
-    }
-    else if (_horses.Count == 0)
-    {
-        <div class="card"><p>You don't have a share in any horses with @Session.Current?.TenantName at the moment.</p></div>
-    }
-    else
-    {
-        @foreach (var horse in _horses)
+<div class="grid grid-cols-[minmax(0,1fr)] gap-8">
+    <section class="grid gap-4" aria-labelledby="horses-heading">
+        <h1 id="horses-heading" class="text-heading font-heading">My horses</h1>
+        @if (_error is not null)
         {
-            <HorseCard Side="Side.Owner" Model="@(new HorseCardModel(horse.Name, horse.SexAge ?? "", null, horse.Next, 0, Subtitle: horse.LastUpdate, Href: $"my/horses/{horse.Id}"))" />
+            <Error Message="@_error" />
         }
+        else if (_horses is null)
+        {
+            <p class="text-text-muted" role="status">Loading…</p>
+        }
+        else if (_horses.Count == 0)
+        {
+            <div class="card"><p>You don't have a share in any horses with @Session.Current?.TenantName at the moment.</p></div>
+        }
+        else
+        {
+            @foreach (var horse in _horses)
+            {
+                <HorseCard Side="Side.Owner" Model="@(new HorseCardModel(horse.Name, horse.Pedigree ?? horse.SexAge ?? "", null, horse.Next, horse.Unread, Subtitle: horse.LastUpdate, Href: $"my/horses/{horse.Id}"))" />
+            }
+        }
+    </section>
+
+    @if (_updates is { Count: > 0 })
+    {
+        <section class="grid gap-4" aria-labelledby="latest-heading">
+            <h2 id="latest-heading" class="text-title font-heading">Latest</h2>
+            <ol class="grid gap-3">
+                @foreach (var u in _updates.Take(5))
+                {
+                    <li>
+                        <a href="@UpdateLink(u)" class="card grid gap-1 hover:border-border-strong">
+                            <span class="flex flex-wrap items-center gap-2 text-small text-text-muted">
+                                @if (u.Unread)
+                                {
+                                    <span class="badge bg-action-primary-bg text-action-primary-fg">New</span>
+                                }
+                                <span>@u.Horse@(u.Event is null ? null : $" · {u.Event}") · @u.At</span>
+                            </span>
+                            <span class="font-strong">@(u.Title ?? u.Kind)</span>
+                            <span class="line-clamp-2">@u.Summary</span>
+                        </a>
+                    </li>
+                }
+            </ol>
+            @if (_updates.Count > 5)
+            {
+                <a href="my/updates" class="btn-secondary justify-self-start">All updates</a>
+            }
+        </section>
     }
+
+    <p class="text-text-muted">Your contact details are under <a href="my/me" class="underline underline-offset-4">Me</a>.</p>
 </div>
 
 @code {
     private List<OwnerHorse>? _horses;
+    private List<OwnerUpdate>? _updates;
     private string? _error;
 
     protected override async Task OnInitializedAsync()
     {
         if (!await EnsureSignedInAsync()) return;
-        var result = await Api.MyHorsesAsync();
+        var horses = Api.MyHorsesAsync();
+        var updates = Api.MyUpdatesAsync();
+        var result = await horses;
         if (result.Succeeded) _horses = result.Value;
         else _error = result.Error;
+        _updates = (await updates).Value;
     }
+
+    private static string UpdateLink(OwnerUpdate u) => u.EventId is { } e ? $"my/events/{e}#item-{u.ItemId}" : $"my/horses/{u.HorseId}";
 }

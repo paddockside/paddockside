@@ -46,6 +46,12 @@ public sealed class Tenant
     /// </summary>
     public bool InviteOwnersOnFirstInterest { get; set; } = true;
 
+    /// <summary>
+    /// Tenant setting "owners see each other" (identity-access.md §5.1, open question in §11): whether an owner sees
+    /// the names of the other current owners of a horse. Off unless the tenant turns it on.
+    /// </summary>
+    public bool OwnersSeeCoOwners { get; set; }
+
     public void SetBranding(string slug, string? logoUrl, string? footerDetails)
     {
         Slug = NormaliseSlug(slug);

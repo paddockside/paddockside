@@ -18,7 +18,7 @@ public sealed record HorseDetail(Guid Id, string Name, string? SexAge, string? P
 
 public sealed record StepView(string Label, string State, string? Detail, bool ClientVisible);
 
-public sealed record EventSummary(Guid Id, string Type, string Title, string KeyDate, string Status, List<StepView> Steps, string LastActivity);
+public sealed record EventSummary(Guid Id, string Type, string Title, string KeyDate, string Status, List<StepView> Steps, string LastActivity, int Unread = 0);
 
 public sealed record FieldView(string Label, string Value, string? Was);
 
@@ -113,18 +113,20 @@ public sealed record OwnerTenant(Guid Id, string Name, bool Current);
 
 public sealed record OwnerSession(string Name, string? Email, string? Mobile, string TenantName, string? TenantLogoUrl, List<OwnerTenant> Tenants);
 
-public sealed record OwnerHorse(Guid Id, string Name, string? SexAge, string? Pedigree, string? Next, string LastUpdate);
+public sealed record OwnerHorse(Guid Id, string Name, string? SexAge, string? Pedigree, string? Next, string LastUpdate, int Unread);
 
-public sealed record OwnerUpdate(Guid ItemId, Guid HorseId, string Horse, Guid? EventId, string? Event, string Kind, string? Title, string Summary, string At);
+public sealed record OwnerUpdate(Guid ItemId, Guid HorseId, string Horse, Guid? EventId, string? Event, string Kind, string? Title, string Summary, string At, bool Unread);
 
 public sealed record OwnerField(string Label, string Value);
 
 public sealed record OwnerReply(string Author, string At, string Body);
 
 public sealed record OwnerItem(Guid Id, string Kind, string At, string? Title, string Body, string? Author, string? Source,
-    List<OwnerField> Fields, string? Corrected, List<OwnerReply> Replies, bool CanReply);
+    List<OwnerField> Fields, string? Corrected, List<OwnerReply> Replies, bool CanReply, bool Unread, bool Mine);
 
-public sealed record OwnerEventPage(EventSummary Event, Guid HorseId, string Horse, List<OwnerItem> Items);
+public sealed record OwnerEventPage(EventSummary Event, Guid HorseId, string Horse, List<OwnerItem> Items, List<string>? CoOwners);
+
+public sealed record Contacted(Guid Id);
 
 public sealed record SignedIn(string Destination);
 
@@ -275,6 +277,10 @@ public sealed class PaddocksideApi(HttpClient http)
     public Task<ApiResult<OwnerEventPage>> MyEventAsync(Guid id) => GetAsync<OwnerEventPage>($"api/my/events/{id}");
 
     public Task<ApiResult<OwnerReply>> ReplyAsync(Guid itemId, string body) => PostAsync<OwnerReply>($"api/my/items/{itemId}/replies", new { body });
+
+    public Task<ApiResult<object>> MarkEventSeenAsync(Guid eventId) => PostAsync<object>($"api/my/events/{eventId}/seen", new { });
+
+    public Task<ApiResult<Contacted>> ContactAboutEventAsync(Guid eventId, string body) => PostAsync<Contacted>($"api/my/events/{eventId}/contact", new { body });
 
     private sealed record LinkProblem(string? Title, string? ReturnPath);
 

@@ -14,7 +14,7 @@ public static class ComponentMapping
         e.KeyDate,
         Enum.TryParse<EventStatus>(e.Status, out var status) ? status : EventStatus.Open,
         e.Steps.Select(s => new StageStep(s.Label, ToStepState(s.State), s.Detail, s.ClientVisible)).ToList(),
-        Unread: 0,
+        e.Unread,
         e.LastActivity,
         href);
 

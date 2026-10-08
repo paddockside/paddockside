@@ -5,7 +5,7 @@
 @* The owner's own details and sign out. Contact details are changed by the tenant (identity-access.md §4.1). *@
 <PageTitle>Me</PageTitle>
 
-<div class="grid gap-6">
+<div class="grid grid-cols-[minmax(0,1fr)] gap-6">
     <h1 class="text-heading font-heading">Me</h1>
     @if (Session.Current is { } me)
     {

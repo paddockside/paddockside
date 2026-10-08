@@ -1,24 +1,26 @@
 @*
     One horse, recognisable at a glance (design-system.md §2.0: always a photo, because a photo is recognised
-    faster than a name). Used on the owner home and the staff horse list. The whole card is one link.
+    faster than a name). Used on the owner home and the staff horse list. The whole card is one link. Names and
+    dates wrap rather than cut off: at 360 px an owner must still read "Saturday 10 October · Randwick" in full.
 *@
 @{
     var owner = Side == Side.Owner;
+    var photoSize = owner ? "size-[72px] sm:size-[96px]" : "size-[72px]";
 }
 <article class="card relative flex gap-4 !p-4 @(owner ? "text-body-owner" : "text-body") @(Model.Href is not null ? "hover:border-border-strong" : null)">
     @if (Model.PhotoUrl is not null)
     {
-        <img src="@Model.PhotoUrl" alt="" class="@(owner ? "size-[96px]" : "size-[72px]") shrink-0 rounded-control object-cover" />
+        <img src="@Model.PhotoUrl" alt="" class="@photoSize shrink-0 rounded-control object-cover" />
     }
     else
     {
-        <div class="@(owner ? "size-[96px]" : "size-[72px]") grid shrink-0 place-items-center rounded-control bg-surface-sunken text-center text-small text-text-muted">
+        <div class="@photoSize grid shrink-0 place-items-center rounded-control bg-surface-sunken p-1 text-center text-small text-text-muted">
             No photo yet
         </div>
     }
 
-    <div class="grid min-w-0 content-start gap-1">
-        <h3 class="truncate font-heading @(owner ? "text-title" : "text-body")">
+    <div class="grid min-w-0 flex-1 content-start gap-1">
+        <h3 class="break-words font-heading @(owner ? "text-title" : "text-body")">
             @if (Model.Href is not null)
             {
                 @* Stretched link: the whole card is clickable, but only the name is announced as the link. *@
@@ -29,23 +31,25 @@
                 @Model.Name
             }
         </h3>
-        @if (Model.Subtitle is not null)
+        @if (Model.Unread > 0)
         {
-            <p class="truncate text-text-muted">@Model.Subtitle</p>
+            <span class="badge justify-self-start bg-action-primary-bg text-action-primary-fg">
+                @Model.Unread<span class="sr-only"> unread @(Model.Unread == 1 ? "update" : "updates")</span><span aria-hidden="true"> new</span>
+            </span>
         }
-        <p class="text-text-muted">@Model.SexAge@(Model.Trainer is not null ? $" · Trainer {Model.Trainer}" : null)</p>
+        @if (!string.IsNullOrEmpty(Model.SexAge) || Model.Trainer is not null)
+        {
+            <p class="text-text-muted">@Model.SexAge@(Model.Trainer is not null ? $" · Trainer {Model.Trainer}" : null)</p>
+        }
         @if (Model.NextKeyDate is not null)
         {
             <p><span class="text-text-muted">Next: </span><span class="font-strong">@Model.NextKeyDate</span></p>
         }
+        @if (Model.Subtitle is not null)
+        {
+            <p class="text-small text-text-muted">@Model.Subtitle</p>
+        }
     </div>
-
-    @if (Model.Unread > 0)
-    {
-        <span class="badge ml-auto self-start bg-action-primary-bg text-action-primary-fg">
-            @Model.Unread<span class="sr-only"> unread @(Model.Unread == 1 ? "update" : "updates")</span><span aria-hidden="true"> new</span>
-        </span>
-    }
 </article>
 
 @code {

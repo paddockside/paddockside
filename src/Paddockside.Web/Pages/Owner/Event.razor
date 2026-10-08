@@ -4,13 +4,15 @@
 @inject IJSRuntime JS
 
 @*
-    One event as an owner sees it (search-reporting.md §3; design-system.md §2.0): the steps owners follow, then
-    what they may see, newest first — results as cards, messages with only their own replies, and a reply box under
-    each message. A notification link lands on its item ("#item-…"), scrolled into view and highlighted.
+    One event as an owner sees it (search-reporting.md §3; event-page-mockup-notes.md, owner view): the same spine as
+    the staff page — steps at the top, then items newest first — but only what is scoped to them, only their own
+    replies, no internal notes and no delivery figures. Other owners are named only if the tenant allows. Every
+    notification link lands here, on its item ("#item-…"), scrolled into view and highlighted. "Contact {tenant}"
+    is the help control (design-system.md §2.0): a message to staff, on this horse, that lands in the stream.
 *@
 <PageTitle>@(_page?.Event.Title ?? "Update")</PageTitle>
 
-<div class="grid gap-6">
+<div class="grid grid-cols-[minmax(0,1fr)] gap-6">
     @if (_error is not null)
     {
         <a href="my/horses" class="btn-link justify-self-start">← My horses</a>
@@ -26,6 +28,13 @@
         <h1 class="sr-only">@_page.Horse: @_page.Event.Title</h1>
         <EventCard Side="Side.Owner" Model="_page.Event.ToCard()" />
 
+        @if (_page.CoOwners is { Count: > 0 } others)
+        {
+            <p class="text-text-muted">Also owning @_page.Horse: @string.Join(", ", others)</p>
+        }
+
+        <button type="button" class="btn-secondary justify-self-start whitespace-normal text-left" @onclick="FocusContact">Contact @TenantName</button>
+
         @if (_page.Items.Count == 0)
         {
             <div class="card"><p>Nothing posted yet. You'll get an email when there is.</p></div>
@@ -35,23 +44,34 @@
             var target = item.Id == _target;
             <section id="item-@item.Id" tabindex="-1" aria-label="@(item.Title ?? item.Kind)"
                      class="grid gap-3 rounded-card @(target ? "ring-4 ring-focus ring-offset-4 ring-offset-surface-default" : null)">
+                @if (item.Unread)
+                {
+                    <span class="badge justify-self-start bg-action-primary-bg text-action-primary-fg">New</span>
+                }
                 @if (item.Kind == "Result")
                 {
                     <FactCard Side="Side.Owner" Model="@(new FactModel(item.Title ?? "Result", item.Source ?? "", item.At, Scope.Owners,
                         item.Fields.Select(f => new Components.FactField(f.Label, f.Value)).ToList(), Correction: item.Corrected))" />
                 }
+                else if (item.Mine)
+                {
+                    <article class="card grid gap-2 border-l-4 border-l-action-primary-bg">
+                        <p class="text-small text-text-muted">You wrote to @TenantName · @item.At</p>
+                        <p class="whitespace-pre-line">@item.Body</p>
+                    </article>
+                }
                 else
                 {
-                    <MessageThread Side="Side.Owner" Model="@(new MessageModel(item.Author ?? Session.Current?.TenantName ?? "", item.At, Scope.Owners, "", item.Body,
+                    <MessageThread Side="Side.Owner" Model="@(new MessageModel(item.Author ?? TenantName, item.At, Scope.Owners, "", item.Body,
                         item.Replies.Select(r => new Reply(r.Author, "", r.At, r.Body, IsViewer: true)).ToList(), [], Title: item.Title))" />
                 }
 
                 @if (item.CanReply)
                 {
                     <form class="grid gap-3" @onsubmit="() => ReplyAsync(item)" @onsubmit:preventDefault>
-                        <label for="reply-@item.Id" class="font-strong">Reply to @(Session.Current?.TenantName ?? "us")</label>
+                        <label for="reply-@item.Id" class="font-strong">Reply to @TenantName</label>
                         <textarea id="reply-@item.Id" rows="3" class="rounded-control border border-border-strong bg-surface-raised p-4"
-                                  @bind="_drafts[item.Id]" placeholder="Only @(Session.Current?.TenantName ?? "the team") will see this."></textarea>
+                                  @bind="_drafts[item.Id]" placeholder="Only @TenantName will see this."></textarea>
                         <button type="submit" class="btn-primary justify-self-start" disabled="@(_sending == item.Id)">Send reply</button>
                         @if (_replyError.TryGetValue(item.Id, out var problem))
                         {
@@ -61,6 +81,26 @@
                 }
             </section>
         }
+
+        <section id="contact" class="card grid gap-3" aria-labelledby="contact-heading">
+            <h2 id="contact-heading" class="text-title font-heading">Contact @TenantName</h2>
+            @if (_contactSent)
+            {
+                <p class="rounded-control bg-status-success-bg px-4 py-3 text-status-success-fg" role="status">
+                    Sent. @TenantName will see it with @_page.Horse's updates and get back to you.
+                </p>
+            }
+            <form class="grid gap-3" @onsubmit="ContactAsync" @onsubmit:preventDefault>
+                <label for="contact-body" class="font-strong">Your message about @_page.Horse</label>
+                <textarea id="contact-body" rows="4" class="rounded-control border border-border-strong bg-surface-raised p-4"
+                          @bind="_contactDraft" placeholder="Only @TenantName will see this."></textarea>
+                <button type="submit" class="btn-primary justify-self-start whitespace-normal text-left" disabled="@_contacting">Send to @TenantName</button>
+                @if (_contactError is not null)
+                {
+                    <p class="font-strong text-status-danger-fg" role="alert">@_contactError</p>
+                }
+            </form>
+        </section>
     }
 </div>
 
@@ -74,13 +114,26 @@
     private bool _scrolled;
     private readonly Dictionary<Guid, string?> _drafts = [];
     private readonly Dictionary<Guid, string> _replyError = [];
+    private string? _contactDraft;
+    private string? _contactError;
+    private bool _contacting;
+    private bool _contactSent;
+
+    private string TenantName => Session.Current?.TenantName ?? "us";
 
     protected override async Task OnParametersSetAsync()
     {
         if (!await EnsureSignedInAsync()) return;
         var hash = new Uri(Navigation.Uri).Fragment;
         _target = hash.StartsWith("#item-", StringComparison.Ordinal) && Guid.TryParse(hash["#item-".Length..], out var id) ? id : null;
+        await LoadAsync();
 
+        // Shown once as "New", then it isn't: mark what they have just been shown as seen.
+        if (_page is { Event.Unread: > 0 }) await Api.MarkEventSeenAsync(Id);
+    }
+
+    private async Task LoadAsync()
+    {
         var result = await Api.MyEventAsync(Id);
         if (!result.Succeeded) { _error = result.Error; return; }
         _page = result.Value;
@@ -92,6 +145,8 @@
         if (_page is not null && _target is { } target && !_scrolled)
             _scrolled = await JS.InvokeAsync<bool>("paddockside.scrollToItem", $"item-{target}");
     }
+
+    private async Task FocusContact() => await JS.InvokeAsync<bool>("paddockside.scrollToItem", "contact-body");
 
     private async Task ReplyAsync(OwnerItem item)
     {
@@ -109,6 +164,25 @@
         finally
         {
             _sending = null;
+        }
+    }
+
+    private async Task ContactAsync()
+    {
+        (_contactError, _contactSent) = (null, false);
+        if (string.IsNullOrWhiteSpace(_contactDraft)) { _contactError = "Write your message first."; return; }
+
+        _contacting = true;
+        try
+        {
+            var result = await Api.ContactAboutEventAsync(Id, _contactDraft);
+            if (!result.Succeeded) { _contactError = result.Error; return; }
+            (_contactDraft, _contactSent) = (null, true);
+            await LoadAsync();
+        }
+        finally
+        {
+            _contacting = false;
         }
     }
 }

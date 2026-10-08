@@ -233,6 +233,22 @@ public sealed class StreamItem
         };
     }
 
+    /// <summary>
+    /// An owner writing to staff from the portal ("Contact {tenant}", design-system.md §2.0 "help is a person"): it
+    /// lands in the horse's stream like any other message, seen by staff and that owner only.
+    /// </summary>
+    public static StreamItem FromOwner(Horse horse, Event? @event, Party party, string body, DateTimeOffset at)
+    {
+        if (string.IsNullOrWhiteSpace(body)) throw new DomainException("Write your message first.");
+        if (party.TenantId != horse.TenantId) throw new DomainException("The owner and horse must belong to the same tenant.");
+        return new StreamItem(horse, @event, StreamItemKind.Message, StreamItemScope.NamedParties, StreamItemDirection.Inbound, at, body.Trim(),
+            authorPartyId: party.Id, namedPartyIds: [party.Id], recordedAt: at)
+        {
+            AuthorName = party.DisplayName,
+            Channel = "Portal",
+        };
+    }
+
     /// <summary>A staff-only note.</summary>
     public static StreamItem Note(Horse horse, Event? @event, string body, DateTimeOffset at, string authorName, string? stepCode = null)
     {

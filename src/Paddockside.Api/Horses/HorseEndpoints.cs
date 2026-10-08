@@ -38,7 +38,8 @@ public static class HorseEndpoints
         string KeyDate,
         string Status,
         IReadOnlyList<StepView> Steps,
-        string LastActivity);
+        string LastActivity,
+        int Unread = 0);
 
     public static void MapHorseEndpoints(this IEndpointRouteBuilder app)
     {

@@ -6,7 +6,7 @@
 @* The latest updates across all their horses, newest first (search-reporting.md §3 "Owner home" feed). *@
 <PageTitle>Updates</PageTitle>
 
-<div class="grid gap-4">
+<div class="grid grid-cols-[minmax(0,1fr)] gap-4">
     <h1 class="text-heading font-heading">Updates</h1>
     @if (_error is not null)
     {
@@ -27,7 +27,7 @@
             {
                 <li id="item-@u.ItemId" tabindex="-1">
                     <a href="@(u.EventId is { } e ? $"my/events/{e}#item-{u.ItemId}" : $"my/horses/{u.HorseId}")" class="card grid gap-1 hover:border-border-strong">
-                        <span class="text-small text-text-muted">@u.Horse@(u.Event is null ? null : $" · {u.Event}") · @u.At</span>
+                        <span class="flex flex-wrap items-center gap-2 text-small text-text-muted">@if (u.Unread) { <span class="badge bg-action-primary-bg text-action-primary-fg">New</span> }<span>@u.Horse@(u.Event is null ? null : $" · {u.Event}") · @u.At</span></span>
                         <span class="font-strong">@(u.Title ?? u.Kind)</span>
                         <span>@u.Summary</span>
                     </a>

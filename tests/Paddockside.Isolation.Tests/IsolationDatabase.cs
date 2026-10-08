@@ -95,6 +95,7 @@ public sealed class IsolationDatabase : IAsyncLifetime
         var support = new SupportSession(tenant.Id, Guid.NewGuid(), "Paddockside support: seed", "Seeded request", SupportSession.DefaultDuration, bought);
         context.AddRange(tenant, ann, dee, eve, syndicate, external, horse, raceStart, update, personal, note, inbound, audit, support);
         context.AddRange(routing);
+        context.Add(new ItemRead(update, ann.Id, bought.AddMonths(6)));
         context.AddRange(deliveries);
         await context.SaveChangesAsync();
 
