@@ -1,7 +1,10 @@
 using System.Net;
 using System.Net.Http.Json;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Paddockside.Domain;
+using Paddockside.Infrastructure.Identity;
 
 namespace Paddockside.Isolation.Tests.Api;
 
@@ -72,6 +75,29 @@ public sealed class SupportAndAuditTests(IsolationDatabase db, ApiFactoryFixture
         Assert.Equal(HttpStatusCode.NoContent, (await admin.PostApiAsync($"/api/support/{session.Id}/decline", new { })).StatusCode);
         Assert.Equal(HttpStatusCode.Conflict, (await ops.PostApiAsync($"/api/ops/support/{tenantId}/{session.Id}/enter", new { })).StatusCode);
         Assert.Equal(HttpStatusCode.Conflict, (await admin.PostApiAsync($"/api/support/{session.Id}/approve", new { })).StatusCode); // answered once
+    }
+
+    [Fact]
+    public async Task An_operator_who_is_also_the_tenants_admin_cannot_approve_their_own_request()
+    {
+        var (tenantId, otherAdmin) = await NewTenantAsync();
+        var (email, password) = await Api.CreatePersonAsync(tenantId, MemberRole.TenantAdmin);
+        await using (var scope = Api.Services.CreateAsyncScope())
+        {
+            var users = scope.ServiceProvider.GetRequiredService<UserManager<Person>>();
+            var person = (await users.FindByEmailAsync(email))!;
+            person.IsOperator = true;
+            await users.UpdateAsync(person);
+        }
+
+        using var both = await Api.SignedInWithAsync(email, password);
+        var session = (await (await both.PostApiAsync($"/api/ops/tenants/{tenantId}/support", new { reason = "Checking the import", hours = 1 })).Content.ReadFromJsonAsync<SupportView>())!;
+
+        Assert.Equal(HttpStatusCode.Conflict, (await both.PostApiAsync($"/api/support/{session.Id}/approve", new { })).StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, (await both.PostApiAsync($"/api/ops/support/{tenantId}/{session.Id}/enter", new { })).StatusCode); // still closed
+
+        // Another admin of the business can.
+        Assert.Equal(HttpStatusCode.NoContent, (await otherAdmin.PostApiAsync($"/api/support/{session.Id}/approve", new { })).StatusCode);
     }
 
     [Fact]

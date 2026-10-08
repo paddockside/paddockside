@@ -91,7 +91,8 @@ What the console shows, for every business, is account and health only:
 Operators never see a business's horses, owners or messages, except through a **support session**:
 1. In the console, under **Support access**, the operator asks a business for access, with a reason and a number
    of hours (at most 24). The business's Tenant admins are emailed.
-2. An admin approves or declines it on **Members**, under "Paddockside support access".
+2. An admin approves or declines it on **Members**, under "Paddockside support access". An operator who is
+   also an admin of that business cannot approve their own request; another admin must.
 3. Once it's approved, the operator clicks **Enter (read-only)** and sees the business as a Viewer until it
    expires. A banner says so throughout.
 4. Anything that would change data is refused, and every page viewed goes into the business's audit log.

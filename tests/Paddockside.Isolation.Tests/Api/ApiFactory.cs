@@ -89,6 +89,12 @@ public sealed class ApiFactory(IsolationDatabase db) : WebApplicationFactory<Pro
     public async Task<HttpClient> SignedInAsync(Guid tenantId, MemberRole role)
     {
         var (email, password) = await CreatePersonAsync(tenantId, role);
+        return await SignedInWithAsync(email, password);
+    }
+
+    /// <summary>A browser signed in as an existing person, authenticator enrolled.</summary>
+    public async Task<HttpClient> SignedInWithAsync(string email, string password)
+    {
         var browser = Browser();
         await browser.PostApiAsync("/api/auth/password", new { email, password });
         var enrolment = await browser.GetFromJsonAsync<EnrolmentDetails>("/api/auth/enrolment");

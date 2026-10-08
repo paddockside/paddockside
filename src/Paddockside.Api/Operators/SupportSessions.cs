@@ -218,8 +218,16 @@ public static class SupportSessions
 
         var by = user.FindFirstValue(ClaimTypes.Email) ?? "A tenant admin";
         var now = clock.GetUtcNow();
-        if (approve) session.Approve(by, now);
-        else session.Decline(by, now);
+        try
+        {
+            if (approve) session.Approve(PersonOf(user), by, now);
+            else session.Decline(by, now);
+        }
+        catch (DomainException ex)
+        {
+            return Results.Problem(statusCode: StatusCodes.Status409Conflict, title: ex.Message);
+        }
+
         await db.SaveChangesAsync(cancellationToken);
         await audit.RecordAsync(session.TenantId, approve ? "support.approved" : "support.declined",
             approve ? $"Approved {session.OperatorName}'s access until {Words.Moment(session.ExpiresAt!.Value)}" : $"Declined {session.OperatorName}'s request",

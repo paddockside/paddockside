@@ -84,7 +84,15 @@ public sealed class SupportSession
 
     public bool IsActive(DateTimeOffset now) => StatusAt(now) == SupportSessionStatus.Active;
 
-    public void Approve(string by, DateTimeOffset at)
+    /// <summary>Approved by one of the tenant's admins, who can never be the operator who asked.</summary>
+    public void Approve(Guid approverPersonId, string by, DateTimeOffset at)
+    {
+        if (approverPersonId == OperatorPersonId)
+            throw new DomainException("You asked for this access, so another admin of this business must approve it.");
+        Open(by, at);
+    }
+
+    private void Open(string by, DateTimeOffset at)
     {
         if (DecidedAt is not null) throw new DomainException("This request has already been answered.");
         (Approved, DecidedAt, DecidedBy, ExpiresAt) = (true, at, by, at + Duration);
@@ -95,7 +103,7 @@ public sealed class SupportSession
     {
         if (!Emergency) throw new DomainException("Only emergency access is approved by a second operator; ask the tenant's admins.");
         if (operatorPersonId == OperatorPersonId) throw new DomainException("A second, different operator must approve emergency access.");
-        Approve(by, at);
+        Open(by, at);
         SecondOperatorPersonId = operatorPersonId;
     }
 
