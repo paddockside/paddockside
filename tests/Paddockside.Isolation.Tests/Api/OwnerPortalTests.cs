@@ -20,7 +20,7 @@ public sealed partial class OwnerSignInTests
 
     private sealed record PortalItem(Guid Id, string Kind, string Body, string? Author, bool Unread, bool Mine);
 
-    private sealed record PortalEvent(Card Event, List<PortalItem> Items, List<string>? CoOwners);
+    private sealed record PortalEvent(Card Event, List<PortalItem> Items);
 
     [Fact]
     public async Task New_items_count_as_unread_until_the_owner_opens_the_event()
@@ -78,19 +78,12 @@ public sealed partial class OwnerSignInTests
     }
 
     [Fact]
-    public async Task Other_owners_are_named_only_when_the_tenant_allows_it()
+    public async Task Other_owners_are_never_named()
     {
         var seed = await SeedAsync();
         using var ann = await SignInAsync(seed.AnnEmail);
-        Assert.Null((await ann.GetFromJsonAsync<PortalEvent>($"/api/my/events/{seed.EventId}"))!.CoOwners);
-
-        await using (var context = db.ContextFor(seed.TenantId))
-        {
-            (await context.Tenants.SingleAsync()).OwnersSeeCoOwners = true;
-            await context.SaveChangesAsync();
-        }
-
-        Assert.Equal(["Bob Owner"], (await ann.GetFromJsonAsync<PortalEvent>($"/api/my/events/{seed.EventId}"))!.CoOwners);
+        var page = await ann.GetStringAsync($"/api/my/events/{seed.EventId}");
+        Assert.DoesNotContain("Bob Owner", page);
     }
 
     private sealed record Choice(string Code, bool Important, string Email, string Text);

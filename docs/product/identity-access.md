@@ -69,7 +69,7 @@ Roles are fixed per audience class. Tenants can *rename* roles for display and c
 
 | Role | Can | Cannot |
 |---|---|---|
-| **Owner** | See the horses where they hold a current managed interest, and the events, items, media and facts scoped to Owners / Owners-at-the-time for their period. Reply in the stream. RSVP and answer prompts. Manage their own notification preferences and contact details. See the other owners in a horse *if the tenant setting allows*. | See Internal items, supplier-scoped items, or any other owner's private replies. See ownership percentages of others unless the tenant allows. Download the full media library in bulk. |
+| **Owner** | See the horses where they hold a current managed interest, and the events, items, media and facts scoped to Owners / Owners-at-the-time for their period. Reply in the stream. RSVP and answer prompts. Manage their own notification preferences and contact details. | See the other owners' names (never; decided 14 Oct 2026), Internal items, supplier-scoped items, or any other owner's private replies. See ownership percentages of others unless the tenant allows. Download the full media library in bulk. |
 | **Owner delegate** | Everything an Owner can, on behalf of a named Owner (a spouse, PA or accountant), except changing that owner's contact details. Delegation is granted by the Owner from their own profile, or by staff at the Owner's request. | Hold interests themselves. Be a delegate of more than one owner at the same tenant without staff approval. |
 
 "Owner" applies equally to a syndicate member, a mare owner, or an agent's client; the label is the tenant's vocabulary.
@@ -139,5 +139,5 @@ Every authentication event and every permission-bearing action is written to an 
 - **P16. One product-level identity per person; memberships per tenant; tenant switcher.** Decided 4 Sep 2026.
 - **P17. Fixed roles: Owner, Owner delegate, Viewer, Coordinator, Manager, Tenant admin. No custom roles in v1.** Confirmed 6 Sep 2026.
 - **P18. Operator access to tenant data only through an admin-approved, logged support session.** Confirmed 6 Sep 2026.
-- Open: whether owners may see the names of co-owners by default (tenant setting; suggested default *on* for syndicators, *off* for agents).
+- **Owners never see the names of the other owners of a horse.** Decided by David, 14 Oct 2026, following the event-page mockup ("other owners' names never appear"); no tenant setting.
 - Open: the client session length (90 days proposed) — worth asking on the validation calls whether any prospect has an owner who would object.

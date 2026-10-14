@@ -79,7 +79,7 @@
   }
 
   .btn-secondary {
-    @apply btn bg-action-secondary-bg text-action-secondary-fg hover:bg-action-secondary-bg-hover;
+    @apply btn border border-border-strong bg-action-secondary-bg text-action-secondary-fg hover:bg-action-secondary-bg-hover;
   }
 
   .btn-link {

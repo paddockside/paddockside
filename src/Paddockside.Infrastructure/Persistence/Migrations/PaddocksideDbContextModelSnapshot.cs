@@ -967,9 +967,6 @@ namespace Paddockside.Infrastructure.Persistence.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("nvarchar(200)");
 
-                    b.Property<bool>("OwnersSeeCoOwners")
-                        .HasColumnType("bit");
-
                     b.Property<bool>("PriorManagementPeriodsVisible")
                         .HasColumnType("bit");
 

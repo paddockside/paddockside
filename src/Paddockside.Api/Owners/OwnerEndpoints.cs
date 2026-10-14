@@ -42,8 +42,8 @@ public static class OwnerEndpoints
 
     public sealed record AnswerRequest(string Value);
 
-    /// <param name="CoOwners">The other current owners' names, only when the tenant lets owners see each other.</param>
-    public sealed record OwnerEventPage(HorseEndpoints.EventSummary Event, Guid HorseId, string Horse, IReadOnlyList<OwnerItem> Items, IReadOnlyList<string>? CoOwners);
+    /// <remarks>Never the other owners' names: owners don't see who else owns the horse (David, 14 Oct 2026).</remarks>
+    public sealed record OwnerEventPage(HorseEndpoints.EventSummary Event, Guid HorseId, string Horse, IReadOnlyList<OwnerItem> Items);
 
     public sealed record ReplyRequest(string Body);
 
@@ -215,7 +215,7 @@ public static class OwnerEndpoints
                     Words.DayAndTime(i.OccurredAt, now),
                     i.Title,
                     i.Body,
-                    mine ? "You" : AuthorFor(i, party.Id, tenant),
+                    mine ? "You" : AuthorFor(i, party.Id),
                     i.Source,
                     i.Fields.Select(f => new OwnerField(f.Label, f.Value)).ToList(),
                     i.SupersedesId is null ? null : $"Updated by {i.Source}{(i.CorrectionNote is null ? "" : $": {i.CorrectionNote}")}",
@@ -225,8 +225,7 @@ public static class OwnerEndpoints
                     mine,
                     i.Prompt is { } p && CanReplyTo(i) ? new OwnerPrompt(p.Kind.ToString(), p.Question, p.Answers, myAnswers.GetValueOrDefault(i.Id)) : null);
             })
-            .ToList(),
-            tenant.OwnersSeeCoOwners ? await CoOwnersAsync(db, horse, party.Id, cancellationToken) : null));
+            .ToList()));
     }
 
     /// <summary>They have looked at this event: everything on it they can see is no longer new to them.</summary>
@@ -441,19 +440,10 @@ public static class OwnerEndpoints
     private static bool HoldsLiveInterest(Horse horse, Guid partyId) =>
         horse.CurrentManagementPeriod is { } period && horse.Interests.Any(i => i.PartyId == partyId && i.ManagementPeriodId == period.Id && i.IsActive);
 
-    /// <summary>The other current owners, by name; the caller has already checked the tenant allows it.</summary>
-    private static async Task<IReadOnlyList<string>> CoOwnersAsync(PaddocksideDbContext db, Horse horse, Guid partyId, CancellationToken cancellationToken)
-    {
-        if (horse.CurrentManagementPeriod is not { } period) return [];
-        var ids = horse.Interests.Where(i => i.ManagementPeriodId == period.Id && i.IsActive && i.PartyId != partyId).Select(i => i.PartyId).Distinct().ToList();
-        var names = await db.Parties.AsNoTracking().Where(p => ids.Contains(p.Id)).Select(p => p.DisplayName).ToListAsync(cancellationToken);
-        return names.Order(StringComparer.OrdinalIgnoreCase).ToList();
-    }
-
-    /// <summary>Who wrote it, as an owner may see it: another owner is never named unless the tenant allows.</summary>
-    private static string? AuthorFor(StreamItem item, Guid partyId, Tenant tenant) =>
+    /// <summary>Who wrote it, as an owner may see it: another owner is never named.</summary>
+    private static string? AuthorFor(StreamItem item, Guid partyId) =>
         item.Kind == StreamItemKind.Fact ? item.Source
-        : item.AuthorPartyId is { } author && author != partyId && !tenant.OwnersSeeCoOwners ? "Another owner"
+        : item.AuthorPartyId is { } author && author != partyId ? "Another owner"
         : item.AuthorName;
 
     /// <summary>Words owners use (design-system.md §2.0), not "fact" and "stream item".</summary>

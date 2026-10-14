@@ -28,11 +28,6 @@
         <h1 class="sr-only">@_page.Horse: @_page.Event.Title</h1>
         <EventCard Side="Side.Owner" Model="_page.Event.ToCard()" />
 
-        @if (_page.CoOwners is { Count: > 0 } others)
-        {
-            <p class="text-text-muted">Also owning @_page.Horse: @string.Join(", ", others)</p>
-        }
-
         <button type="button" class="btn-secondary justify-self-start whitespace-normal text-left" @onclick="FocusContact">Contact @TenantName</button>
 
         @if (_page.Items.Count == 0)

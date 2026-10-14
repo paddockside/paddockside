@@ -165,7 +165,7 @@ public sealed record OwnerItem(Guid Id, string Kind, string At, string? Title, s
 
 public sealed record OwnerPrompt(string Kind, string Question, List<string> Answers, string? Mine);
 
-public sealed record OwnerEventPage(EventSummary Event, Guid HorseId, string Horse, List<OwnerItem> Items, List<string>? CoOwners);
+public sealed record OwnerEventPage(EventSummary Event, Guid HorseId, string Horse, List<OwnerItem> Items);
 
 public sealed record Contacted(Guid Id);
 

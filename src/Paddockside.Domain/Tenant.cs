@@ -47,12 +47,6 @@ public sealed class Tenant
     public bool InviteOwnersOnFirstInterest { get; set; } = true;
 
     /// <summary>
-    /// Tenant setting "owners see each other" (identity-access.md §5.1, open question in §11): whether an owner sees
-    /// the names of the other current owners of a horse. Off unless the tenant turns it on.
-    /// </summary>
-    public bool OwnersSeeCoOwners { get; set; }
-
-    /// <summary>
     /// The party that is the business itself, holding its house share in horses (ownership-model.md: "Laurel Oak
     /// as an ordinary party holding an interest"). Counted in the ownership arithmetic and shown in owner lists, but
     /// never an audience: it is not sent owner updates, invited to the portal, or asked questions.
