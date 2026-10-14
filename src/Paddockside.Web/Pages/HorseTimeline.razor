@@ -42,7 +42,56 @@
         }
 
         <section class="grid grid-cols-[minmax(0,1fr)] gap-4" aria-labelledby="events-heading">
-            <h2 id="events-heading">Events</h2>
+            <div class="flex flex-wrap items-center justify-between gap-3">
+                <h2 id="events-heading">Events</h2>
+                @if (!_creating)
+                {
+                    <button type="button" class="btn-primary" @onclick="StartCreating">New event</button>
+                }
+            </div>
+
+            @if (_creating && _types is not null)
+            {
+                <form class="card grid gap-4" @onsubmit="CreateAsync" @onsubmit:preventDefault aria-labelledby="new-event-heading">
+                    <h3 id="new-event-heading" class="font-heading">New event for @_horse.Name</h3>
+                    <fieldset class="grid gap-2">
+                        <legend class="field-label mb-2">What kind</legend>
+                        <div class="flex flex-wrap gap-2">
+                            @foreach (var type in _types)
+                            {
+                                var selected = _type?.Code == type.Code;
+                                <label class="inline-flex min-h-control cursor-pointer items-center gap-2 rounded-control border px-4 @(selected ? "border-action-primary-bg bg-action-secondary-bg font-strong" : "border-border-strong")">
+                                    <input type="radio" name="event-type" class="size-[18px] accent-action-primary-bg" checked="@selected" @onchange="() => _type = type" />
+                                    @type.Name
+                                </label>
+                            }
+                        </div>
+                    </fieldset>
+                    <div class="grid gap-4 sm:grid-cols-2">
+                        <div class="field">
+                            <label class="field-label" for="event-title">Title</label>
+                            <input id="event-title" class="input" @bind="_title" placeholder="@(_type?.TitleExample)" />
+                        </div>
+                        <div class="field">
+                            <label class="field-label" for="event-date">@(_type?.KeyDateLabel ?? "Date")</label>
+                            <input id="event-date" class="input" type="date" @bind="_date" @bind:format="yyyy-MM-dd" />
+                        </div>
+                    </div>
+                    <label class="inline-flex min-h-control cursor-pointer items-center gap-2">
+                        <input type="checkbox" class="size-[18px] accent-action-primary-bg" @bind="_openNow" />
+                        Open it now, so owners can see it
+                    </label>
+                    <p class="field-hint">@(_openNow ? "Owners see it on their timeline straight away; nothing is sent until you write to them." : "Saved as a draft: owners can't see it and nothing can be sent from it until you open it.")</p>
+                    @if (_createError is not null)
+                    {
+                        <Error Message="@_createError" />
+                    }
+                    <div class="flex flex-wrap gap-3">
+                        <button type="submit" class="btn-primary" disabled="@_busy">@(_openNow ? "Create and open" : "Save as draft")</button>
+                        <button type="button" class="btn-secondary" @onclick="() => _creating = false">Cancel</button>
+                    </div>
+                </form>
+            }
             @if (_events is { Count: 0 })
             {
                 <div class="card"><p>No events yet for @_horse.Name.</p></div>
@@ -65,6 +114,39 @@
     private List<EventSummary>? _events;
     private string? _error;
     private bool _copied;
+    private bool _creating;
+    private bool _busy;
+    private bool _openNow = true;
+    private List<EventTypeOption>? _types;
+    private EventTypeOption? _type;
+    private string? _title;
+    private DateOnly? _date;
+    private string? _createError;
+
+    private async Task StartCreating()
+    {
+        _types ??= (await Api.EventTypesAsync()).Value ?? [];
+        _type ??= _types.FirstOrDefault();
+        (_creating, _createError) = (true, null);
+    }
+
+    private async Task CreateAsync()
+    {
+        _createError = _type is null ? "Choose what kind of event it is." : string.IsNullOrWhiteSpace(_title) ? $"Give it a title, for example \"{_type.TitleExample}\"." : null;
+        if (_createError is not null) return;
+
+        _busy = true;
+        try
+        {
+            var result = await Api.CreateEventAsync(Id, _type!.Code, _title!.Trim(), _date?.ToString("yyyy-MM-dd"), _openNow);
+            if (!result.Succeeded) { _createError = result.Error; return; }
+            Navigation.NavigateTo($"events/{result.Value!.Id}");
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
 
     private async Task Copy(string text)
     {

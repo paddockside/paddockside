@@ -180,6 +180,9 @@ public static class EventEndpoints
 
         var e = await db.Events.SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
         if (e is null) return Results.NotFound();
+        // Nothing is sent from a draft (event-library.md §2); staff notes are fine.
+        if (e.Status == EventStatus.Draft && request.Audience != "InternalNote")
+            return Problem("This event is still a draft: owners can't see it and nothing is sent. Open it first, or add a staff note.");
         if (string.IsNullOrWhiteSpace(request.Body)) return Problem("Write something first.");
 
         var horse = await db.Horses.Include(h => h.ManagementPeriods).Include(h => h.Interests).AsSplitQuery()

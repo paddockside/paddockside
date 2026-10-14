@@ -127,6 +127,7 @@ app.MapAuthEndpoints();
 app.MapHorseEndpoints();
 app.MapEventEndpoints();
 app.MapTicketEndpoints();
+app.MapEventLifecycleEndpoints();
 app.MapInboundEndpoints();
 app.MapClientAuthEndpoints();
 app.MapOwnerEndpoints();

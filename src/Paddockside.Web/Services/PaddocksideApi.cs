@@ -64,6 +64,10 @@ public sealed record TicketsView(Guid EventId, string EventTitle, Guid HorseId, 
 
 public sealed record TicketsConfirmed(int Told);
 
+public sealed record EventTypeOption(string Code, string Name, string KeyDateLabel, string TitleExample);
+
+public sealed record CreatedEvent(Guid Id);
+
 public sealed record ComposeRequest(string Audience, string Scope, string? Step, string Channel, IReadOnlyList<Guid> NamedParties, string Body, PromptRequest? Prompt = null);
 
 public sealed record Posted(Guid Id, int Recipients);
@@ -196,6 +200,13 @@ public sealed class PaddocksideApi(HttpClient http)
     public Task<ApiResult<EventPage>> EventAsync(Guid id) => GetAsync<EventPage>($"api/events/{id}");
 
     public Task<ApiResult<Posted>> PostToEventAsync(Guid id, ComposeRequest request) => PostAsync<Posted>($"api/events/{id}/items", request);
+
+    public Task<ApiResult<List<EventTypeOption>>> EventTypesAsync() => GetAsync<List<EventTypeOption>>("api/event-types");
+
+    public Task<ApiResult<CreatedEvent>> CreateEventAsync(Guid horseId, string type, string title, string? keyDate, bool open) =>
+        PostAsync<CreatedEvent>($"api/horses/{horseId}/events", new { type, title, keyDate, open });
+
+    public Task<ApiResult<object>> OpenEventAsync(Guid eventId) => PostAsync<object>($"api/events/{eventId}/open", new { });
 
     public Task<ApiResult<TicketsView>> TicketsAsync(Guid eventId) => GetAsync<TicketsView>($"api/events/{eventId}/tickets");
 

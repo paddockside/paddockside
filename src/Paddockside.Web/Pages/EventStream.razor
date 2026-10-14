@@ -45,6 +45,14 @@
         <h1 class="sr-only">@_page.Event.Title</h1>
         <EventCard Model="_page.Event.ToCard()" />
 
+        @if (_page.Event.Status == "Draft")
+        {
+            <section class="flex flex-wrap items-center gap-3 rounded-control bg-status-warning-bg px-4 py-3 text-status-warning-fg" aria-label="Draft">
+                <p class="flex-1"><strong>Draft.</strong> Owners can't see this event and nothing can be sent from it. Staff notes are fine.</p>
+                <button type="button" class="btn-primary" disabled="@_busy" @onclick="OpenEventAsync">Open event</button>
+            </section>
+        }
+
         @if (_page.Tickets is { } tickets)
         {
             <a href="events/@Id/tickets" class="card flex flex-wrap items-center justify-between gap-2 hover:border-border-strong">
@@ -148,6 +156,22 @@
 
         var events = await Api.HorseEventsAsync(_page!.HorseId);
         _events = events.Succeeded ? events.Value : null; // the rail is a convenience; the page works without it
+    }
+
+    private async Task OpenEventAsync()
+    {
+        (_busy, _error, _saved) = (true, null, null);
+        try
+        {
+            var result = await Api.OpenEventAsync(Id);
+            if (result.Succeeded) _saved = "Opened. Owners can see it now; nothing is sent until you write to them.";
+            else _error = result.Error;
+            await Load();
+        }
+        finally
+        {
+            _busy = false;
+        }
     }
 
     /// <summary>Staff set an owner's answer; the tally reloads from the server.</summary>
