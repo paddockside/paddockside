@@ -55,3 +55,17 @@ public sealed class PromptTests
         Assert.Throws<DomainException>(() => new PromptAnswer(plain, Guid.NewGuid(), "2", AnswerSource.Portal, "Ann", On(2026, 10, 1)));
     }
 }
+
+/// <summary>A question can be the whole message (David's tickets test, 14 Oct 2026).</summary>
+public sealed class QuestionOnlyMessageTests
+{
+    [Fact]
+    public void A_message_may_be_just_a_question_but_not_empty()
+    {
+        var s = new Stable();
+        var asked = StreamItem.Message(s.Horse, null, null, "", StreamItemScope.Owners, Stable.On(2026, 10, 1), "Kate",
+            prompt: MessagePrompt.Count("How many owners tickets would you like?"));
+        Assert.Equal("", asked.Body);
+        Assert.Throws<DomainException>(() => StreamItem.Message(s.Horse, null, null, " ", StreamItemScope.Owners, Stable.On(2026, 10, 1), "Kate"));
+    }
+}

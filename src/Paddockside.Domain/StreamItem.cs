@@ -194,7 +194,7 @@ public sealed class StreamItem
         string? stepCode = null,
         MessagePrompt? prompt = null)
     {
-        if (string.IsNullOrWhiteSpace(body)) throw new DomainException("A message needs a body.");
+        if (string.IsNullOrWhiteSpace(body) && prompt is null) throw new DomainException("A message needs a body."); // a question alone is enough
         if (scope == StreamItemScope.Internal) throw new DomainException("An internal item is a note, not a message.");
         return new StreamItem(horse, @event, StreamItemKind.Message, scope, StreamItemDirection.Outbound, sentAt, body, namedPartyIds: namedPartyIds, stepCode: stepCode)
         {

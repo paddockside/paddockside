@@ -117,7 +117,7 @@
     }
 
     <div class="field">
-        <label class="field-label" for="@_id-body">@(_audience == Audience.InternalNote ? "Note" : "Message")</label>
+        <label class="field-label" for="@_id-body">@(_audience == Audience.InternalNote ? "Note" : _asking && _audience == Audience.Owners ? "Message (optional when asking a question)" : "Message")</label>
         <textarea id="@_id-body" class="input min-h-[8rem] py-3" @bind="_body" @bind:event="oninput" aria-describedby="@(_error is null ? null : $"{_id}-error")"></textarea>
     </div>
 
@@ -214,7 +214,7 @@
 
     private async Task Submit()
     {
-        _error = string.IsNullOrWhiteSpace(_body) ? "Write something first."
+        _error = string.IsNullOrWhiteSpace(_body) && Prompt is null ? "Write something first, or ask a question."
             : _scope == Scope.NamedParties && _named.Count == 0 ? "Choose at least one owner."
             : Prompt is { } p && p.Question.Length == 0 ? "Write the question, or untick \"Ask a question\"."
             : Prompt is { Kind: "Choice" } c && c.Options!.Count < 2 ? "Give at least two choices, one per line."

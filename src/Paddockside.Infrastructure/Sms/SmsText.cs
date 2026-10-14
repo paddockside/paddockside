@@ -24,7 +24,7 @@ public static class SmsText
             : link is null ? "Reply to this text to answer." : $"Open: {link} or reply to this text.";
         var summary = Plain(body);
 
-        var full = $"{head} {summary} {tail}";
+        var full = summary.Length == 0 ? $"{head} {tail}" : $"{head} {summary} {tail}";
         var limit = Limit(full);
         if (full.Length <= limit) return full;
 

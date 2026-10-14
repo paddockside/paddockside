@@ -87,18 +87,17 @@
                     </fieldset>
                 }
 
-                @if (item.CanReply)
+                @if (item.CanReply && item.Prompt is not null)
                 {
-                    <form class="grid gap-3" @onsubmit="() => ReplyAsync(item)" @onsubmit:preventDefault>
-                        <label for="reply-@item.Id" class="font-strong">Reply to @TenantName</label>
-                        <textarea id="reply-@item.Id" rows="3" class="rounded-control border border-border-strong bg-surface-raised p-4"
-                                  @bind="_drafts[item.Id]" placeholder="Only @TenantName will see this."></textarea>
-                        <button type="submit" class="btn-primary justify-self-start" disabled="@(_sending == item.Id)">Send reply</button>
-                        @if (_replyError.TryGetValue(item.Id, out var problem))
-                        {
-                            <p class="font-strong text-status-danger-fg" role="alert">@problem</p>
-                        }
-                    </form>
+                    @* Under a question the answer buttons are the reply; words are extra, so they wait behind a link. *@
+                    <details class="grid gap-3" open="@_replyError.ContainsKey(item.Id)">
+                        <summary class="btn-link cursor-pointer">Add a message for @TenantName (optional)</summary>
+                        @ReplyForm(item, "Your message", "btn-secondary")
+                    </details>
+                }
+                else if (item.CanReply)
+                {
+                    @ReplyForm(item, $"Reply to {TenantName}", "btn-primary")
                 }
             </section>
         }
@@ -168,6 +167,20 @@
     }
 
     private async Task FocusContact() => await JS.InvokeAsync<bool>("paddockside.scrollToItem", "contact-body");
+
+    private RenderFragment ReplyForm(OwnerItem item, string label, string buttonClass) => __builder =>
+    {
+        <form class="mt-3 grid gap-3" @onsubmit="() => ReplyAsync(item)" @onsubmit:preventDefault>
+            <label for="reply-@item.Id" class="font-strong">@label</label>
+            <textarea id="reply-@item.Id" rows="3" class="rounded-control border border-border-strong bg-surface-raised p-4"
+                      @bind="_drafts[item.Id]" placeholder="Only @TenantName will see this."></textarea>
+            <button type="submit" class="@buttonClass justify-self-start" disabled="@(_sending == item.Id)">Send</button>
+            @if (_replyError.TryGetValue(item.Id, out var problem))
+            {
+                <p class="font-strong text-status-danger-fg" role="alert">@problem</p>
+            }
+        </form>
+    };
 
     private Guid? _answering;
     private readonly Dictionary<Guid, string> _answerError = [];

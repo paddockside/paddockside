@@ -188,7 +188,7 @@ public sealed partial class OwnerSignInTests
         var posted = (await (await staff.PostApiAsync($"/api/events/{seed.EventId}/items", new
         {
             audience = "Owners", scope = "Owners", step = "Result", channel = "Preferred", namedParties = (Guid[]?)null,
-            body = "She ran second.", prompt = new { kind = "YesNo", question = "Will you come to the presentation?" },
+            body = "", prompt = new { kind = "YesNo", question = "Will you come to the presentation?" }, // the question alone is the message
         })).Content.ReadFromJsonAsync<Sent>())!;
         await DispatchTextsAsync();
         Assert.Contains("Will you come to the presentation? Reply with your answer", Api.Texts.Sent.Last(t => t.To == Mobile(seed)).Body);

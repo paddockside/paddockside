@@ -469,6 +469,7 @@ public static class OwnerEndpoints
         var text = item.Kind == StreamItemKind.Fact
             ? string.Join(" · ", item.Fields.Take(3).Select(f => $"{f.Label}: {f.Value}"))
             : string.Join(' ', item.Body.Split((char[])['\n', '\r'], StringSplitOptions.RemoveEmptyEntries));
+        if (text.Length == 0 && item.Prompt is { } prompt) text = prompt.Question; // a message that is only a question
         return text.Length <= 140 ? text : text[..140] + "…";
     }
 }

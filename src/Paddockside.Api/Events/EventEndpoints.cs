@@ -183,7 +183,8 @@ public static class EventEndpoints
         // Nothing is sent from a draft (event-library.md §2); staff notes are fine.
         if (e.Status == EventStatus.Draft && request.Audience != "InternalNote")
             return Problem("This event is still a draft: owners can't see it and nothing is sent. Open it first, or add a staff note.");
-        if (string.IsNullOrWhiteSpace(request.Body)) return Problem("Write something first.");
+        // A question can be the whole message; anything else needs words.
+        if (string.IsNullOrWhiteSpace(request.Body) && !(request.Audience == "Owners" && request.Prompt is not null)) return Problem("Write something first.");
 
         var horse = await db.Horses.Include(h => h.ManagementPeriods).Include(h => h.Interests).AsSplitQuery()
             .SingleAsync(h => h.Id == e.HorseId, cancellationToken);
@@ -235,7 +236,7 @@ public static class EventEndpoints
                     }
                 }
 
-                item = StreamItem.Message(horse, e, null, request.Body.Trim(), scope, now, author, scope == StreamItemScope.NamedParties ? named : null, stepCode, prompt);
+                item = StreamItem.Message(horse, e, null, (request.Body ?? "").Trim(), scope, now, author, scope == StreamItemScope.NamedParties ? named : null, stepCode, prompt);
                 // Recipients are worked out now, at send time, and each gets its own routing token (messaging-channels.md §1).
                 db.StreamItems.Add(item);
                 deliveries = await OutboundQueue.QueueAsync(db, tenant, horse, e, item, ToChannel(request.Channel), texts.IsConfigured, now, cancellationToken);
