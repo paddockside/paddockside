@@ -9,9 +9,10 @@ using Paddockside.Infrastructure.Identity;
 //   dotnet run --project tools/Paddockside.Ops -- grant-operator you@example.com
 //   dotnet run --project tools/Paddockside.Ops -- revoke-operator you@example.com
 //
-// Until staff can manage owners in the app (build plan Sprint 4), two setup commands for test owners:
+// Until staff can manage owners in the app (build plan Sprint 4), setup commands for test owners:
 //   dotnet run --project tools/Paddockside.Ops -- list-horses laureloak
 //   dotnet run --project tools/Paddockside.Ops -- add-owner laureloak "Faultless Miss" someone@example.com "Their Name" 5
+//   dotnet run --project tools/Paddockside.Ops -- set-mobile laureloak someone@example.com "0412 345 678"
 //
 // It connects to the dev database as you (az login), with the connection string from Key Vault; set
 // ConnectionStrings__Paddockside to point it elsewhere. Granting needs an existing Paddockside sign-in; after the
@@ -69,7 +70,10 @@ switch (args)
     case ["add-owner", var slug, var horseName, var ownerAddress, var name, var percent]:
         return await Owners.AddOwnerAsync(connection, slug, horseName, ownerAddress, name, percent);
 
+    case ["set-mobile", var slug, var ownerEmail, var mobile]:
+        return await Owners.SetMobileAsync(connection, slug, ownerEmail, mobile);
+
     default:
-        Console.Error.WriteLine("Usage: list-operators | grant-operator <email> | revoke-operator <email> | list-horses <business> | add-owner <business> <horse> <email> <name> <percent>");
+        Console.Error.WriteLine("Usage: list-operators | grant-operator <email> | revoke-operator <email> | list-horses <business> | add-owner <business> <horse> <email> <name> <percent> | set-mobile <business> <email> <mobile>");
         return 2;
 }

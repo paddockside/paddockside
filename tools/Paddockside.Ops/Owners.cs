@@ -94,6 +94,33 @@ internal static class Owners
         return 0;
     }
 
+    /// <summary>Gives the owner with this email a mobile number, so they can sign in by text and be sent texts.</summary>
+    public static async Task<int> SetMobileAsync(string connection, string slug, string address, string mobile)
+    {
+        if (await TenantAsync(connection, slug) is not { } tenant) return 1;
+        await using var db = For(connection, tenant.Id);
+        var normalised = address.Trim().ToLowerInvariant();
+        var party = (await db.Parties.ToListAsync()).FirstOrDefault(p => p.Contacts.Any(c => c.Kind == ContactKind.Email && c.Value == normalised));
+        if (party is null)
+        {
+            Console.Error.WriteLine($"No owner with the email {normalised} in {tenant.Name}.");
+            return 1;
+        }
+
+        try
+        {
+            var contact = party.AddMobile(mobile);
+            await db.SaveChangesAsync();
+            Console.WriteLine($"{party.DisplayName} ({normalised}) now has the mobile {contact.Value} with {tenant.Name}.");
+            return 0;
+        }
+        catch (DomainException ex)
+        {
+            Console.Error.WriteLine(ex.Message);
+            return 1;
+        }
+    }
+
     private static async Task<Tenant?> TenantAsync(string connection, string slug)
     {
         await using var any = For(connection, null);
