@@ -20,6 +20,7 @@ internal sealed class TenantConfiguration : IEntityTypeConfiguration<Tenant>
         b.Property(x => x.PriorManagementPeriodsVisible);
         b.Property(x => x.InviteOwnersOnFirstInterest).HasDefaultValue(true);
         b.Property(x => x.OwnersSeeCoOwners);
+        b.Property(x => x.HousePartyId);
         b.Property(x => x.Slug).HasMaxLength(30);
         b.Property(x => x.LogoUrl).HasMaxLength(500);
         b.Property(x => x.FooterDetails).HasMaxLength(500);

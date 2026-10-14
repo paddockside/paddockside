@@ -906,6 +906,9 @@ namespace Paddockside.Infrastructure.Persistence.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("nvarchar(500)");
 
+                    b.Property<Guid?>("HousePartyId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<bool>("InviteOwnersOnFirstInterest")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("bit")

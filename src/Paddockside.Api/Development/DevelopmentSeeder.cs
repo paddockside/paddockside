@@ -65,6 +65,7 @@ public static class DevelopmentSeeder
         var bought = new DateTimeOffset(2024, 3, 1, 0, 0, 0, TimeSpan.FromHours(10));
         var syndicate = new HoldingEntity(tenant.Id, "Laurel Oak Bloodstock", HoldingEntityType.ManagedSyndicate);
         var house = new Party(tenant.Id, "Laurel Oak house share", PartyKind.Organisation);
+        tenant.SetHouseParty(house);
         var owners = new[] { "Margaret Hale", "Tom Okafor", "Priya Nair", "Graham Lowe" }.Select(n => new Party(tenant.Id, n)).ToArray();
 
         var mare = new Horse(tenant.Id, "Faultless Miss", HorseNameKind.Registered, bought);

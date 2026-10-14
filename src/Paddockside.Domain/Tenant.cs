@@ -52,6 +52,20 @@ public sealed class Tenant
     /// </summary>
     public bool OwnersSeeCoOwners { get; set; }
 
+    /// <summary>
+    /// The party that is the business itself, holding its house share in horses (ownership-model.md: "Laurel Oak
+    /// as an ordinary party holding an interest"). Counted in the ownership arithmetic and shown in owner lists, but
+    /// never an audience: it is not sent owner updates, invited to the portal, or asked questions.
+    /// </summary>
+    public Guid? HousePartyId { get; private set; }
+
+    public void SetHouseParty(Party party)
+    {
+        if (party.TenantId != Id) throw new DomainException("The house share belongs to this business.");
+        if (party.Kind != PartyKind.Organisation) throw new DomainException("The house share is the business, not a person.");
+        HousePartyId = party.Id;
+    }
+
     public void SetBranding(string slug, string? logoUrl, string? footerDetails)
     {
         Slug = NormaliseSlug(slug);

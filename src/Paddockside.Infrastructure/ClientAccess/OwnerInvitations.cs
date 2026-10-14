@@ -46,7 +46,7 @@ public static class OwnerInvitations
         var queued = 0;
         foreach (var interest in added.OrderBy(i => i.EffectiveFrom))
         {
-            if (!skip.Add(interest.PartyId)) continue;
+            if (interest.PartyId == tenant.HousePartyId || !skip.Add(interest.PartyId)) continue; // the business never invites itself
             db.OwnerInvitations.Add(new OwnerInvitation(tenant.Id, interest.PartyId, interest.HorseId, at));
             queued++;
         }

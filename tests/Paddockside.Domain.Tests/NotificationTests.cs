@@ -70,3 +70,23 @@ public sealed class NotificationTests
         Assert.Throws<DomainException>(() => new NotificationPreference(owner, NotificationCategories.Results, DeliveryChannel.Portal, false, On(2026, 10, 1)));
     }
 }
+
+/// <summary>The business's own house share: an owner in the arithmetic, never an audience.</summary>
+public sealed class HouseShareTests
+{
+    [Fact]
+    public void The_house_share_holds_an_interest_but_is_never_sent_anything()
+    {
+        var s = new Stable();
+        var house = new Party(s.Tenant.Id, "Laurel Oak house share", PartyKind.Organisation);
+        s.Horse.AddInterest(house, s.Syndicate, 100, Stable.Purchased);
+        var ann = s.Owner("Ann", 900);
+        s.Tenant.SetHouseParty(house);
+
+        Stable.AssertParties(s.Audience(s.Item(Stable.On(2026, 10, 1))), ann);
+        Assert.Contains(s.Horse.Interests, i => i.PartyId == house.Id && i.IsActive); // still counts as a share
+
+        Assert.Throws<DomainException>(() => s.Tenant.SetHouseParty(s.NewParty("A person")));
+        Assert.Throws<DomainException>(() => s.Tenant.SetHouseParty(new Party(Guid.NewGuid(), "Another business", PartyKind.Organisation)));
+    }
+}

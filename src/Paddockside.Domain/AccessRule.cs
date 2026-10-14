@@ -61,8 +61,9 @@ public static class AccessRule
         var period = horse.CurrentManagementPeriod;
         if (period is null) return new HashSet<Guid>();
 
+        // The business's own house share holds an interest but is never sent anything (Tenant.HousePartyId).
         return horse.Interests
-            .Where(i => i.ManagementPeriodId == period.Id && i.IsActive)
+            .Where(i => i.ManagementPeriodId == period.Id && i.IsActive && i.PartyId != tenant.HousePartyId)
             .Select(i => i.PartyId)
             .Where(partyId => ClientCanSee(partyId, tenant, horse, item))
             .ToHashSet();
