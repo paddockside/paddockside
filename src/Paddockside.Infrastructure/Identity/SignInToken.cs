@@ -16,6 +16,9 @@ public enum SignInTokenPurpose
 
     /// <summary>An invitation to the portal (14 days).</summary>
     Invitation,
+
+    /// <summary>A staff member choosing a new password (30 minutes).</summary>
+    PasswordReset,
 }
 
 /// <summary>

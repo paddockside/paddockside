@@ -119,6 +119,39 @@ public sealed class OwnerEmailRenderer
             TextFrame(text, null, "Paddockside", null, why));
     }
 
+    /// <summary>"Choose a new password": the staff reset link, once, for <paramref name="minutes"/> minutes.</summary>
+    public RenderedEmail RenderPasswordReset(string link, int minutes)
+    {
+        var html = new StringBuilder()
+            .Append(Heading("Choose a new password"))
+            .Append(Paragraph($"You asked to choose a new Paddockside password. The button works once, for the next {minutes} minutes."))
+            .Append(Button(link, "Choose a new password"))
+            .Append(Destination(link))
+            .Append(Muted("You will still need your authenticator app to sign in afterwards. If you did not ask for this, ignore this email: your password stays as it is."));
+        var text = $"Choose a new password\n\nYou asked to choose a new Paddockside password. This link works once, for the next {minutes} minutes:\n{link}\n\n" +
+                   "You will still need your authenticator app to sign in afterwards. If you did not ask for this, ignore this email: your password stays as it is.\n";
+        const string why = "You are receiving this because someone asked to reset the password for this address on the Paddockside sign-in page.";
+        return new RenderedEmail("Choose a new Paddockside password",
+            Frame(Senders.Product, null, null, "Choose a new password", "The link works once, for 30 minutes.", html.ToString(), null, why),
+            TextFrame(text, null, Senders.Product, null, why));
+    }
+
+    /// <summary>Sent after a reset, so a change the owner of the inbox did not make is noticed.</summary>
+    public RenderedEmail RenderPasswordChanged(string? signInLink)
+    {
+        var html = new StringBuilder()
+            .Append(Heading("Your password was changed"))
+            .Append(Paragraph("Your Paddockside password was just changed using a reset link, and any other signed-in devices were signed out."));
+        if (signInLink is not null) html.Append(Button(signInLink, "Sign in")).Append(Destination(signInLink));
+        html.Append(Muted("If this was not you, reply to this email or contact Paddockside straight away."));
+        var text = "Your Paddockside password was just changed using a reset link, and any other signed-in devices were signed out.\n\n" +
+                   (signInLink is null ? "" : $"Sign in: {signInLink}\n\n") + "If this was not you, reply to this email or contact Paddockside straight away.\n";
+        const string why = "You are receiving this because the password for this address was changed.";
+        return new RenderedEmail("Your Paddockside password was changed",
+            Frame(Senders.Product, null, null, "Your password was changed", "Any other signed-in devices were signed out.", html.ToString(), null, why),
+            TextFrame(text, null, Senders.Product, null, why));
+    }
+
     private static string E(string s) => WebUtility.HtmlEncode(s);
 
     private static readonly string Font = $"font-family:{E(T.FontUi)}";

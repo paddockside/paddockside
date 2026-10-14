@@ -62,6 +62,7 @@ public static class DependencyInjection
         });
         services.AddScoped<ClientAccess.ClientSignIn>();
         services.AddScoped<Identity.StaffInvitations>();
+        services.AddScoped<Identity.StaffPasswordReset>();
         return services;
     }
 

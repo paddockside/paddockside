@@ -39,6 +39,9 @@ public static class AuthEndpoints
         auth.MapGet("/enrolment", StartEnrolment);
         auth.MapPost("/enrolment", CompleteEnrolment);
         auth.MapPost("/sign-out", (Delegate)SignOut);
+        auth.MapPost("/forgot-password", ForgotPassword);
+        auth.MapPost("/reset-password/check", CheckReset);
+        auth.MapPost("/reset-password", ResetPassword);
         app.MapGet("/api/auth/me", Me).RequireAuthorization(StaffPolicy.Name);
         app.MapGet("/api/auth/tenants", StaffTenants).RequireAuthorization(StaffPolicy.Name);
         app.MapPost("/api/auth/switch", SwitchTenant).RequireAuthorization(StaffPolicy.Name);
@@ -47,6 +50,12 @@ public static class AuthEndpoints
     public sealed record PasswordRequest(string Email, string Password);
 
     public sealed record CodeRequest(string Code);
+
+    public sealed record ForgotRequest(string Email);
+
+    public sealed record ResetRequest(string Token, string Password);
+
+    public sealed record ResetCheck(string Token);
 
     /// <summary>What the client must do next: "totp" (enter a code) or "enrol" (set up an authenticator).</summary>
     public sealed record NextStep(string Next);
@@ -121,6 +130,31 @@ public static class AuthEndpoints
         if (await identity.ActiveStaffMembershipAsync(person.Id) is { } membership)
             await audit.RecordAsync(membership.TenantId, action, summary, "Person", person.Id, actor: (person.Id, person.Email ?? person.UserName ?? "Unknown"));
     }
+
+    /// <summary>
+    /// "Forgot your password?": the same answer whatever the address, so the page never says who has an account.
+    /// </summary>
+    private static async Task<IResult> ForgotPassword(ForgotRequest request, StaffPasswordReset reset, CancellationToken cancellationToken)
+    {
+        if (!string.IsNullOrWhiteSpace(request.Email)) await reset.RequestAsync(request.Email, cancellationToken);
+        return Results.Accepted();
+    }
+
+    private static async Task<IResult> CheckReset(ResetCheck request, StaffPasswordReset reset, CancellationToken cancellationToken) =>
+        await reset.IsOpenAsync(request.Token, cancellationToken) ? Results.NoContent() : ResetLinkGone();
+
+    private static async Task<IResult> ResetPassword(ResetRequest request, StaffPasswordReset reset, PaddocksideIdentityDbContext identity, AuditLog audit,
+        CancellationToken cancellationToken)
+    {
+        var outcome = await reset.ResetAsync(request.Token, request.Password, cancellationToken);
+        if (outcome.Person is null) return ResetLinkGone();
+        if (!outcome.Succeeded) return Results.Problem(statusCode: StatusCodes.Status400BadRequest, title: outcome.Problem);
+        await AuditStaffAsync(audit, identity, outcome.Person, "auth.password-reset", "Chose a new password using an emailed reset link");
+        return Results.NoContent();
+    }
+
+    private static IResult ResetLinkGone() => Results.Problem(statusCode: StatusCodes.Status410Gone,
+        title: "This link has been used or has expired. Ask for a new one from the sign-in page.");
 
     /// <summary>
     /// Shows the authenticator key — only to someone who has just passed the password step and has never

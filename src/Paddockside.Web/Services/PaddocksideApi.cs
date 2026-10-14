@@ -236,6 +236,12 @@ public sealed class PaddocksideApi(HttpClient http)
 
     public Task<ApiResult<NextStep>> AcceptInvitationAsync(string token, string password) => PostAsync<NextStep>("api/join/accept", new { token, password });
 
+    public Task<ApiResult<object>> ForgotPasswordAsync(string email) => PostAsync<object>("api/auth/forgot-password", new { email });
+
+    public Task<ApiResult<object>> CheckResetLinkAsync(string token) => PostAsync<object>("api/auth/reset-password/check", new { token });
+
+    public Task<ApiResult<object>> ResetPasswordAsync(string token, string password) => PostAsync<object>("api/auth/reset-password", new { token, password });
+
     // ---- Owner sign-in and portal --------------------------------------------------------------------------------
 
     public Task<ApiResult<object>> RequestEmailLinkAsync(string email, string? returnPath) =>
