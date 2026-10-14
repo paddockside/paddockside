@@ -88,7 +88,18 @@ public sealed record InboundView(
     string? Horse,
     Guid? EventId,
     string? Event,
-    List<AttachmentView> Attachments);
+    List<AttachmentView> Attachments,
+    string? Waiting = null,
+    List<CandidateView>? Candidates = null,
+    string Channel = "Email");
+
+public sealed record HorseItem(Guid Id, string Kind, string At, string? Title, string Body, string? Author, string? Channel);
+
+public sealed record CandidateView(Guid HorseId, string Horse, Guid? EventId, string? Event, int Score, List<string> Reasons);
+
+public sealed record PlaceOption(Guid HorseId, string Horse, List<EventOption> Events);
+
+public sealed record EventOption(Guid Id, string Title, string KeyDate);
 
 public sealed record StaffTenantOption(Guid Id, string Name, string Role, bool Current);
 
@@ -162,7 +173,7 @@ public sealed record SignedIn(string Destination);
 public sealed record LinkOutcome(string? Destination, string? Error, string? ReturnPath);
 
 /// <summary>Held is null unless the signed-in person is a tenant admin.</summary>
-public sealed record InboundCounts(int Pending, int Placed, int Ignored, int? Held);
+public sealed record InboundCounts(int Pending, int Placed, int Ignored, int? Held, int Waiting = 0, int Suggested = 0, string? Ages = null, string? MedianToPlace = null);
 
 /// <summary>The outcome of a call: a value, or a message that can be shown to the person as it is.</summary>
 public sealed record ApiResult<T>(T? Value, string? Error, HttpStatusCode Status)
@@ -222,6 +233,15 @@ public sealed class PaddocksideApi(HttpClient http)
     public Task<ApiResult<List<InboundView>>> InboundAsync(string state) => GetAsync<List<InboundView>>($"api/inbound?state={Uri.EscapeDataString(state)}");
 
     public Task<ApiResult<InboundCounts>> InboundCountsAsync() => GetAsync<InboundCounts>("api/inbound/counts");
+
+    public Task<ApiResult<List<HorseItem>>> OnTheHorseAsync(Guid horseId) => GetAsync<List<HorseItem>>($"api/horses/{horseId}/unplaced");
+
+    public Task<ApiResult<List<PlaceOption>>> InboundPlacesAsync() => GetAsync<List<PlaceOption>>("api/inbound/places");
+
+    public Task<ApiResult<object>> PlaceInboundAsync(Guid id, Guid horseId, Guid? eventId) =>
+        PostAsync<object>($"api/inbound/{id}/place", new { horseId, eventId });
+
+    public Task<ApiResult<object>> DismissInboundAsync(Guid id, bool spam) => PostAsync<object>($"api/inbound/{id}/{(spam ? "spam" : "ignore")}", new { });
 
     public Task<ApiResult<List<StaffTenantOption>>> StaffTenantsAsync() => GetAsync<List<StaffTenantOption>>("api/auth/tenants");
 

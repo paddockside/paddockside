@@ -41,6 +41,25 @@
             </section>
         }
 
+        @if (_onHorse is { Count: > 0 })
+        {
+            <section class="grid grid-cols-[minmax(0,1fr)] gap-3" aria-labelledby="on-horse-heading">
+                <h2 id="on-horse-heading">On the horse, not on an event</h2>
+                <p class="text-small text-text-muted">Mail to @_horse.Name's address when no event was open, and mail left here from the queue. Staff only.</p>
+                @foreach (var item in _onHorse)
+                {
+                    <article class="card grid gap-2">
+                        <p class="text-small text-text-muted">@(item.Author ?? "Unknown sender") · @item.At@(item.Channel is null ? null : $" · by {item.Channel.ToLowerInvariant()}")</p>
+                        @if (item.Title is not null)
+                        {
+                            <p class="font-strong">@item.Title</p>
+                        }
+                        <p class="line-clamp-2 whitespace-pre-line break-words">@item.Body</p>
+                    </article>
+                }
+            </section>
+        }
+
         <section class="grid grid-cols-[minmax(0,1fr)] gap-4" aria-labelledby="events-heading">
             <div class="flex flex-wrap items-center justify-between gap-3">
                 <h2 id="events-heading">Events</h2>
@@ -114,6 +133,7 @@
     private List<EventSummary>? _events;
     private string? _error;
     private bool _copied;
+    private List<HorseItem>? _onHorse;
     private bool _creating;
     private bool _busy;
     private bool _openNow = true;
@@ -166,6 +186,7 @@
         if (!horse.Succeeded) { _error = horse.Error; return; }
         _horse = horse.Value;
 
+        _onHorse = (await Api.OnTheHorseAsync(Id)).Value;
         var events = await Api.HorseEventsAsync(Id);
         if (events.Succeeded) _events = events.Value;
         else _error = events.Error;

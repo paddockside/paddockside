@@ -222,6 +222,73 @@ public sealed class InboundEmailTests(IsolationDatabase db, ApiFactoryFixture ap
 
     private sealed record PostmarkPayload(string MessageId, byte[] Bytes);
 
+    private sealed record QueueCandidate(Guid HorseId, string Horse, Guid? EventId, string? Event, int Score, List<string> Reasons);
+
+    private sealed record QueueItem(Guid Id, string State, string? Subject, Guid? HorseId, Guid? EventId, string? Waiting, List<QueueCandidate>? Candidates);
+
+    private sealed record QueueCounts(int Waiting, int Suggested, string? Ages);
+
+    [Fact]
+    public async Task Mail_to_a_general_address_naming_a_horse_is_suggested_and_confirmed_in_one_click()
+    {
+        var seed = await SeedTenantAsync(eventInWindow: true);
+        var payload = Payload($"office@{seed.Slug}.in.paddockside.com.au", "someone@partner.test", "Bel Esprit for Caulfield", "Track was heavy, she handled it.");
+        await InboundAsync(payload);
+        await ProcessQueueAsync();
+
+        var message = await InboundFor(seed.TenantId, payload.MessageId);
+        Assert.Equal((InboundState.Suggested, seed.HorseId, seed.EventId, 3), (message.State, message.HorseId, message.EventId, message.MatchTier));
+        Assert.Contains("Bel Esprit named in the subject", message.Reason);
+
+        using var coordinator = await Api.SignedInAsync(seed.TenantId, MemberRole.Coordinator);
+        var queue = (await coordinator.GetFromJsonAsync<List<QueueItem>>("/api/inbound?state=Waiting"))!;
+        var waiting = queue.Single(q => q.Id == message.Id);
+        Assert.StartsWith("Waiting", waiting.Waiting);
+        Assert.Contains(waiting.Candidates!, c => c.EventId == seed.EventId && c.Reasons.Contains("\"Caulfield\" mentioned"));
+        Assert.Equal(1, (await coordinator.GetFromJsonAsync<QueueCounts>("/api/inbound/counts"))!.Suggested);
+
+        // A viewer can look but not place; a coordinator confirms in one click.
+        using var viewer = await Api.SignedInAsync(seed.TenantId, MemberRole.Viewer);
+        Assert.Equal(HttpStatusCode.Forbidden, (await viewer.PostApiAsync($"/api/inbound/{message.Id}/place", new { horseId = seed.HorseId, eventId = seed.EventId })).StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, (await coordinator.PostApiAsync($"/api/inbound/{message.Id}/place", new { horseId = seed.HorseId, eventId = seed.EventId })).StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, (await coordinator.PostApiAsync($"/api/inbound/{message.Id}/place", new { horseId = seed.HorseId, eventId = seed.EventId })).StatusCode);
+
+        var placed = await InboundFor(seed.TenantId, payload.MessageId);
+        Assert.Equal((InboundState.Placed, 3), (placed.State, placed.MatchTier));
+        Assert.StartsWith("Suggestion confirmed by", placed.Reason);
+        Assert.Contains("Track was heavy", await coordinator.GetStringAsync($"/api/events/{seed.EventId}"));
+        await using var context = db.ContextFor(seed.TenantId);
+        Assert.True((await context.MatchCandidates.SingleAsync(c => c.InboundMessageId == message.Id && c.EventId == seed.EventId)).Chosen);
+    }
+
+    [Fact]
+    public async Task Mail_with_nothing_to_go_on_waits_and_staff_place_ignore_or_spam_it()
+    {
+        var seed = await SeedTenantAsync(eventInWindow: false);
+        var unclear = Payload($"office@{seed.Slug}.in.paddockside.com.au", "someone@partner.test", "Invoice", "See attached.");
+        var junk = Payload($"office@{seed.Slug}.in.paddockside.com.au", "spam@junk.test", "You won", "Click here.");
+        var chatty = Payload($"office@{seed.Slug}.in.paddockside.com.au", "someone@partner.test", "Lunch?", "Are you free Thursday?");
+        foreach (var p in new[] { unclear, junk, chatty }) await InboundAsync(p);
+        await ProcessQueueAsync();
+        Assert.Equal(InboundState.Pending, (await InboundFor(seed.TenantId, unclear.MessageId)).State);
+
+        using var coordinator = await Api.SignedInAsync(seed.TenantId, MemberRole.Coordinator);
+        Assert.Equal(3, (await coordinator.GetFromJsonAsync<QueueCounts>("/api/inbound/counts"))!.Waiting);
+        var ids = (await coordinator.GetFromJsonAsync<List<QueueItem>>("/api/inbound?state=Waiting"))!.ToDictionary(q => q.Subject!, q => q.Id);
+
+        // Placed by hand on the horse (no event): tier 4, and it shows on the horse's page.
+        Assert.Equal(HttpStatusCode.NoContent, (await coordinator.PostApiAsync($"/api/inbound/{ids["Invoice"]}/place", new { horseId = seed.HorseId, eventId = (Guid?)null })).StatusCode);
+        var placed = await InboundFor(seed.TenantId, unclear.MessageId);
+        Assert.Equal((InboundState.Placed, 4, (Guid?)null), (placed.State, placed.MatchTier, placed.EventId));
+        Assert.Contains("See attached.", await coordinator.GetStringAsync($"/api/horses/{seed.HorseId}/unplaced"));
+
+        Assert.Equal(HttpStatusCode.NoContent, (await coordinator.PostApiAsync($"/api/inbound/{ids["You won"]}/spam", new { })).StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, (await coordinator.PostApiAsync($"/api/inbound/{ids["Lunch?"]}/ignore", new { })).StatusCode);
+        Assert.Equal(InboundState.Held, (await InboundFor(seed.TenantId, junk.MessageId)).State);
+        Assert.Equal(InboundState.Ignored, (await InboundFor(seed.TenantId, chatty.MessageId)).State);
+        Assert.Equal(0, (await coordinator.GetFromJsonAsync<QueueCounts>("/api/inbound/counts"))!.Waiting);
+    }
+
     private static object Attachment(string name, string contentType, byte[] content, string? contentId = null) =>
         new { Name = name, Content = Convert.ToBase64String(content), ContentType = contentType, ContentLength = content.Length, ContentID = contentId ?? "" };
 

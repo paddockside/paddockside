@@ -17,7 +17,9 @@ namespace Paddockside.Infrastructure.Inbound;
 /// original message and the recipient's delivery is marked Replied.</item>
 /// <item>Tier 2: a horse address resolves the horse; the single open event in its expected window gets it,
 /// otherwise it is parked on the horse.</item>
-/// <item>Anything else → Pending, for staff.</item>
+/// <item>Tier 3: anything else (a general address) is scored against every managed horse by what it says and who
+/// sent it. A clear winner is Suggested for staff to confirm in one click; otherwise Pending, with the best guesses
+/// kept as candidates. Tier 3 never places mail by itself.</item>
 /// </list>
 /// All of it runs inside the tenant the mail was addressed to, so a token from another tenant simply is not found.
 /// </summary>
@@ -40,8 +42,7 @@ public sealed partial class InboundProcessor(TenantScopedDb tenants, IOptions<Em
         else if (!await TryReplyTokenAsync(db, message, display, now, cancellationToken)
                  && !await TryHorseAddressAsync(db, message, display, now, cancellationToken))
         {
-            var sender = await KnownSenderAsync(db, message.FromAddress, cancellationToken);
-            message.Park("Not sent to a reply or horse address we know, so it needs a person to place it.", display, sender?.Id, now);
+            await MatchAsync(db, message, display, now, cancellationToken);
         }
 
         await db.SaveChangesAsync(cancellationToken);
@@ -109,6 +110,45 @@ public sealed partial class InboundProcessor(TenantScopedDb tenants, IOptions<Em
         }
 
         return false;
+    }
+
+    /// <summary>
+    /// Tier 3: score every managed horse against what the mail says and who sent it. The top few candidates are kept
+    /// with their reasons; a clear winner becomes a suggestion, anything less waits in the queue.
+    /// </summary>
+    private async Task MatchAsync(PaddocksideDbContext db, InboundMessage message, string display, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        var sender = await KnownSenderAsync(db, message.FromAddress, cancellationToken);
+        var horses = (await db.Horses.Include(h => h.ManagementPeriods).Include(h => h.Interests).AsSplitQuery().ToListAsync(cancellationToken))
+            .Where(h => h.CurrentManagementPeriod is not null)
+            .ToList();
+        var horseIds = horses.Select(h => h.Id).ToList();
+        var openEvents = (await db.Events.Where(e => horseIds.Contains(e.HorseId) && e.Status == EventStatus.Open).ToListAsync(cancellationToken))
+            .ToLookup(e => e.HorseId);
+        var eventIds = openEvents.SelectMany(g => g).Select(e => e.Id).ToList();
+        var lastActivity = await db.StreamItems.Where(i => i.EventId != null && eventIds.Contains(i.EventId.Value))
+            .GroupBy(i => i.EventId!.Value).Select(g => new { g.Key, Last = g.Max(i => i.OccurredAt) })
+            .ToDictionaryAsync(g => g.Key, g => g.Last, cancellationToken);
+
+        // The address it came to is a hint ("faultless@…"); the generic ones ("office@…") simply match nothing.
+        var localPart = (await OurAddressesAsync(db, message, cancellationToken)).Select(a => a.LocalPart).FirstOrDefault(l => l is not null);
+        var scored = InboundMatcher.Score(message.Subject, display, localPart, sender?.Id,
+            horses.Select(h => new MatchHorse(h, openEvents[h.Id].ToList(), lastActivity)).ToList(), message.ReceivedAt);
+        foreach (var suggestion in scored.Take(3)) db.MatchCandidates.Add(new MatchCandidate(message, suggestion));
+
+        var names = horses.ToDictionary(h => h.Id, h => h.Name);
+        var titles = openEvents.SelectMany(g => g).ToDictionary(e => e.Id, e => e.Title);
+        if (InboundMatcher.Winner(scored) is { } best)
+        {
+            var where = best.EventId is { } eventId ? $"{names[best.HorseId]}, {titles[eventId]}" : $"{names[best.HorseId]} (on the horse)";
+            message.Suggest(best.HorseId, best.EventId, $"Looks like {where}: {string.Join("; ", best.Reasons)}.", display, sender?.Id, now);
+        }
+        else
+        {
+            message.Park(scored.Count == 0
+                ? "Not sent to a reply or horse address, and nothing in it points to one of our horses."
+                : $"Not sure where this goes. Closest: {string.Join(", ", scored.Take(3).Select(s => names[s.HorseId]))}.", display, sender?.Id, now);
+        }
     }
 
     /// <summary>The recipient addresses on this tenant's inbound subdomain.</summary>

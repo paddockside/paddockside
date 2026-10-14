@@ -101,6 +101,7 @@ public sealed class IsolationDatabase : IAsyncLifetime
         var tickets = new TicketAllocation(raceStart, bought.AddMonths(6));
         tickets.Set(8, [(ann.Id, 2)], bought.AddMonths(6));
         context.Add(tickets);
+        context.Add(new MatchCandidate(inbound, new MatchSuggestion(horse.Id, raceStart.Id, 60, ["Seeded"])));
         context.AddRange(deliveries);
         await context.SaveChangesAsync();
 

@@ -41,12 +41,16 @@ public static class HorseEndpoints
         string LastActivity,
         int Unread = 0);
 
+    /// <summary>An item on the horse but not on an event: mail to its inbox with no event to go on, or left there from the queue.</summary>
+    public sealed record HorseItem(Guid Id, string Kind, string At, string? Title, string Body, string? Author, string? Channel);
+
     public static void MapHorseEndpoints(this IEndpointRouteBuilder app)
     {
         var horses = app.MapGroup("/api/horses").RequireAuthorization(StaffPolicy.Name);
         horses.MapGet("/", ListHorses);
         horses.MapGet("/{id:guid}", GetHorse);
         horses.MapGet("/{id:guid}/events", ListEvents);
+        horses.MapGet("/{id:guid}/unplaced", OnTheHorse);
     }
 
     private static async Task<IReadOnlyList<HorseSummary>> ListHorses(PaddocksideDbContext db, CancellationToken cancellationToken)
@@ -114,6 +118,18 @@ public static class HorseEndpoints
     }
 
     /// <summary>Shared with the event page, so the card and the page header always agree.</summary>
+    /// <summary>Items on the horse but on no event, newest first: staff see them here as well as in the inbound list.</summary>
+    private static async Task<IResult> OnTheHorse(Guid id, PaddocksideDbContext db, TimeProvider clock, CancellationToken cancellationToken)
+    {
+        if (!await db.Horses.AnyAsync(h => h.Id == id, cancellationToken)) return Results.NotFound();
+        var now = clock.GetUtcNow();
+        var items = await db.StreamItems.AsNoTracking()
+            .Where(i => i.HorseId == id && i.EventId == null && i.InReplyToId == null)
+            .OrderByDescending(i => i.OccurredAt).Take(50)
+            .ToListAsync(cancellationToken);
+        return Results.Ok(items.Select(i => new HorseItem(i.Id, i.Kind.ToString(), Words.DayAndTime(i.OccurredAt, now), i.Title, i.Body, i.AuthorName, i.Channel)).ToList());
+    }
+
     public static EventSummary Summarise(DomainEvent e, IEnumerable<string?> stepCodes, DateTimeOffset? lastActivity, DateTimeOffset now)
     {
         var type = EventTypes.Find(e.EventType);

@@ -322,11 +322,35 @@ internal sealed class RoutingAddressConfiguration : IEntityTypeConfiguration<Rou
     }
 }
 
+internal sealed class MatchCandidateConfiguration : IEntityTypeConfiguration<MatchCandidate>
+{
+    public void Configure(EntityTypeBuilder<MatchCandidate> b)
+    {
+        b.MapTenantOwned();
+        b.Property(x => x.Score);
+        b.Property(x => x.Chosen);
+        b.Property(x => x.Reasons)
+            .HasConversion(
+                reasons => JsonSerializer.Serialize(reasons, (JsonSerializerOptions?)null),
+                json => JsonSerializer.Deserialize<List<string>>(json, (JsonSerializerOptions?)null) ?? new List<string>(),
+                new ValueComparer<IReadOnlyList<string>>(
+                    (a, c) => a!.SequenceEqual(c!),
+                    reasons => reasons.Aggregate(0, (hash, r) => HashCode.Combine(hash, r)),
+                    reasons => reasons.ToList()))
+            .HasMaxLength(2000);
+        b.HasOne<InboundMessage>().WithMany().HasForeignKey(x => x.InboundMessageId).OnDelete(DeleteBehavior.Cascade);
+        b.HasOne<Horse>().WithMany().HasForeignKey(x => x.HorseId).OnDelete(DeleteBehavior.Restrict);
+        b.HasOne<Event>().WithMany().HasForeignKey(x => x.EventId).OnDelete(DeleteBehavior.Restrict);
+        b.HasIndex(x => x.InboundMessageId);
+    }
+}
+
 internal sealed class InboundMessageConfiguration : IEntityTypeConfiguration<InboundMessage>
 {
     public void Configure(EntityTypeBuilder<InboundMessage> b)
     {
         b.MapTenantOwned();
+        b.Ignore(x => x.IsWaiting);
         b.Property(x => x.Channel).HasMaxLength(16);
         b.Property(x => x.Provider).HasMaxLength(32);
         b.Property(x => x.ProviderMessageId).HasMaxLength(200);

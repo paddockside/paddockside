@@ -507,6 +507,47 @@ namespace Paddockside.Infrastructure.Persistence.Migrations
                     b.ToTable("ManagementPeriods");
                 });
 
+            modelBuilder.Entity("Paddockside.Domain.MatchCandidate", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<bool>("Chosen")
+                        .HasColumnType("bit");
+
+                    b.Property<Guid?>("EventId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("HorseId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("InboundMessageId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Reasons")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.Property<int>("Score")
+                        .HasColumnType("int");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("EventId");
+
+                    b.HasIndex("HorseId");
+
+                    b.HasIndex("InboundMessageId");
+
+                    b.HasIndex("TenantId");
+
+                    b.ToTable("MatchCandidates");
+                });
+
             modelBuilder.Entity("Paddockside.Domain.NotificationPreference", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1246,6 +1287,32 @@ namespace Paddockside.Infrastructure.Persistence.Migrations
                         .WithMany("ManagementPeriods")
                         .HasForeignKey("HorseId")
                         .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Paddockside.Domain.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Paddockside.Domain.MatchCandidate", b =>
+                {
+                    b.HasOne("Paddockside.Domain.Event", null)
+                        .WithMany()
+                        .HasForeignKey("EventId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Paddockside.Domain.Horse", null)
+                        .WithMany()
+                        .HasForeignKey("HorseId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Paddockside.Domain.InboundMessage", null)
+                        .WithMany()
+                        .HasForeignKey("InboundMessageId")
+                        .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
                     b.HasOne("Paddockside.Domain.Tenant", null)

@@ -15,6 +15,9 @@ public enum InboundState
     /// <summary>Could not be placed by its address; waiting for staff.</summary>
     Pending,
 
+    /// <summary>Tier 3 found a clear likely place (HorseId, EventId); waiting for staff to confirm it.</summary>
+    Suggested,
+
     /// <summary>An auto-reply, out-of-office or bounce: never placed, never answered.</summary>
     Ignored,
 
@@ -145,7 +148,7 @@ public sealed class InboundMessage
 
     public void Place(int tier, StreamItem item, Guid? routingAddressId, Guid? partyId, string displayBody, string reason, DateTimeOffset at)
     {
-        if (State is not (InboundState.Received or InboundState.Pending)) throw new DomainException($"A {State} message cannot be placed.");
+        if (!IsWaiting && State != InboundState.Received) throw new DomainException($"A {State} message cannot be placed.");
         if (item.TenantId != TenantId) throw new DomainException("An inbound message is placed in its own tenant.");
         MatchTier = tier;
         StreamItemId = item.Id;
@@ -164,13 +167,27 @@ public sealed class InboundMessage
         Move(InboundState.Pending, reason, at);
     }
 
+    /// <summary>
+    /// Tier 3 found a clear likely place: waiting for staff to confirm it in one click (data-model.md §3). The horse and
+    /// event are the suggestion until it is placed.
+    /// </summary>
+    public void Suggest(Guid horseId, Guid? eventId, string reason, string displayBody, Guid? partyId, DateTimeOffset at)
+    {
+        (HorseId, EventId, MatchTier, DisplayBody, PartyId) = (horseId, eventId, 3, displayBody, partyId);
+        Move(InboundState.Suggested, reason, at);
+    }
+
+    /// <summary>In the queue: a suggestion to confirm, or nothing yet to go on.</summary>
+    public bool IsWaiting => State is InboundState.Pending or InboundState.Suggested;
+
     public void Ignore(string reason, DateTimeOffset at) => Move(InboundState.Ignored, reason, at);
 
     public void Hold(string reason, DateTimeOffset at) => Move(InboundState.Held, reason, at);
 
+    /// <summary>From Received (the pipeline) or from the queue (staff); a placed message is moved, not re-matched (§3.2).</summary>
     private void Move(InboundState to, string reason, DateTimeOffset at)
     {
-        if (to != InboundState.Placed && State != InboundState.Received) throw new DomainException($"A {State} message has already been processed.");
+        if (to != InboundState.Placed && State != InboundState.Received && !IsWaiting) throw new DomainException($"A {State} message has already been processed.");
         State = to;
         StateAt = at;
         Reason = reason;

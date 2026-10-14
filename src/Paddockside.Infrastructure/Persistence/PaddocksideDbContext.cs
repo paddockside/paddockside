@@ -45,6 +45,8 @@ public sealed class PaddocksideDbContext(DbContextOptions<PaddocksideDbContext> 
 
     public DbSet<InboundMessage> InboundMessages => Set<InboundMessage>();
 
+    public DbSet<MatchCandidate> MatchCandidates => Set<MatchCandidate>();
+
     public DbSet<OwnerInvitation> OwnerInvitations => Set<OwnerInvitation>();
 
     public DbSet<AuditEntry> AuditEntries => Set<AuditEntry>();
