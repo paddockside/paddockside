@@ -5,6 +5,7 @@ using Paddockside.Api.Formatting;
 using Paddockside.Api.Horses;
 using Paddockside.Domain;
 using Paddockside.Infrastructure.ClientAccess;
+using Paddockside.Application.Messaging;
 using Paddockside.Infrastructure.Email;
 using Paddockside.Infrastructure.Identity;
 using Paddockside.Infrastructure.Persistence;
@@ -285,7 +286,7 @@ public static class OwnerEndpoints
     /// What they are sent, category by category (messaging-channels.md §6): email and text, each on, off, or
     /// unavailable because there is no address or number. Everything is always in the portal regardless.
     /// </summary>
-    private static async Task<IResult> Notifications(ClaimsPrincipal user, PaddocksideDbContext db, CancellationToken cancellationToken)
+    private static async Task<IResult> Notifications(ClaimsPrincipal user, PaddocksideDbContext db, ISmsSender texts, CancellationToken cancellationToken)
     {
         var party = await db.Parties.AsNoTracking().SingleAsync(p => p.Id == PartyId(user), cancellationToken);
         var choices = await db.NotificationPreferences.AsNoTracking().Where(p => p.PartyId == party.Id).ToListAsync(cancellationToken);
@@ -299,7 +300,7 @@ public static class OwnerEndpoints
                     email is null ? "unavailable" : on.Contains(DeliveryChannel.Email) ? "on" : "off",
                     mobile is null ? "unavailable" : on.Contains(DeliveryChannel.Sms) ? "on" : "off");
             }).ToList(),
-            email, mobile, OutboundQueue.SmsAvailable));
+            email, mobile, texts.IsConfigured));
     }
 
     /// <summary>One switch. An important category keeps at least one way on, so it can never be silenced.</summary>

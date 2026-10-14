@@ -50,6 +50,8 @@ public static class DependencyInjection
         });
         services.AddSingleton<OwnerEmailRenderer>();
         services.AddScoped<EmailDispatcher>();
+        services.AddScoped<Sms.SmsDispatcher>();
+        services.AddScoped<Sms.SmsInbox>();
         services.AddSingleton<EmailDispatchSignal>();
         services.AddSingleton<Microsoft.EntityFrameworkCore.Diagnostics.IInterceptor, MailQueuedInterceptor>();
 

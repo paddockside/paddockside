@@ -126,7 +126,9 @@ public sealed class ClientSignIn(
         {
             Purpose = purpose,
             TokenHash = SignInToken.Hash(token),
-            Email = address,
+            // A link sent by text proves the phone, not an inbox.
+            Email = address.Contains('@') ? address : null,
+            Mobile = address.Contains('@') ? null : address,
             TenantId = tenantId,
             PartyId = partyId,
             StreamItemId = streamItemId,

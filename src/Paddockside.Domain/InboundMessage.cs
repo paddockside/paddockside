@@ -50,11 +50,12 @@ public sealed class InboundMessage
         string? textBody,
         string? htmlBody,
         string headers,
-        string rawBlobName)
+        string rawBlobName,
+        string channel = "Email")
     {
         if (string.IsNullOrWhiteSpace(providerMessageId)) throw new DomainException("An inbound message needs the provider's message id.");
         TenantId = tenantId;
-        Channel = "Email";
+        Channel = channel;
         Provider = provider;
         ProviderMessageId = providerMessageId;
         ReceivedAt = receivedAt;
@@ -138,6 +139,10 @@ public sealed class InboundMessage
     }
 
     /// <summary>Became <paramref name="item"/>. Never re-placed once placed: moving it is a stream operation.</summary>
+    /// <summary>A text message (messaging-channels.md §4.3). The provider's own record is the original; nothing is stored in blobs.</summary>
+    public static InboundMessage Text(Guid tenantId, string providerMessageId, DateTimeOffset receivedAt, string fromNumber, string? fromName, string toNumber, string body) =>
+        new(tenantId, "Twilio", providerMessageId, receivedAt, fromNumber, fromName, toNumber, toNumber, null, body, null, "{}", string.Empty, channel: "Sms");
+
     public void Place(int tier, StreamItem item, Guid? routingAddressId, Guid? partyId, string displayBody, string reason, DateTimeOffset at)
     {
         if (State is not (InboundState.Received or InboundState.Pending)) throw new DomainException($"A {State} message cannot be placed.");

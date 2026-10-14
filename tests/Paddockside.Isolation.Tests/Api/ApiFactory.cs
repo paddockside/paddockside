@@ -28,6 +28,8 @@ public sealed class ApiFactory(IsolationDatabase db) : WebApplicationFactory<Pro
 
     public const string PortalBaseUrl = "https://portal.test";
 
+    public const string TwilioAuthToken = "test-twilio-auth-token";
+
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Testing");
@@ -39,6 +41,7 @@ public sealed class ApiFactory(IsolationDatabase db) : WebApplicationFactory<Pro
         builder.UseSetting("Postmark:WebhookUsername", WebhookUsername);
         builder.UseSetting("Postmark:WebhookPassword", WebhookPassword);
         builder.UseSetting("Email:PortalBaseUrl", PortalBaseUrl);
+        builder.UseSetting("Twilio:AuthToken", TwilioAuthToken); // signs the test's Twilio webhook calls
         // Recheck every session on every request, so each test also proves sessions survive the check unchanged.
         builder.UseSetting("Sessions:CheckSeconds", "0");
         builder.ConfigureTestServices(services =>
@@ -156,16 +159,17 @@ public sealed class FakeEmailSender : IEmailSender
 /// <summary>Accepts every text and keeps it.</summary>
 public sealed class FakeSmsSender : ISmsSender
 {
-    private readonly System.Collections.Concurrent.ConcurrentQueue<(string To, string Body)> _sent = new();
+    private readonly System.Collections.Concurrent.ConcurrentQueue<(string To, string Body, string Id, string? StatusCallback)> _sent = new();
 
     public bool IsConfigured => true;
 
-    public IReadOnlyList<(string To, string Body)> Sent => _sent.ToList();
+    public IReadOnlyList<(string To, string Body, string Id, string? StatusCallback)> Sent => _sent.ToList();
 
-    public Task<SmsSendResult> SendAsync(string to, string body, CancellationToken cancellationToken)
+    public Task<SmsSendResult> SendAsync(string to, string body, CancellationToken cancellationToken, string? statusCallback = null)
     {
-        _sent.Enqueue((to, body));
-        return Task.FromResult(SmsSendResult.Sent(Guid.NewGuid().ToString()));
+        var id = $"SM{Guid.NewGuid():N}";
+        _sent.Enqueue((to, body, id, statusCallback));
+        return Task.FromResult(SmsSendResult.Sent(id));
     }
 }
 

@@ -13,15 +13,12 @@ namespace Paddockside.Infrastructure.Email;
 /// </summary>
 public static class OutboundQueue
 {
-    /// <summary>Whether texts can be sent. False until SMS sending is built and a provider is configured.</summary>
-    public const bool SmsAvailable = false;
-
     /// <param name="channel">
     /// Staff's override, or null for "Preferred": each owner by their own choices for the message's category
     /// (messaging-channels.md §6). An override still respects an owner who switched a non-important category off.
     /// </param>
     public static async Task<IReadOnlyList<Delivery>> QueueAsync(
-        PaddocksideDbContext db, Tenant tenant, Horse horse, Event? @event, StreamItem message, DeliveryChannel? channel, DateTimeOffset now,
+        PaddocksideDbContext db, Tenant tenant, Horse horse, Event? @event, StreamItem message, DeliveryChannel? channel, bool smsAvailable, DateTimeOffset now,
         CancellationToken cancellationToken)
     {
         var category = NotificationCategories.For(message, @event);
@@ -33,7 +30,7 @@ public static class OutboundQueue
         IReadOnlySet<DeliveryChannel> ChannelsFor(Guid partyId)
         {
             if (!parties.TryGetValue(partyId, out var party)) return new HashSet<DeliveryChannel>();
-            var preferred = NotificationCategories.ChannelsFor(category, choices[partyId], party.PrimaryEmail is not null, party.PrimaryMobile is not null, SmsAvailable);
+            var preferred = NotificationCategories.ChannelsFor(category, choices[partyId], party.PrimaryEmail is not null, party.PrimaryMobile is not null, smsAvailable);
             if (channel is not { } forced) return preferred;
             var optedOut = !category.Important && NotificationCategories.Chosen(category, choices[partyId]).Count == 0;
             return optedOut ? new HashSet<DeliveryChannel>() : new HashSet<DeliveryChannel> { forced };
@@ -41,7 +38,8 @@ public static class OutboundQueue
 
         var deliveries = Delivery.ForOwners(tenant, horse, message, ChannelsFor, now);
         var issued = new HashSet<string>();
-        foreach (var delivery in deliveries)
+        // Email replies come back through a per-recipient address; a text reply is matched by the sender's number.
+        foreach (var delivery in deliveries.Where(d => d.Channel == DeliveryChannel.Email))
         {
             var token = await NewUniqueTokenAsync(db, issued, cancellationToken);
             var address = RoutingAddress.ForRecipient(message, delivery.PartyId, token, now);

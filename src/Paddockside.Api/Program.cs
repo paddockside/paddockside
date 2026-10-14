@@ -123,6 +123,7 @@ app.MapOperatorEndpoints();
 app.MapSupportSessionEndpoints();
 app.MapAuditEndpoints();
 app.MapPostmarkWebhooks();
+app.MapTwilioWebhooks();
 app.MapFallback("/api/{**rest}", () => Results.NotFound());
 app.MapFallbackToFile("index.html");
 

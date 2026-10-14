@@ -136,6 +136,42 @@ public sealed class TenantScopedDb(DbContextOptions<PaddocksideDbContext> option
         return rows.Select(r => (r.TenantId, r.Id)).ToList();
     }
 
+    /// <summary>Which tenants have queued texts.</summary>
+    public async Task<IReadOnlyList<Guid>> TenantsWithQueuedTextsAsync(int limit, CancellationToken cancellationToken)
+    {
+        await using var db = new PaddocksideDbContext(options, new FixedTenantContext(null));
+        return await db.Deliveries.IgnoreQueryFilters()
+            .Where(d => d.Status == Domain.DeliveryStatus.Queued && d.Channel == Domain.DeliveryChannel.Sms && d.Attempts < Domain.Delivery.MaxAttempts)
+            .Select(d => d.TenantId)
+            .Distinct()
+            .Take(limit)
+            .ToListAsync(cancellationToken);
+    }
+
+    /// <summary>The tenant and delivery for a provider's message id (a Twilio status report), in any tenant.</summary>
+    public async Task<(Guid TenantId, Guid DeliveryId)?> DeliveryForProviderIdAsync(string providerMessageId, CancellationToken cancellationToken)
+    {
+        await using var db = new PaddocksideDbContext(options, new FixedTenantContext(null));
+        var row = await db.Deliveries.IgnoreQueryFilters().Where(d => d.ProviderMessageId == providerMessageId)
+            .Select(d => new { d.TenantId, d.Id }).FirstOrDefaultAsync(cancellationToken);
+        return row is null ? null : (row.TenantId, row.Id);
+    }
+
+    /// <summary>
+    /// The most recent text sent to any of these parties since <paramref name="since"/>: where a text reply belongs
+    /// (messaging-channels.md §4.3). Parties are (tenant, party) pairs from <see cref="PartiesWithContactAsync"/>.
+    /// </summary>
+    public async Task<(Guid TenantId, Guid DeliveryId)?> LatestTextToAsync(IReadOnlyCollection<Guid> partyIds, DateTimeOffset since, CancellationToken cancellationToken)
+    {
+        await using var db = new PaddocksideDbContext(options, new FixedTenantContext(null));
+        var row = await db.Deliveries.IgnoreQueryFilters()
+            .Where(d => partyIds.Contains(d.PartyId) && d.Channel == Domain.DeliveryChannel.Sms && d.SentAt != null && d.SentAt >= since)
+            .OrderByDescending(d => d.SentAt)
+            .Select(d => new { d.TenantId, d.Id })
+            .FirstOrDefaultAsync(cancellationToken);
+        return row is null ? null : (row.TenantId, row.Id);
+    }
+
     /// <summary>Which tenants have queued email.</summary>
     public async Task<IReadOnlyList<Guid>> TenantsWithQueuedEmailAsync(int limit, CancellationToken cancellationToken)
     {

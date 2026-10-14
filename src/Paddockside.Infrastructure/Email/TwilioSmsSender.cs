@@ -1,4 +1,5 @@
 using System.Net.Http.Headers;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
@@ -13,15 +14,14 @@ public sealed class TwilioSmsSender(HttpClient http, IOptions<TwilioOptions> opt
     public bool IsConfigured =>
         !string.IsNullOrEmpty(options.Value.AccountSid) && !string.IsNullOrEmpty(options.Value.AuthToken) && !string.IsNullOrEmpty(options.Value.FromNumber);
 
-    public async Task<SmsSendResult> SendAsync(string to, string body, CancellationToken cancellationToken)
+    public async Task<SmsSendResult> SendAsync(string to, string body, CancellationToken cancellationToken, string? statusCallback = null)
     {
         if (!IsConfigured) return SmsSendResult.Failed("Text messages are not configured (Twilio settings are missing).");
         var o = options.Value;
 
-        using var request = new HttpRequestMessage(HttpMethod.Post, $"2010-04-01/Accounts/{o.AccountSid}/Messages.json")
-        {
-            Content = new FormUrlEncodedContent(new Dictionary<string, string> { ["To"] = to, ["From"] = o.FromNumber!, ["Body"] = body }),
-        };
+        var form = new Dictionary<string, string> { ["To"] = to, ["From"] = o.FromNumber!, ["Body"] = body };
+        if (statusCallback is not null) form["StatusCallback"] = statusCallback;
+        using var request = new HttpRequestMessage(HttpMethod.Post, $"2010-04-01/Accounts/{o.AccountSid}/Messages.json") { Content = new FormUrlEncodedContent(form) };
         request.Headers.Authorization = new AuthenticationHeaderValue("Basic", Convert.ToBase64String(Encoding.ASCII.GetBytes($"{o.AccountSid}:{o.AuthToken}")));
 
         try
@@ -42,4 +42,23 @@ public sealed class TwilioSmsSender(HttpClient http, IOptions<TwilioOptions> opt
             return SmsSendResult.Failed("Could not reach the text message service.");
         }
     }
+}
+
+/// <summary>
+/// Twilio's webhook signature: HMAC-SHA1, keyed with the auth token, over the full URL Twilio called followed by
+/// every form field (sorted by name, name then value), Base64. A request without a matching signature did not come
+/// from Twilio.
+/// </summary>
+public static class TwilioSignature
+{
+    public static string Compute(string authToken, string url, IEnumerable<KeyValuePair<string, string>> form)
+    {
+        var data = new StringBuilder(url);
+        foreach (var (key, value) in form.OrderBy(f => f.Key, StringComparer.Ordinal)) data.Append(key).Append(value);
+        return Convert.ToBase64String(HMACSHA1.HashData(Encoding.UTF8.GetBytes(authToken), Encoding.UTF8.GetBytes(data.ToString())));
+    }
+
+    public static bool IsValid(string? authToken, string url, IEnumerable<KeyValuePair<string, string>> form, string? signature) =>
+        !string.IsNullOrEmpty(authToken) && !string.IsNullOrEmpty(signature)
+        && CryptographicOperations.FixedTimeEquals(Encoding.ASCII.GetBytes(Compute(authToken, url, form)), Encoding.ASCII.GetBytes(signature));
 }

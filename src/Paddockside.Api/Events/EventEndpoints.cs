@@ -137,6 +137,7 @@ public static class EventEndpoints
         PaddocksideDbContext db,
         TimeProvider clock,
         EmailDispatchSignal emailSignal,
+        ISmsSender texts,
         CancellationToken cancellationToken)
     {
         if (!CanPost.Contains(user.FindFirstValue(SessionClaims.Role)))
@@ -185,7 +186,7 @@ public static class EventEndpoints
                 item = StreamItem.Message(horse, e, null, request.Body.Trim(), scope, now, author, scope == StreamItemScope.NamedParties ? named : null, stepCode);
                 // Recipients are worked out now, at send time, and each gets its own routing token (messaging-channels.md §1).
                 db.StreamItems.Add(item);
-                deliveries = await OutboundQueue.QueueAsync(db, tenant, horse, e, item, ToChannel(request.Channel), now, cancellationToken);
+                deliveries = await OutboundQueue.QueueAsync(db, tenant, horse, e, item, ToChannel(request.Channel), texts.IsConfigured, now, cancellationToken);
                 break;
 
             case "Trainer":

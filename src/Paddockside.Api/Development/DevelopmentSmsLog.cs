@@ -10,7 +10,7 @@ public sealed class DevelopmentSmsLog(ILogger<DevelopmentSmsLog> logger) : ISmsS
 {
     public bool IsConfigured => true;
 
-    public Task<SmsSendResult> SendAsync(string to, string body, CancellationToken cancellationToken)
+    public Task<SmsSendResult> SendAsync(string to, string body, CancellationToken cancellationToken, string? statusCallback = null)
     {
         logger.LogWarning("DEVELOPMENT: text to {To} not sent (Twilio is not configured): {Body}", to, body);
         return Task.FromResult(SmsSendResult.Sent($"dev-{Guid.NewGuid():N}"));
