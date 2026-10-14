@@ -270,7 +270,7 @@
     private async Task EnterAsync(SupportView session)
     {
         var result = await Api.EnterSupportAsync(session.TenantId, session.Id);
-        if (result.Succeeded) Navigation.NavigateTo("horses", forceLoad: true);
+        if (result.Succeeded) Navigation.NavigateTo("today", forceLoad: true);
         else _error = result.Error;
     }
 

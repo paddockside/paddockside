@@ -224,7 +224,7 @@
     private async Task SwitchTenant(TenantOption tenant)
     {
         var result = await Api.SwitchStaffTenantAsync(Guid.Parse(tenant.Id));
-        if (result.Succeeded) Navigation.NavigateTo("horses", forceLoad: true);
+        if (result.Succeeded) Navigation.NavigateTo("today", forceLoad: true);
     }
 
     private async Task SignOut()

@@ -76,6 +76,20 @@ public sealed record Posted(Guid Id, int Recipients);
 
 public sealed record AttachmentView(string Name, string? Dropped);
 
+public sealed record TodayRunner(Guid EventId, Guid HorseId, string Horse, string Type, string Title, string? Time, string? Stage, List<StepView> Steps, List<string> Attention);
+
+public sealed record TodayUndelivered(Guid ItemId, Guid? EventId, Guid HorseId, string Horse, string? Event, string Title, string Sent, string Detail);
+
+public sealed record TodayQueue(int Waiting, string? Oldest);
+
+public sealed record TodayQuiet(Guid Id, string Horse, string Type, string Title, string Detail);
+
+/// <param name="State">"ok", "warn" or "off".</param>
+public sealed record TodayHealth(string Label, string State, string Detail);
+
+public sealed record TodayPage(string Date, List<TodayRunner> Today, List<TodayRunner> Tomorrow, List<TodayUndelivered> Undelivered, TodayQueue Queue,
+    List<TodayQuiet> Dormant, List<TodayQuiet> Drafts, List<TodayHealth> Health);
+
 public sealed record InboundView(
     Guid Id,
     string State,
@@ -246,6 +260,8 @@ public sealed class PaddocksideApi(HttpClient http)
     public Task<ApiResult<OwnerEventPage>> EventAsOwnerAsync(Guid eventId, Guid partyId) => GetAsync<OwnerEventPage>($"api/events/{eventId}/as-owner/{partyId}");
 
     public Task<ApiResult<InboundCounts>> InboundCountsAsync() => GetAsync<InboundCounts>("api/inbound/counts");
+
+    public Task<ApiResult<TodayPage>> TodayAsync() => GetAsync<TodayPage>("api/today");
 
     public Task<ApiResult<RepliedToSender>> ReplyToSenderAsync(Guid itemId, string body) =>
         PostAsync<RepliedToSender>($"api/items/{itemId}/reply-to-sender", new { body });

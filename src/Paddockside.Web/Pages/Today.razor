@@ -1,0 +1,184 @@
+@page "/today"
+@inject PaddocksideApi Api
+@inject SessionState Session
+@inject NavigationManager Navigation
+
+<PageTitle>Today · Paddockside</PageTitle>
+
+@*
+    Today, the staff home (search-reporting.md §3): "Runners and trials today and tomorrow with their event stage;
+    important messages not yet delivered to everyone; pending queue count and oldest age; dormant events; drafts
+    awaiting open; integration health. Nothing else." The screen a racing manager opens at 7 am: the runners on the
+    left, what needs a look on the right, in the staff mockup's style.
+*@
+<div class="grid gap-6">
+    <header class="grid gap-1">
+        <h1>Today</h1>
+        @if (_page is not null)
+        {
+            <p class="text-text-muted">@_page.Date</p>
+        }
+    </header>
+
+    @if (_error is not null)
+    {
+        <Error Message="@_error" />
+    }
+    else if (_page is null)
+    {
+        <p class="text-text-muted" role="status">Loading…</p>
+    }
+    else
+    {
+        <div class="grid grid-cols-[minmax(0,1fr)] items-start gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
+            <div class="grid grid-cols-[minmax(0,1fr)] gap-6">
+                @Runners("Racing today", _page.Today, "No runners or trials today.")
+                @Runners("Tomorrow", _page.Tomorrow, "Nothing tomorrow.")
+
+                @if (_page.Undelivered.Count > 0)
+                {
+                    <section class="grid gap-3" aria-labelledby="undelivered-heading">
+                        <h2 id="undelivered-heading" class="@SideHeading">Important news that hasn't reached everyone</h2>
+                        <ul class="grid gap-2">
+                            @foreach (var m in _page.Undelivered)
+                            {
+                                <li>
+                                    <a href="@(m.EventId is { } e ? $"events/{e}" : $"horses/{m.HorseId}")"
+                                       class="grid gap-1 rounded-card border border-border-subtle bg-surface-raised px-4 py-3 hover:border-border-strong">
+                                        <span class="font-strong">@m.Title</span>
+                                        <span class="text-small text-text-muted">@m.Horse@(m.Event is null ? null : $" · {m.Event}") · sent @m.Sent</span>
+                                        <span class="text-small font-strong text-status-warning-fg">@m.Detail</span>
+                                    </a>
+                                </li>
+                            }
+                        </ul>
+                    </section>
+                }
+            </div>
+
+            <aside class="grid grid-cols-[minmax(0,1fr)] gap-4" aria-label="Needs a look">
+                <a href="inbound" class="grid gap-1 rounded-card border border-border-subtle bg-surface-raised px-4 py-4 hover:border-border-strong">
+                    <span class="@SideHeading">Pending</span>
+                    @if (_page.Queue.Waiting == 0)
+                    {
+                        <span>Nothing waiting to be placed.</span>
+                    }
+                    else
+                    {
+                        <span class="text-heading font-heading leading-tight">@_page.Queue.Waiting</span>
+                        <span>@(_page.Queue.Waiting == 1 ? "message waiting" : "messages waiting") to be placed</span>
+                        <span class="text-small text-status-warning-fg">Oldest: @_page.Queue.Oldest</span>
+                    }
+                </a>
+
+                @if (_page.Drafts.Count > 0)
+                {
+                    @Quiet("Drafts to open", _page.Drafts, "Owners can't see a draft and nothing can be sent from it.")
+                }
+
+                @if (_page.Dormant.Count > 0)
+                {
+                    @Quiet("Gone quiet", _page.Dormant, "Open, with nothing new for two weeks. Post an update, or close the event.")
+                }
+
+                <section class="grid gap-2 rounded-card border border-border-subtle bg-surface-raised px-4 py-4" aria-labelledby="health-heading">
+                    <h2 id="health-heading" class="@SideHeading">Email and texts</h2>
+                    <ul class="grid gap-2">
+                        @foreach (var h in _page.Health)
+                        {
+                            <li class="flex gap-2">
+                                <span aria-hidden="true" class="mt-[6px] size-[10px] shrink-0 rounded-pill @(h.State switch { "ok" => "bg-action-primary-bg", "warn" => "bg-status-warning-fg", _ => "border-2 border-border-strong" })"></span>
+                                <span class="grid">
+                                    <span class="font-strong">@h.Label<span class="sr-only">: @(h.State switch { "ok" => "working", "warn" => "needs a look", _ => "not set up" })</span></span>
+                                    <span class="text-small @(h.State == "warn" ? "text-status-warning-fg" : "text-text-muted")">@h.Detail</span>
+                                </span>
+                            </li>
+                        }
+                    </ul>
+                </section>
+            </aside>
+        </div>
+    }
+</div>
+
+@code {
+    private const string SideHeading = "text-small font-strong uppercase tracking-wide text-text-muted";
+
+    private TodayPage? _page;
+    private string? _error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (Session.Current is null && await Session.RefreshAsync() is null)
+        {
+            Navigation.NavigateTo("sign-in");
+            return;
+        }
+
+        var result = await Api.TodayAsync();
+        if (result.Succeeded) _page = result.Value;
+        else _error = result.Error;
+    }
+
+    /// <summary>A day's runners: the horse, the race and its time, where it is up to, and any step not received.</summary>
+    private RenderFragment Runners(string heading, List<TodayRunner> runners, string empty) => __builder =>
+    {
+        var id = $"runners-{heading.Replace(' ', '-').ToLowerInvariant()}";
+        <section class="grid gap-3" aria-labelledby="@id">
+            <h2 id="@id" class="@SideHeading">@heading</h2>
+            @if (runners.Count == 0)
+            {
+                <p class="text-text-muted">@empty</p>
+            }
+            @foreach (var r in runners)
+            {
+                <a href="events/@r.EventId" class="grid gap-3 rounded-card border border-border-subtle bg-surface-raised px-4 py-4 hover:border-border-strong sm:px-[20px]">
+                    <span class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+                        <span class="text-title font-heading">@r.Horse</span>
+                        @if (r.Time is not null)
+                        {
+                            <span class="font-strong tabular-nums">@r.Time</span>
+                        }
+                    </span>
+                    <span class="text-text-muted">@r.Type · @r.Title</span>
+                    @if (r.Steps.Count > 0)
+                    {
+                        <span class="flex flex-wrap items-center gap-x-3 gap-y-1 text-small">
+                            @foreach (var step in r.Steps)
+                            {
+                                <span class="inline-flex items-center gap-1 @(step.State switch { "Done" => "text-text-primary", "Current" => "font-strong text-action-primary-bg", "Missing" => "text-status-warning-fg", _ => "text-text-muted" })">
+                                    <span aria-hidden="true" class="size-[10px] shrink-0 rounded-pill @(step.State switch { "Done" => "bg-action-primary-bg", "Current" => "border-[3px] border-action-primary-bg", "Missing" => "border-2 border-status-warning-fg bg-status-warning-bg", _ => "border-2 border-border-strong" })"></span>
+                                    @step.Label<span class="sr-only">, @(step.State switch { "Done" => "done", "Current" => "now", "Missing" => "not received", _ => "to come" })</span>
+                                </span>
+                            }
+                        </span>
+                    }
+                    @if (r.Attention.Count > 0)
+                    {
+                        <span class="text-small font-strong text-status-warning-fg">@string.Join(" · ", r.Attention)</span>
+                    }
+                </a>
+            }
+        </section>
+    };
+
+    /// <summary>Drafts and quiet events: a short list, each opening its event.</summary>
+    private RenderFragment Quiet(string heading, List<TodayQuiet> events, string hint) => __builder =>
+    {
+        <section class="grid gap-2 rounded-card border border-border-subtle bg-surface-raised px-4 py-4" aria-label="@heading">
+            <h2 class="@SideHeading">@heading</h2>
+            <p class="text-small text-text-muted">@hint</p>
+            <ul class="grid">
+                @foreach (var e in events)
+                {
+                    <li class="border-t border-border-subtle py-2 first:border-t-0">
+                        <a href="events/@e.Id" class="grid hover:underline">
+                            <span class="font-strong">@e.Horse · @e.Title</span>
+                            <span class="text-small text-text-muted">@e.Type · @e.Detail</span>
+                        </a>
+                    </li>
+                }
+            </ul>
+        </section>
+    };
+}

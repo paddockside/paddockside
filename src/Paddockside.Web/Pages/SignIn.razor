@@ -184,7 +184,7 @@
     /// <summary>Staff go to their horses; an operator with no business membership goes to the operator console.</summary>
     private async Task Finish()
     {
-        Navigation.NavigateTo(await Session.RefreshAsync() is null ? "ops" : "horses");
+        Navigation.NavigateTo(await Session.RefreshAsync() is null ? "ops" : "today");
     }
 
     private async Task Run(Func<Task> action)
