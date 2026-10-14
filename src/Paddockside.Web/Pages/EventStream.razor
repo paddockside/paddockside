@@ -85,6 +85,10 @@
                         break;
                     default:
                         <MessageThread Model="item.ToMessage()" />
+                        @if (item.CanReplyToSender)
+                        {
+                            <ReplyToSender ItemId="item.Id" Author="@item.Author" OnSent="Load" />
+                        }
                         @if (item.Prompt is { } prompt)
                         {
                             <PromptTally Model="prompt" ItemId="item.Id" Busy="_busy" OnSet="answer => SetAnswer(item, answer.PartyId, answer.Value)" />

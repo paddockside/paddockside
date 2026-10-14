@@ -42,7 +42,10 @@ public static class HorseEndpoints
         int Unread = 0);
 
     /// <summary>An item on the horse but not on an event: mail to its inbox with no event to go on, or left there from the queue.</summary>
-    public sealed record HorseItem(Guid Id, string Kind, string At, string? Title, string Body, string? Author, string? Channel);
+    public sealed record HorseItem(Guid Id, string Kind, string At, string? Title, string Body, string? Author, string? Channel, bool CanReplyToSender = false,
+        IReadOnlyList<HorseReply>? Replies = null);
+
+    public sealed record HorseReply(string Author, string At, string Body);
 
     public static void MapHorseEndpoints(this IEndpointRouteBuilder app)
     {
@@ -127,7 +130,12 @@ public static class HorseEndpoints
             .Where(i => i.HorseId == id && i.EventId == null && i.InReplyToId == null)
             .OrderByDescending(i => i.OccurredAt).Take(50)
             .ToListAsync(cancellationToken);
-        return Results.Ok(items.Select(i => new HorseItem(i.Id, i.Kind.ToString(), Words.DayAndTime(i.OccurredAt, now), i.Title, i.Body, i.AuthorName, i.Channel)).ToList());
+        var ids = items.Select(i => i.Id).ToList();
+        var replies = (await db.StreamItems.AsNoTracking().Where(i => i.InReplyToId != null && ids.Contains(i.InReplyToId.Value))
+            .OrderBy(i => i.OccurredAt).ToListAsync(cancellationToken)).ToLookup(i => i.InReplyToId!.Value);
+        return Results.Ok(items.Select(i => new HorseItem(i.Id, i.Kind.ToString(), Words.DayAndTime(i.OccurredAt, now), i.Title, i.Body, i.AuthorName, i.Channel,
+            i is { Kind: StreamItemKind.Message, Direction: StreamItemDirection.Inbound },
+            replies[i.Id].Select(r => new HorseReply(r.AuthorName ?? "Unknown", Words.Recently(r.OccurredAt, now), r.Body)).ToList())).ToList());
     }
 
     public static EventSummary Summarise(DomainEvent e, IEnumerable<string?> stepCodes, DateTimeOffset? lastActivity, DateTimeOffset now)

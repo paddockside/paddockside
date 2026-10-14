@@ -55,6 +55,12 @@ public sealed class Delivery
     /// <summary>The address actually used (data-model.md DELIVERY: "address used").</summary>
     public string? Address { get; private set; }
 
+    /// <summary>
+    /// Written to this person directly (a staff reply to someone who emailed in), not as an owner: sent whatever the
+    /// ownership, never carries a portal sign-in link.
+    /// </summary>
+    public bool Direct { get; private set; }
+
     /// <summary>The routing token issued to this recipient with this message.</summary>
     public Guid? RoutingAddressId { get; private set; }
 
@@ -123,6 +129,15 @@ public sealed class Delivery
         if (!failure && status < Status) return;
         Status = status;
         StatusAt = at;
+    }
+
+    /// <summary>A staff reply to someone who wrote in (messaging-channels.md §3.5): one email, to them alone.</summary>
+    public static Delivery ToSender(StreamItem message, Party recipient, DateTimeOffset at)
+    {
+        if (message.Kind != StreamItemKind.Message || message.Direction != StreamItemDirection.Outbound)
+            throw new DomainException("Only an outbound message is delivered.");
+        if (recipient.TenantId != message.TenantId) throw new DomainException("The recipient belongs to another business.");
+        return new Delivery(message, recipient.Id, DeliveryChannel.Email, at) { Direct = true };
     }
 
     /// <summary>

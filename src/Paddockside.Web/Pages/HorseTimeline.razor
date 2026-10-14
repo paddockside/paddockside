@@ -55,6 +55,17 @@
                             <p class="font-strong">@item.Title</p>
                         }
                         <p class="line-clamp-2 whitespace-pre-line break-words">@item.Body</p>
+                        @foreach (var reply in item.Replies ?? [])
+                        {
+                            <div class="ml-4 grid gap-1 border-l-2 border-border-subtle pl-3">
+                                <p class="text-small text-text-muted">@reply.Author · @reply.At</p>
+                                <p class="whitespace-pre-line break-words">@reply.Body</p>
+                            </div>
+                        }
+                        @if (item.CanReplyToSender)
+                        {
+                            <ReplyToSender ItemId="item.Id" Author="@item.Author" OnSent="ReloadOnHorseAsync" />
+                        }
                     </article>
                 }
             </section>
@@ -134,6 +145,8 @@
     private string? _error;
     private bool _copied;
     private List<HorseItem>? _onHorse;
+
+    private async Task ReloadOnHorseAsync() => _onHorse = (await Api.OnTheHorseAsync(Id)).Value;
     private bool _creating;
     private bool _busy;
     private bool _openNow = true;

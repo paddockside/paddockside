@@ -41,7 +41,8 @@ public sealed record ItemView(
     string? Audience,
     List<ReplyView> Replies,
     List<RecipientView> Recipients,
-    PromptView? Prompt = null);
+    PromptView? Prompt = null,
+    bool CanReplyToSender = false);
 
 public sealed record PromptView(string Kind, string Question, List<string> Answers, string Summary, List<TallyCount> Counts, List<PromptOwnerView> Owners);
 
@@ -93,7 +94,12 @@ public sealed record InboundView(
     List<CandidateView>? Candidates = null,
     string Channel = "Email");
 
-public sealed record HorseItem(Guid Id, string Kind, string At, string? Title, string Body, string? Author, string? Channel);
+public sealed record HorseItem(Guid Id, string Kind, string At, string? Title, string Body, string? Author, string? Channel, bool CanReplyToSender = false,
+    List<HorseReply>? Replies = null);
+
+public sealed record HorseReply(string Author, string At, string Body);
+
+public sealed record RepliedToSender(Guid Id, string To);
 
 public sealed record CandidateView(Guid HorseId, string Horse, Guid? EventId, string? Event, int Score, List<string> Reasons);
 
@@ -233,6 +239,9 @@ public sealed class PaddocksideApi(HttpClient http)
     public Task<ApiResult<List<InboundView>>> InboundAsync(string state) => GetAsync<List<InboundView>>($"api/inbound?state={Uri.EscapeDataString(state)}");
 
     public Task<ApiResult<InboundCounts>> InboundCountsAsync() => GetAsync<InboundCounts>("api/inbound/counts");
+
+    public Task<ApiResult<RepliedToSender>> ReplyToSenderAsync(Guid itemId, string body) =>
+        PostAsync<RepliedToSender>($"api/items/{itemId}/reply-to-sender", new { body });
 
     public Task<ApiResult<List<HorseItem>>> OnTheHorseAsync(Guid horseId) => GetAsync<List<HorseItem>>($"api/horses/{horseId}/unplaced");
 

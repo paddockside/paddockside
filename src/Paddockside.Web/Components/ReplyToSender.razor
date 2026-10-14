@@ -1,0 +1,64 @@
+@inject PaddocksideApi Api
+
+@*
+    "Reply" on an email or message that came in (a trainer, an agent, an owner writing to the office): staff write
+    back to the person who sent it, by email, "Re:" their subject. It goes on the same horse and event, and their answer
+    threads back under it. Staff only.
+*@
+@if (!_open)
+{
+    <button type="button" class="btn-secondary justify-self-start" @onclick="() => (_open, _sent) = (true, null)">Reply to @(Author ?? "the sender")</button>
+    @if (_sent is not null)
+    {
+        <p class="text-small text-status-success-fg" role="status">@_sent</p>
+    }
+}
+else
+{
+    <form class="grid gap-3" @onsubmit="SendAsync" @onsubmit:preventDefault>
+        <label class="field-label" for="reply-@ItemId">Reply to @(Author ?? "the sender")</label>
+        <textarea id="reply-@ItemId" class="input min-h-[6rem] py-3" @bind="_body" @bind:event="oninput"></textarea>
+        <p class="field-hint">Sent by email to them alone. Their answer comes back here.</p>
+        @if (_error is not null)
+        {
+            <p class="font-strong text-status-danger-fg" role="alert">@_error</p>
+        }
+        <div class="flex flex-wrap gap-3">
+            <button type="submit" class="btn-primary" disabled="@_busy">Send reply</button>
+            <button type="button" class="btn-secondary" @onclick="() => _open = false">Cancel</button>
+        </div>
+    </form>
+}
+
+@code {
+    [Parameter, EditorRequired] public Guid ItemId { get; set; }
+
+    /// <summary>Who wrote it, for the button ("Reply to J Hartley").</summary>
+    [Parameter] public string? Author { get; set; }
+
+    /// <summary>After sending: the page reloads to show the reply on the horse or event.</summary>
+    [Parameter] public EventCallback OnSent { get; set; }
+
+    private bool _open;
+    private bool _busy;
+    private string _body = "";
+    private string? _error;
+    private string? _sent;
+
+    private async Task SendAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_body)) { _error = "Write your reply first."; return; }
+        (_busy, _error) = (true, null);
+        try
+        {
+            var result = await Api.ReplyToSenderAsync(ItemId, _body);
+            if (!result.Succeeded) { _error = result.Error; return; }
+            (_open, _body, _sent) = (false, "", $"Sent to {result.Value!.To}.");
+            await OnSent.InvokeAsync();
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}

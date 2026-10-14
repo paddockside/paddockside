@@ -39,7 +39,8 @@ public static class EventEndpoints
         string? Audience,
         IReadOnlyList<ReplyView> Replies,
         IReadOnlyList<RecipientView> Recipients,
-        PromptView? Prompt = null);
+        PromptView? Prompt = null,
+        bool CanReplyToSender = false);
 
     /// <summary>A message's question, with the tally: totals, then each owner's answer and how it was given.</summary>
     public sealed record PromptView(string Kind, string Question, IReadOnlyList<string> Answers, string Summary,
@@ -137,7 +138,8 @@ public static class EventEndpoints
                         .OrderBy(d => parties.GetValueOrDefault(d.PartyId))
                         .Select(d => new RecipientView(parties.GetValueOrDefault(d.PartyId) ?? "Unknown", Channel(d.Channel), d.Status.ToString(), d.Note))
                         .ToList(),
-                    i.Prompt is null ? null : Tally(i, tenant, horse, answers[i.Id].ToList(), parties, now));
+                    i.Prompt is null ? null : Tally(i, tenant, horse, answers[i.Id].ToList(), parties, now),
+                    i is { Kind: StreamItemKind.Message, Direction: StreamItemDirection.Inbound });
             })
             .ToList();
 

@@ -224,6 +224,7 @@ internal sealed class DeliveryConfiguration : IEntityTypeConfiguration<Delivery>
         b.Property(x => x.SentAt);
         b.Property(x => x.Attempts);
         b.Property(x => x.Note).HasMaxLength(500);
+        b.Property(x => x.Direct);
         b.Ignore(x => x.IsWaitingToSend);
         b.HasOne<StreamItem>().WithMany().HasForeignKey(x => x.StreamItemId).OnDelete(DeleteBehavior.Restrict);
         b.HasOne<Party>().WithMany().HasForeignKey(x => x.PartyId).OnDelete(DeleteBehavior.Restrict);

@@ -52,6 +52,20 @@ public static class OutboundQueue
     }
 
     /// <summary>
+    /// A staff reply to someone who wrote in: one email to them alone, with its own reply address so their answer
+    /// threads back under it (messaging-channels.md §3.5).
+    /// </summary>
+    public static async Task<Delivery> QueueDirectAsync(PaddocksideDbContext db, StreamItem message, Party recipient, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        var delivery = Delivery.ToSender(message, recipient, now);
+        var address = RoutingAddress.ForRecipient(message, recipient.Id, await NewUniqueTokenAsync(db, new HashSet<string>(), cancellationToken), now);
+        delivery.AssignRoutingAddress(address);
+        db.RoutingAddresses.Add(address);
+        db.Deliveries.Add(delivery);
+        return delivery;
+    }
+
+    /// <summary>
     /// Tokens are unique across the product, so the check looks across every tenant — it asks only whether the
     /// token exists, never reads another tenant's row. The unique index is the final guarantee.
     /// </summary>
@@ -141,7 +155,8 @@ public sealed class EmailDispatcher(
             var horse = horses[message.HorseId];
             var party = parties[delivery.PartyId];
 
-            if (!AccessRule.CurrentOwnerAudience(tenant, horse, message).Contains(party.Id))
+            // A direct reply goes to whoever wrote in, owner or not; an owner update only to current owners.
+            if (!delivery.Direct && !AccessRule.CurrentOwnerAudience(tenant, horse, message).Contains(party.Id))
             {
                 delivery.Suppress("Not sent: no longer an owner when the email went out.", now);
                 continue;
@@ -167,9 +182,19 @@ public sealed class EmailDispatcher(
             }
 
             // Each owner's copy carries its own link: it opens this message and signs them in (identity-access.md §4.1).
-            var openLink = await links.IssueDeepLinkAsync(tenant.Id, party.Id, contact.Value, message.Id, message.EventId, cancellationToken);
-            var choices = options.Value.PortalBaseUrl is { Length: > 0 } portal ? $"{portal.TrimEnd('/')}/my/me#notifications" : null;
-            var rendered = renderer.Render(tenant, horse, message.EventId is { } eventId ? events.GetValueOrDefault(eventId) : null, message, party, openLink, choices);
+            // A direct reply carries no portal link: the person who wrote in may not be an owner at all.
+            var onEvent = message.EventId is { } eventId ? events.GetValueOrDefault(eventId) : null;
+            RenderedEmail rendered;
+            if (delivery.Direct)
+            {
+                rendered = renderer.RenderDirectReply(tenant, horse, onEvent, message, party);
+            }
+            else
+            {
+                var openLink = await links.IssueDeepLinkAsync(tenant.Id, party.Id, contact.Value, message.Id, message.EventId, cancellationToken);
+                var choices = options.Value.PortalBaseUrl is { Length: > 0 } portal ? $"{portal.TrimEnd('/')}/my/me#notifications" : null;
+                rendered = renderer.Render(tenant, horse, onEvent, message, party, openLink, choices);
+            }
             var result = await sender.SendAsync(new OutboundEmail(
                 options.Value.FromAddress,
                 Senders.For(tenant.Name),

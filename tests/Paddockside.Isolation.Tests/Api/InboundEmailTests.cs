@@ -8,6 +8,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Paddockside.Application.Messaging;
 using Paddockside.Domain;
 using Paddockside.Infrastructure.Inbound;
+using Paddockside.Infrastructure.Email;
 
 namespace Paddockside.Isolation.Tests.Api;
 
@@ -287,6 +288,55 @@ public sealed class InboundEmailTests(IsolationDatabase db, ApiFactoryFixture ap
         Assert.Equal(InboundState.Held, (await InboundFor(seed.TenantId, junk.MessageId)).State);
         Assert.Equal(InboundState.Ignored, (await InboundFor(seed.TenantId, chatty.MessageId)).State);
         Assert.Equal(0, (await coordinator.GetFromJsonAsync<QueueCounts>("/api/inbound/counts"))!.Waiting);
+    }
+
+    private sealed record RepliedTo(Guid Id, string To);
+
+    private sealed record HorseReplyView(string Author, string Body);
+
+    private sealed record OnTheHorse(Guid Id, string? Title, bool CanReplyToSender, List<HorseReplyView>? Replies);
+
+    [Fact]
+    public async Task Staff_reply_to_someone_who_wrote_in_and_their_answer_threads_back()
+    {
+        var seed = await SeedTenantAsync(eventInWindow: false);
+        var payload = Payload($"office@{seed.Slug}.in.paddockside.com.au", "agent@bloodstock.test", "Yearling inspection", "Can I see the colt on Friday?");
+        await InboundAsync(payload);
+        await ProcessQueueAsync();
+        using var coordinator = await Api.SignedInAsync(seed.TenantId, MemberRole.Coordinator);
+        var queued = (await InboundFor(seed.TenantId, payload.MessageId)).Id;
+        await coordinator.PostApiAsync($"/api/inbound/{queued}/place", new { horseId = seed.HorseId, eventId = (Guid?)null });
+
+        var item = (await coordinator.GetFromJsonAsync<List<OnTheHorse>>($"/api/horses/{seed.HorseId}/unplaced"))!.Single(i => i.Title == "Yearling inspection");
+        Assert.True(item.CanReplyToSender);
+
+        using var viewer = await Api.SignedInAsync(seed.TenantId, MemberRole.Viewer);
+        Assert.Equal(HttpStatusCode.Forbidden, (await viewer.PostApiAsync($"/api/items/{item.Id}/reply-to-sender", new { body = "Yes" })).StatusCode);
+
+        var replied = await coordinator.PostApiAsync($"/api/items/{item.Id}/reply-to-sender", new { body = "Friday at 10 works. Ask for Kate at the stables." });
+        Assert.Equal(HttpStatusCode.Created, replied.StatusCode);
+        var reply = (await replied.Content.ReadFromJsonAsync<RepliedTo>())!;
+        Assert.Contains("agent@bloodstock.test", reply.To);
+
+        // One plain email to them: "Re:" their subject, no portal sign-in link (they are not an owner).
+        await using (var scope = Api.Services.CreateAsyncScope())
+            await scope.ServiceProvider.GetRequiredService<EmailDispatcher>().DispatchAsync(CancellationToken.None);
+        var email = Api.Emails.Sent.Last(e => e.Email.ToAddress == "agent@bloodstock.test").Email;
+        Assert.Equal("Re: Yearling inspection", email.Subject);
+        Assert.Contains("Friday at 10 works.", email.TextBody);
+        Assert.DoesNotContain("/my/link#", email.TextBody);
+        Assert.StartsWith("r-", email.ReplyTo);
+
+        // Their answer to that email threads back under the reply, on the horse.
+        var answer = Payload(email.ReplyTo, "agent@bloodstock.test", "Re: Yearling inspection", "See you then.");
+        await InboundAsync(answer);
+        await ProcessQueueAsync();
+        Assert.Equal((InboundState.Placed, 1), ((await InboundFor(seed.TenantId, answer.MessageId)).State, (await InboundFor(seed.TenantId, answer.MessageId)).MatchTier));
+        var thread = (await coordinator.GetFromJsonAsync<List<OnTheHorse>>($"/api/horses/{seed.HorseId}/unplaced"))!.Single(i => i.Id == reply.Id);
+        Assert.Equal("See you then.", thread.Replies!.Single().Body);
+
+        // Only something that came in can be answered this way.
+        Assert.Equal(HttpStatusCode.BadRequest, (await coordinator.PostApiAsync($"/api/items/{reply.Id}/reply-to-sender", new { body = "Again" })).StatusCode);
     }
 
     private static object Attachment(string name, string contentType, byte[] content, string? contentId = null) =>

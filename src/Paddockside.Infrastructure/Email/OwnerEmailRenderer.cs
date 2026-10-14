@@ -57,6 +57,32 @@ public sealed class OwnerEmailRenderer
     }
 
     /// <summary>
+    /// A staff reply to someone who wrote in: a plain email from the business, no portal link (they may not be an
+    /// owner), and replying works as usual, back to the same horse.
+    /// </summary>
+    public RenderedEmail RenderDirectReply(Tenant tenant, Horse horse, Domain.Event? @event, StreamItem message, Party recipient)
+    {
+        var signOff = message.AuthorName is { Length: > 0 } author && !author.Contains('@') ? $"{author}, {tenant.Name}" : $"The team at {tenant.Name}";
+        var replyLine = $"Reply to this email to answer. It goes to {tenant.Name}.";
+        var whyLine = $"You are receiving this because you wrote to {tenant.Name} about {horse.Name}.";
+        var subject = message.Title is { Length: > 0 } t ? t : $"About {horse.Name}";
+
+        var html = new StringBuilder();
+        html.Append(Small(@event is null ? horse.Name : $"{horse.Name} · {@event.Title}"));
+        html.Append(Paragraph($"Hi {recipient.FirstName},"));
+        foreach (var paragraph in Paragraphs(message.Body)) html.Append(Paragraph(paragraph));
+        html.Append(Muted(signOff));
+
+        var text = new StringBuilder().AppendLine($"Hi {recipient.FirstName},").AppendLine();
+        foreach (var paragraph in Paragraphs(message.Body)) text.AppendLine(paragraph).AppendLine();
+        text.AppendLine($"- {signOff}").AppendLine();
+
+        return new RenderedEmail(subject,
+            Frame(tenant.Name, tenant.LogoUrl, tenant.FooterDetails, subject, Preview(message.Body), html.ToString(), replyLine, whyLine),
+            TextFrame(text.ToString(), replyLine, tenant.Name, tenant.FooterDetails, whyLine));
+    }
+
+    /// <summary>
     /// A sign-in link with its code (identity-access.md §4.1). <paramref name="sender"/> is the tenant when the
     /// address belongs to one tenant's owner, else the product.
     /// </summary>
