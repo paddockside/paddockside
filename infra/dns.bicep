@@ -65,6 +65,8 @@ resource apexTxt 'Microsoft.Network/dnsZones/TXT@2018-05-01' = {
       // Microsoft Entra domain verification for the paddockside.com.au custom domain.
       { value: ['MS=ms22572786'] }
       { value: ['v=spf1 include:spf.titan.email ~all'] }
+      // Twilio domain verification (owner texts; added 14 Oct 2026).
+      { value: ['twilio-domain-verification=56e4925b6a49fe422f66810b055d898c'] }
     ]
   }
 }
