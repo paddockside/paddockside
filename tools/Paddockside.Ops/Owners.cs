@@ -15,7 +15,7 @@ internal static class Owners
         if (await TenantAsync(connection, slug) is not { } tenant) return 1;
         await using var db = For(connection, tenant.Id);
         var horses = await LoadHorsesAsync(db);
-        var parties = await db.Parties.AsNoTracking().ToDictionaryAsync(p => p.Id, p => p.DisplayName);
+        var parties = await db.Parties.AsNoTracking().ToDictionaryAsync(p => p.Id, p => p.PrimaryEmail is { } e ? $"{p.DisplayName} <{e.Value}>" : p.DisplayName);
 
         Console.WriteLine($"{tenant.Name}:");
         foreach (var horse in horses.OrderBy(h => h.Name, StringComparer.OrdinalIgnoreCase))
