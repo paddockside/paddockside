@@ -28,7 +28,8 @@ public static class OwnerEndpoints
 
     public sealed record OwnerUpdate(Guid ItemId, Guid HorseId, string Horse, Guid? EventId, string? Event, string Kind, string? Title, string Summary, string At, bool Unread);
 
-    public sealed record OwnerField(string Label, string Value);
+    /// <param name="Was">The value before the source corrected it.</param>
+    public sealed record OwnerField(string Label, string Value, string? Was = null);
 
     public sealed record OwnerReply(string Author, string At, string Body);
 
@@ -42,8 +43,21 @@ public static class OwnerEndpoints
 
     public sealed record AnswerRequest(string Value);
 
+    /// <summary>Their owners tickets: confirmed, or what they asked for while it is sorted.</summary>
+    public sealed record OwnerTickets(string Line, bool Confirmed, string? Note);
+
+    /// <summary>"5% of Autumn Ridge", "Since April 2025 · with 13 other owners": a count, never names.</summary>
+    public sealed record OwnerShare(string Line, string Detail);
+
+    public sealed record OwnerEarlier(Guid Id, string Title);
+
+    /// <param name="Heading">The event as a sentence: "Autumn Ridge races at Randwick on Saturday".</param>
+    /// <param name="GlanceTitle">"Saturday at a glance".</param>
+    /// <param name="Glance">The facts they can see, the latest value of each: race, barrier, jockey.</param>
     /// <remarks>Never the other owners' names: owners don't see who else owns the horse (David, 14 Oct 2026).</remarks>
-    public sealed record OwnerEventPage(HorseEndpoints.EventSummary Event, Guid HorseId, string Horse, IReadOnlyList<OwnerItem> Items);
+    public sealed record OwnerEventPage(HorseEndpoints.EventSummary Event, Guid HorseId, string Horse, IReadOnlyList<OwnerItem> Items,
+        string? Heading = null, string? GlanceTitle = null, IReadOnlyList<OwnerField>? Glance = null, OwnerTickets? Tickets = null,
+        OwnerShare? Share = null, IReadOnlyList<OwnerEarlier>? Earlier = null);
 
     public sealed record ReplyRequest(string Body);
 
@@ -206,11 +220,14 @@ public static class OwnerEndpoints
         var myAnswers = await db.PromptAnswers.AsNoTracking().Where(a => a.PartyId == party.Id && itemIds.Contains(a.StreamItemId))
             .ToDictionaryAsync(a => a.StreamItemId, a => a.Value, cancellationToken);
         var read = await ReadAsync(db, party.Id, cancellationToken);
+        var byId = items.ToDictionary(i => i.Id);
+        var glance = visible.Where(i => i.Kind == StreamItemKind.Fact).SelectMany(i => i.Fields).DistinctBy(f => f.Label).Take(6)
+            .Select(f => new OwnerField(f.Label, f.Value)).ToList();
 
         var summary = HorseEndpoints.Summarise(e, visible.Select(i => i.StepCode), visible.Count == 0 ? null : visible.Max(i => i.OccurredAt), now);
         summary = summary with { Steps = summary.Steps.Where(s => s.ClientVisible).ToList(), Unread = visible.Count(i => IsUnread(i, party.Id, read)) };
 
-        return new OwnerEventPage(summary, horse.Id, horse.Name, visible
+        var page = new OwnerEventPage(summary, horse.Id, horse.Name, visible
             .OrderByDescending(i => i.OccurredAt)
             .Select(i =>
             {
@@ -223,7 +240,7 @@ public static class OwnerEndpoints
                     i.Body,
                     mine ? "You" : AuthorFor(i, party.Id),
                     i.Source,
-                    i.Fields.Select(f => new OwnerField(f.Label, f.Value)).ToList(),
+                    i.Fields.Select(f => new OwnerField(f.Label, f.Value, Events.EventEndpoints.WasValue(i, f, byId))).ToList(),
                     i.SupersedesId is null ? null : $"Updated by {i.Source}{(i.CorrectionNote is null ? "" : $": {i.CorrectionNote}")}",
                     replies[i.Id].OrderBy(r => r.OccurredAt).Select(r => new OwnerReply("You", Words.Recently(r.OccurredAt, now), r.Body)).ToList(),
                     CanReplyTo(i),
@@ -232,6 +249,97 @@ public static class OwnerEndpoints
                     i.Prompt is { } p && CanReplyTo(i) ? new OwnerPrompt(p.Kind.ToString(), p.Question, p.Answers, myAnswers.GetValueOrDefault(i.Id)) : null);
             })
             .ToList());
+
+        return page with
+        {
+            Heading = Heading(e, horse.Name, now),
+            GlanceTitle = e.KeyDate is { } key && key > now.AddDays(-1) && key < now.AddDays(6) ? $"{Words.Local(key):dddd} at a glance" : "At a glance",
+            Glance = glance,
+            Tickets = await TicketsForAsync(db, e, items, party.Id, tenant, cancellationToken),
+            Share = Share(horse, party.Id, tenant),
+            Earlier = await EarlierAsync(db, viewer, horse, e.Id, cancellationToken),
+        };
+    }
+
+    private static readonly System.Globalization.CultureInfo Australian = System.Globalization.CultureInfo.GetCultureInfo("en-AU");
+
+    /// <summary>
+    /// The event as a sentence, as the owner mockup puts it: "Autumn Ridge races at Randwick on Saturday". A race's
+    /// place is its title up to the first comma ("Randwick, Race 6"); without a date or for other types, the title.
+    /// </summary>
+    internal static string Heading(DomainEvent e, string horse, DateTimeOffset now)
+    {
+        var (future, past) = e.EventType switch
+        {
+            "RaceStart" => ("races", "raced"),
+            "BarrierTrial" => ("trials", "trialled"),
+            _ => ((string?)null, (string?)null),
+        };
+        if (future is null || e.KeyDate is not { } key) return $"{horse}: {e.Title}";
+
+        var comma = e.Title.IndexOf(',');
+        var at = comma > 0 ? $" at {e.Title[..comma].Trim()}" : "";
+        var day = Words.Local(key).Date;
+        var today = Words.Local(now).Date;
+        var when = day == today ? "today"
+            : day == today.AddDays(1) ? "tomorrow"
+            : day > today && day < today.AddDays(7) ? $"on {day.ToString("dddd", Australian)}"
+            : $"on {day.ToString("dddd d MMMM", Australian)}";
+        return $"{horse} {(day < today ? past : future)}{at} {when}";
+    }
+
+    /// <summary>Their owners tickets for a race: the number confirmed to them, or what they asked for while it is sorted.</summary>
+    private static async Task<OwnerTickets?> TicketsForAsync(PaddocksideDbContext db, DomainEvent e, List<StreamItem> items, Guid partyId, Tenant tenant,
+        CancellationToken cancellationToken)
+    {
+        if (e.EventType != EventTypes.RaceStart.Code) return null;
+        var allocation = await db.TicketAllocations.AsNoTracking().SingleOrDefaultAsync(a => a.EventId == e.Id, cancellationToken);
+        var grant = allocation?.Grants.FirstOrDefault(g => g.PartyId == partyId);
+        var question = items.Where(i => i.StepCode == "TICKETS" && i.InReplyToId == null && i.Prompt is { Kind: PromptKind.Count }).MaxBy(i => i.OccurredAt);
+        var asked = question is null ? null
+            : (await db.PromptAnswers.AsNoTracking().SingleOrDefaultAsync(a => a.StreamItemId == question.Id && a.PartyId == partyId, cancellationToken))?.Value;
+
+        static string Tickets(int n) => n == 1 ? "1 owners ticket" : $"{n} owners tickets";
+        if (grant?.Confirmed is { } confirmed)
+            return new OwnerTickets(confirmed == 0 ? "No tickets this time" : $"{Tickets(confirmed)} for you", true,
+                int.TryParse(asked, out var wanted) && wanted > confirmed ? $"You asked for {wanted}." : null);
+        if (asked is null) return null;
+        return asked == "0"
+            ? new OwnerTickets("You said none this time", false, null)
+            : new OwnerTickets($"You asked for {asked}", false, $"{tenant.Name} will confirm.");
+    }
+
+    /// <summary>Their share of the horse now, from units (ownership-model.md: units stored, percentages shown).</summary>
+    private static OwnerShare? Share(Horse horse, Guid partyId, Tenant tenant)
+    {
+        if (horse.CurrentManagementPeriod is not { } period) return null;
+        var current = horse.Interests.Where(i => i.ManagementPeriodId == period.Id && i.IsActive).ToList();
+        var mine = current.Where(i => i.PartyId == partyId).ToList();
+        var total = current.Sum(i => i.Units);
+        if (mine.Count == 0 || total == 0) return null;
+
+        var percent = 100m * mine.Sum(i => i.Units) / total;
+        var others = current.Select(i => i.PartyId).Where(p => p != partyId && p != tenant.HousePartyId).Distinct().Count();
+        var since = Words.Local(mine.Min(i => i.EffectiveFrom)).ToString("MMMM yyyy", Australian);
+        return new OwnerShare($"{percent.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)}% of {horse.Name}",
+            $"Since {since}" + (others == 0 ? "" : $" · with {others} other {(others == 1 ? "owner" : "owners")}"));
+    }
+
+    /// <summary>Their other events on this horse, newest first: the ones they could open.</summary>
+    private static async Task<IReadOnlyList<OwnerEarlier>> EarlierAsync(PaddocksideDbContext db, OwnerViewer viewer, Horse horse, Guid current,
+        CancellationToken cancellationToken)
+    {
+        var events = await db.Events.AsNoTracking().Where(e => e.HorseId == horse.Id && e.Id != current && e.Status != EventStatus.Draft).ToListAsync(cancellationToken);
+        var ids = events.Select(e => e.Id).ToList();
+        var items = (await db.StreamItems.AsNoTracking().Where(i => i.EventId != null && ids.Contains(i.EventId.Value)).ToListAsync(cancellationToken))
+            .ToLookup(i => i.EventId!.Value);
+        var live = HoldsLiveInterest(horse, viewer.Party.Id);
+        return events
+            .Where(e => VisibleIn(viewer, horse, items[e.Id]).Count > 0 || (live && e.Status == EventStatus.Open))
+            .OrderByDescending(e => e.KeyDate ?? e.OpenedAt)
+            .Take(4)
+            .Select(e => new OwnerEarlier(e.Id, e.KeyDate is { } k ? $"{e.Title} · {Words.Local(k).ToString("d MMM", Australian)}" : e.Title))
+            .ToList();
     }
 
     /// <summary>They have looked at this event: everything on it they can see is no longer new to them.</summary>

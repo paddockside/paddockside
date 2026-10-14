@@ -5,21 +5,45 @@
 
 @*
     The owner portal's frame (design-system.md §2.0, §2.2): the tenant's logo and name at the top, one thing per
-    screen, 18 px text, and a bottom bar of three labelled destinations — My horses, Updates, Me. No hamburger menu,
-    no icon-only controls. The product's name is small in the footer, never in the owner's way.
+    screen, 18 px text, and three labelled destinations — My horses, Updates, Me: a bottom bar on a phone, beside the
+    tenant's name at the top on a wide screen (the owner mockup), with their own name at the right. No hamburger
+    menu, no icon-only controls. The product's name is small in the footer, never in the owner's way. An event page
+    is wider, for its side panel.
 *@
 <div class="grid min-h-screen grid-cols-[minmax(0,1fr)] grid-rows-[auto_1fr_auto] bg-surface-default text-body-owner">
     <AppHeader Side="Side.Owner" TenantName="@Session.Current?.TenantName" LogoUrl="@Session.Current?.TenantLogoUrl"
-               OtherTenants="OtherTenants" OnSwitchTenant="Switch" />
+               OtherTenants="OtherTenants" OnSwitchTenant="Switch">
+        <Actions>
+            @if (Session.Current is { } me)
+            {
+                <nav aria-label="Main" class="hidden lg:block">
+                    <ul class="flex gap-1">
+                        @foreach (var (href, label) in Destinations)
+                        {
+                            var current = IsCurrent(href);
+                            <li>
+                                <a href="@href" aria-current="@(current ? "page" : null)"
+                                   class="flex min-h-[48px] items-center rounded-control px-4 font-strong @(current ? "bg-scope-owners-bg text-scope-owners-fg" : "text-text-primary hover:bg-surface-sunken")">@label</a>
+                            </li>
+                        }
+                    </ul>
+                </nav>
+                <span class="hidden items-center gap-3 lg:flex">
+                    <span aria-hidden="true" class="grid size-[40px] place-items-center rounded-pill bg-scope-owners-bg text-small font-heading text-scope-owners-fg">@Monograms.Of(me.Name)</span>
+                    <span class="font-strong">@me.Name</span>
+                </span>
+            }
+        </Actions>
+    </AppHeader>
 
-    <main class="mx-auto w-full max-w-xl px-4 pb-[8rem] pt-6">
+    <main class="mx-auto w-full @(Wide ? "max-w-xl lg:max-w-6xl" : "max-w-xl") px-4 pb-[8rem] pt-6 lg:pb-12 lg:pt-8">
         @Body
         <p class="mt-12 text-center text-small text-text-muted">Paddockside</p>
     </main>
 
     @if (Session.Current is not null)
     {
-        <nav aria-label="Main" class="fixed inset-x-0 bottom-0 z-10 border-t border-border-subtle bg-surface-raised pb-[env(safe-area-inset-bottom)]">
+        <nav aria-label="Main" class="fixed inset-x-0 bottom-0 z-10 border-t lg:hidden border-border-subtle bg-surface-raised pb-[env(safe-area-inset-bottom)]">
             <ul class="mx-auto grid max-w-xl grid-cols-3">
                 @foreach (var (href, label) in Destinations)
                 {
@@ -41,6 +65,9 @@
 
     private IReadOnlyList<TenantOption> OtherTenants =>
         Session.Current?.Tenants.Where(t => !t.Current).Select(t => new TenantOption(t.Id.ToString(), t.Name)).ToList() ?? [];
+
+    /// <summary>An event page: room for its side panel on a wide screen.</summary>
+    private bool Wide => Navigation.ToBaseRelativePath(Navigation.Uri).StartsWith("my/events/", StringComparison.Ordinal);
 
     private bool IsCurrent(string href)
     {

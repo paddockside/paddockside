@@ -209,3 +209,18 @@ public static class Marks
 
     public static bool IsProblem(DeliveryStatus status) => status is DeliveryStatus.Bounced or DeliveryStatus.Suppressed;
 }
+
+/// <summary>Initials for an avatar: "Margaret Hale" → "MH", "kate@laurel-oak.test" → "KA".</summary>
+public static class Monograms
+{
+    public static string Of(string name)
+    {
+        var words = name.Split('@')[0].Split([' ', '.', '-', '_'], StringSplitOptions.RemoveEmptyEntries).Where(w => char.IsLetterOrDigit(w[0])).ToList();
+        return words.Count switch
+        {
+            0 => "?",
+            1 => words[0][..Math.Min(2, words[0].Length)].ToUpperInvariant(),
+            _ => $"{char.ToUpperInvariant(words[0][0])}{char.ToUpperInvariant(words[^1][0])}",
+        };
+    }
+}

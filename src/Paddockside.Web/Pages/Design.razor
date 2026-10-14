@@ -67,6 +67,13 @@
         </div>
     </Section>
 
+    <Section Title="OwnerItemCard" Doc="message-thread.md">
+        <div class="grid gap-4 lg:grid-cols-2">
+            <Variant Label="Owner: a question with their answer, and their reply"><OwnerItemCard Item="AutumnRidge.OwnerTicketsMessage" TenantName="Laurel Oak Bloodstock" ViewerName="Margaret Doyle" /></Variant>
+            <Variant Label="Owner: a corrected fact, in words"><OwnerItemCard Item="AutumnRidge.OwnerAcceptance" TenantName="Laurel Oak Bloodstock" /></Variant>
+        </div>
+    </Section>
+
     <Section Title="MessageThread" Doc="message-thread.md">
         <div class="grid gap-4 lg:grid-cols-2">
             <Variant Label="Staff: every reply and the delivery line (select it)"><MessageThread Model="AutumnRidge.TicketsMessage" /></Variant>

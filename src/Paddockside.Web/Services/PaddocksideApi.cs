@@ -171,7 +171,7 @@ public sealed record OwnerHorse(Guid Id, string Name, string? SexAge, string? Pe
 
 public sealed record OwnerUpdate(Guid ItemId, Guid HorseId, string Horse, Guid? EventId, string? Event, string Kind, string? Title, string Summary, string At, bool Unread);
 
-public sealed record OwnerField(string Label, string Value);
+public sealed record OwnerField(string Label, string Value, string? Was = null);
 
 public sealed record OwnerReply(string Author, string At, string Body);
 
@@ -180,7 +180,14 @@ public sealed record OwnerItem(Guid Id, string Kind, string At, string? Title, s
 
 public sealed record OwnerPrompt(string Kind, string Question, List<string> Answers, string? Mine);
 
-public sealed record OwnerEventPage(EventSummary Event, Guid HorseId, string Horse, List<OwnerItem> Items);
+public sealed record OwnerTickets(string Line, bool Confirmed, string? Note);
+
+public sealed record OwnerShare(string Line, string Detail);
+
+public sealed record OwnerEarlier(Guid Id, string Title);
+
+public sealed record OwnerEventPage(EventSummary Event, Guid HorseId, string Horse, List<OwnerItem> Items, string? Heading = null, string? GlanceTitle = null,
+    List<OwnerField>? Glance = null, OwnerTickets? Tickets = null, OwnerShare? Share = null, List<OwnerEarlier>? Earlier = null);
 
 public sealed record Contacted(Guid Id);
 

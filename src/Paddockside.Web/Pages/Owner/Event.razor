@@ -4,15 +4,16 @@
 @inject IJSRuntime JS
 
 @*
-    One event as an owner sees it (search-reporting.md §3; event-page-mockup-notes.md, owner view): the same spine as
-    the staff page — steps at the top, then items newest first — but only what is scoped to them, only their own
-    replies, no internal notes and no delivery figures. Other owners are named only if the tenant allows. Every
-    notification link lands here, on its item ("#item-…"), scrolled into view and highlighted. "Contact {tenant}"
-    is the help control (design-system.md §2.0): a message to staff, on this horse, that lands in the stream.
+    One event as an owner sees it (search-reporting.md §3; the owner mockup): the horse and the event as a sentence,
+    the steps owners care about, then everything newest first on one spine: only what is scoped to them, only their
+    own replies, no internal notes, no delivery figures, and no other owner ever named. Beside it (above it on a
+    phone), the event at a glance, their share, their earlier events and "Contact {tenant}", the help control
+    (design-system.md §2.0). The reply bar at the bottom writes to staff about this horse. Every notification link
+    lands here, on its item ("#item-…"), scrolled into view and highlighted.
 *@
-<PageTitle>@(_page?.Event.Title ?? "Update")</PageTitle>
+<PageTitle>@(_page?.Heading ?? _page?.Event.Title ?? "Update")</PageTitle>
 
-<div class="grid grid-cols-[minmax(0,1fr)] gap-6">
+<div class="grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start">
     @if (_error is not null)
     {
         <a href="my/horses" class="btn-link justify-self-start">← My horses</a>
@@ -24,57 +25,154 @@
     }
     else
     {
-        <a href="my/horses/@_page.HorseId" class="btn-link justify-self-start">← @_page.Horse</a>
-        <h1 class="sr-only">@_page.Horse: @_page.Event.Title</h1>
-        <EventCard Side="Side.Owner" Model="_page.Event.ToCard()" />
+        <header class="grid gap-5 lg:col-start-1">
+            <div class="flex items-center gap-4 sm:gap-6">
+                <span aria-hidden="true" class="grid size-[56px] shrink-0 place-items-center rounded-card bg-scope-owners-bg text-title font-heading text-scope-owners-fg sm:size-[88px] sm:text-heading">@Monograms.Of(_page.Horse)</span>
+                <div class="grid min-w-0 gap-1">
+                    <nav class="text-small text-text-muted" aria-label="Breadcrumb">
+                        <a href="my/horses" class="underline underline-offset-4">My horses</a> ›
+                        <a href="my/horses/@_page.HorseId" class="underline underline-offset-4">@_page.Horse</a>
+                    </nav>
+                    <h1 class="text-title font-heading leading-tight sm:text-heading">@(_page.Heading ?? $"{_page.Horse}: {_page.Event.Title}")</h1>
+                    <p class="text-text-muted">@Detail</p>
+                </div>
+            </div>
 
-        <button type="button" class="btn-secondary justify-self-start whitespace-normal text-left" @onclick="FocusContact">Contact @TenantName</button>
+            @if (_page.Event.Steps.Count > 0)
+            {
+                <ol class="flex max-w-[760px] flex-wrap items-center gap-3" aria-label="Progress">
+                    @for (var i = 0; i < _page.Event.Steps.Count; i++)
+                    {
+                        var step = _page.Event.Steps[i];
+                        if (i > 0)
+                        {
+                            <li aria-hidden="true" class="hidden h-[3px] min-w-[16px] flex-1 sm:block @(step.State is "Done" or "Current" ? "bg-action-primary-bg" : "bg-border-subtle")"></li>
+                        }
+                        <li class="flex items-center gap-2 font-strong @(step.State switch { "Done" => "text-text-primary", "Current" => "text-action-primary-bg", _ => "text-text-muted" })"
+                            aria-current="@(step.State == "Current" ? "step" : null)">
+                            <span aria-hidden="true" class="size-[16px] shrink-0 rounded-pill @(step.State switch { "Done" => "bg-action-primary-bg", "Current" => "border-[5px] border-action-primary-bg bg-surface-raised", _ => "border-2 border-border-strong bg-surface-raised" })"></span>
+                            @step.Label<span class="sr-only">, @(step.State switch { "Done" => "done", "Current" => "now", _ => "to come" })</span>
+                        </li>
+                    }
+                </ol>
+            }
+        </header>
 
-        @if (_page.Items.Count == 0)
-        {
-            <div class="card"><p>Nothing posted yet. You'll get an email when there is.</p></div>
-        }
-        @foreach (var item in _page.Items)
-        {
-            var target = item.Id == _target;
-            <section id="item-@item.Id" tabindex="-1" aria-label="@(item.Title ?? item.Kind)"
-                     class="grid gap-3 rounded-card @(target ? "ring-4 ring-focus ring-offset-4 ring-offset-surface-default" : null)">
-                <OwnerItemCard Item="item" TenantName="@TenantName" Busy="@(_answering == item.Id)" AnswerError="@_answerError.GetValueOrDefault(item.Id)"
-                               OnAnswer="answer => AnswerAsync(item, answer)" />
-
-                @if (item.CanReply && item.Prompt is not null)
-                {
-                    @* Under a question the answer buttons are the reply; words are extra, so they wait behind a link. *@
-                    <details class="grid gap-3" open="@_replyError.ContainsKey(item.Id)">
-                        <summary class="btn-link cursor-pointer">Add a message for @TenantName (optional)</summary>
-                        @ReplyForm(item, "Your message", "btn-secondary")
-                    </details>
-                }
-                else if (item.CanReply)
-                {
-                    @ReplyForm(item, $"Reply to {TenantName}", "btn-primary")
-                }
+        <aside class="grid grid-cols-[minmax(0,1fr)] gap-6 rounded-card border border-border-subtle bg-surface-raised px-6 py-6 lg:sticky lg:top-6 lg:col-start-2 lg:row-span-3 lg:row-start-1"
+               aria-label="About this event">
+            <section class="grid gap-3">
+                <h2 class="@SideHeading">@(_page.GlanceTitle ?? "At a glance")</h2>
+                <dl class="grid grid-cols-[90px_minmax(0,1fr)] gap-x-3 gap-y-2">
+                    <dt class="text-text-muted">When</dt>
+                    <dd class="font-strong">@_page.Event.KeyDate</dd>
+                    @foreach (var f in _page.Glance ?? [])
+                    {
+                        <dt class="text-text-muted">@f.Label</dt>
+                        <dd>@f.Value</dd>
+                    }
+                    @if (_page.Tickets is { } tickets)
+                    {
+                        <dt class="text-text-muted">Tickets</dt>
+                        <dd class="grid gap-1">
+                            <span class="font-strong @(tickets.Confirmed ? "text-action-primary-bg" : null)">@tickets.Line</span>
+                            @if (tickets.Note is not null)
+                            {
+                                <span class="text-small text-text-muted">@tickets.Note</span>
+                            }
+                        </dd>
+                    }
+                </dl>
             </section>
-        }
 
-        <section id="contact" class="card grid gap-3" aria-labelledby="contact-heading">
-            <h2 id="contact-heading" class="text-title font-heading">Contact @TenantName</h2>
+            @if (_page.Share is { } share)
+            {
+                <section class="grid gap-1">
+                    <h2 class="@SideHeading">Your share</h2>
+                    <p>@share.Line</p>
+                    <p class="text-small text-text-muted">@share.Detail</p>
+                </section>
+            }
+
+            <section class="grid gap-2">
+                <h2 class="@SideHeading">Earlier</h2>
+                <ul class="grid gap-2">
+                    @foreach (var e in _page.Earlier ?? [])
+                    {
+                        <li><a href="my/events/@e.Id" class="text-action-primary-bg underline underline-offset-4">@e.Title</a></li>
+                    }
+                    <li><a href="my/horses/@_page.HorseId" class="text-text-muted underline underline-offset-4">All of @(_page.Horse)'s story</a></li>
+                </ul>
+            </section>
+
+            <div class="grid gap-2">
+                <button type="button" class="btn-secondary w-full whitespace-normal" @onclick="FocusContact">Contact @TenantName</button>
+                <p class="text-center text-small text-text-muted">Only @TenantName sees what you write.</p>
+            </div>
+        </aside>
+
+        <section class="lg:col-start-1" aria-label="Updates, newest first">
+            @if (_page.Items.Count == 0)
+            {
+                <div class="card"><p>Nothing posted yet. You'll get an email when there is.</p></div>
+            }
+            <ol>
+                @foreach (var item in _page.Items)
+                {
+                    var target = item.Id == _target;
+                    var (day, time) = When(item.At);
+                    <li id="item-@item.Id" tabindex="-1" aria-label="@(item.Title ?? item.Kind)"
+                        class="grid grid-cols-[20px_minmax(0,1fr)] gap-x-3 sm:grid-cols-[120px_32px_minmax(0,1fr)] sm:gap-x-4">
+                        <p class="hidden pt-[22px] text-right leading-snug text-text-muted sm:block">
+                            @day@if (time is not null)
+                            {
+                                <br /><span class="text-small">@time</span>
+                            }
+                        </p>
+                        <div class="relative flex justify-center" aria-hidden="true">
+                            <span class="absolute inset-y-0 w-[3px] bg-border-subtle"></span>
+                            <span class="relative mt-[22px] size-[20px] rounded-pill border-4 @(item.Kind == "Result" ? "border-kind-fact-fg bg-kind-fact-fg" : "border-action-primary-bg bg-surface-raised")"></span>
+                        </div>
+                        <div class="grid min-w-0 gap-2 pb-6 pt-3">
+                            <p class="text-small text-text-muted sm:hidden">@item.At</p>
+                            <div class="rounded-card @(target ? "ring-4 ring-focus ring-offset-4 ring-offset-surface-default" : null)">
+                                <OwnerItemCard Item="item" TenantName="@TenantName" ViewerName="@Session.Current?.Name" Busy="@(_answering == item.Id)"
+                                               AnswerError="@_answerError.GetValueOrDefault(item.Id)" OnAnswer="answer => AnswerAsync(item, answer)">
+                                    @if (item.CanReply)
+                                    {
+                                        @* Answer buttons are the reply to a question; words are extra, so they wait behind a link. *@
+                                        <details class="grid gap-3 border-t border-border-subtle pt-3" open="@_replyError.ContainsKey(item.Id)">
+                                            <summary class="cursor-pointer font-strong text-action-primary-bg underline underline-offset-4">
+                                                @(item.Prompt is null ? $"Reply to {TenantName}" : $"Add a message for {TenantName} (optional)")
+                                            </summary>
+                                            @ReplyForm(item, item.Prompt is null ? "Your reply" : "Your message", "btn-primary")
+                                        </details>
+                                    }
+                                </OwnerItemCard>
+                            </div>
+                        </div>
+                    </li>
+                }
+            </ol>
+        </section>
+
+        <section id="contact" class="sticky bottom-[calc(64px+env(safe-area-inset-bottom))] z-10 grid gap-2 rounded-t-card border border-b-0 border-border-subtle bg-surface-raised p-4 sm:px-[22px] lg:bottom-0 lg:col-start-1"
+                 aria-label="Contact @TenantName">
             @if (_contactSent)
             {
                 <p class="rounded-control bg-status-success-bg px-4 py-3 text-status-success-fg" role="status">
-                    Sent. @TenantName will see it with @_page.Horse's updates and get back to you.
+                    Sent. @TenantName will see it with @(_page.Horse)'s updates and get back to you.
                 </p>
             }
-            <form class="grid gap-3" @onsubmit="ContactAsync" @onsubmit:preventDefault>
-                <label for="contact-body" class="font-strong">Your message about @_page.Horse</label>
-                <textarea id="contact-body" rows="4" class="rounded-control border border-border-strong bg-surface-raised p-4"
-                          @bind="_contactDraft" placeholder="Only @TenantName will see this."></textarea>
-                <button type="submit" class="btn-primary justify-self-start whitespace-normal text-left" disabled="@_contacting">Send to @TenantName</button>
-                @if (_contactError is not null)
-                {
-                    <p class="font-strong text-status-danger-fg" role="alert">@_contactError</p>
-                }
+            <form class="flex flex-wrap items-end gap-3" @onsubmit="ContactAsync" @onsubmit:preventDefault>
+                <label for="contact-body" class="sr-only">Your message to @TenantName about @_page.Horse</label>
+                <textarea id="contact-body" rows="1" class="input min-h-[56px] min-w-0 flex-1 basis-[14rem] rounded-card py-3"
+                          @bind="_contactDraft" placeholder="@($"Write to {TenantName} about {_page.Horse}…")"></textarea>
+                <button type="submit" class="btn-primary min-h-[56px]" disabled="@_contacting">Send</button>
             </form>
+            @if (_contactError is not null)
+            {
+                <p class="font-strong text-status-danger-fg" role="alert">@_contactError</p>
+            }
         </section>
     }
 </div>
@@ -94,7 +192,20 @@
     private bool _contacting;
     private bool _contactSent;
 
+    private const string SideHeading = "text-small font-strong uppercase tracking-wide text-text-muted";
+
     private string TenantName => Session.Current?.TenantName ?? "us";
+
+    /// <summary>The race and its facts on one line: "Randwick, Race 6 · Barrier 9 · Jockey T. Berry".</summary>
+    private string Detail => string.Join(" · ", new[] { _page!.Event.Title }
+        .Concat((_page.Glance ?? []).Take(3).Select(f => f.Value.Length > 0 && char.IsDigit(f.Value[0]) ? $"{f.Label} {f.Value}" : f.Value)));
+
+    /// <summary>"Thursday 10 October, 9:12 am" as two lines for the "when" column.</summary>
+    private static (string Day, string? Time) When(string at)
+    {
+        var comma = at.LastIndexOf(", ", StringComparison.Ordinal);
+        return comma < 0 ? (at, null) : (at[..comma], at[(comma + 2)..]);
+    }
 
     protected override async Task OnParametersSetAsync()
     {

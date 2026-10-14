@@ -107,7 +107,7 @@
                 {
                     var name = reply.IsViewer && owner ? "You" : reply.Author;
                     <li class="flex gap-3 border-t border-border-subtle pt-3 [&:not(:first-child)]:mt-3">
-                        <span aria-hidden="true" class="grid size-[36px] shrink-0 place-items-center rounded-pill bg-scope-owners-bg text-small font-heading text-scope-owners-fg">@Initials(name)</span>
+                        <span aria-hidden="true" class="grid size-[36px] shrink-0 place-items-center rounded-pill bg-scope-owners-bg text-small font-heading text-scope-owners-fg">@Monograms.Of(name)</span>
                         <div class="grid min-w-0 flex-1 gap-1">
                             <p class="flex flex-wrap items-baseline gap-x-2">
                                 <span class="font-strong">@name</span>
@@ -212,15 +212,4 @@
             @answer
         }
     };
-
-    private static string Initials(string name)
-    {
-        var words = name.Split([' ', '@', '.'], StringSplitOptions.RemoveEmptyEntries);
-        return words.Length switch
-        {
-            0 => "?",
-            1 => words[0][..Math.Min(2, words[0].Length)].ToUpperInvariant(),
-            _ => $"{char.ToUpperInvariant(words[0][0])}{char.ToUpperInvariant(words[^1][0])}",
-        };
-    }
 }

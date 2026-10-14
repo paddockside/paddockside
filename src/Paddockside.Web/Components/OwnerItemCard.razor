@@ -1,57 +1,110 @@
 @*
-    One item as an owner sees it on their event page: a fact (a result), something they wrote themselves, or a message
-    from the business with only their own replies; and, under a question, the buttons to answer it. Shared by the
-    owner's own page and the staff "View as an owner" preview, so the preview is exactly what the owner gets. In the
-    preview the answer buttons show their state but do nothing.
+    One item as an owner sees it on their event page (the owner mockup): a message with who it is from, a question
+    with its answer buttons on one line, and only their own replies, each confirmed as received; something they wrote
+    themselves; or a fact as one plain line, with a correction said in words. Shared by the owner's own page and the
+    staff "View as an owner" preview, so the preview is exactly what the owner gets. In the preview the answer
+    buttons show their state but do nothing.
 *@
-@if (Item.Unread)
-{
-    <span class="badge justify-self-start bg-action-primary-bg text-action-primary-fg">New</span>
-}
 @if (Item.Kind == "Result")
 {
-    <FactCard Side="Side.Owner" Model="@(new FactModel(Item.Title ?? "Result", Item.Source ?? "", Item.At, Scope.Owners,
-        Item.Fields.Select(f => new Components.FactField(f.Label, f.Value)).ToList(), Correction: Item.Corrected))" />
+    var changed = Item.Fields.Where(f => f.Was is not null).ToList();
+    <article class="grid gap-1 rounded-card border border-border-subtle bg-surface-raised px-4 py-4 sm:px-[22px]">
+        <p class="flex flex-wrap items-center gap-2">
+            @NewBadge
+            <span class="font-heading">@FactLine</span>
+        </p>
+        <p class="text-small text-text-muted">
+            From @Item.Source@foreach (var f in changed)
+            {
+                @($" · {f.Label.ToLowerInvariant()} was changed from {f.Was} to {f.Value}")
+            }
+        </p>
+    </article>
 }
 else if (Item.Mine)
 {
-    <article class="card grid gap-2 border-l-4 border-l-action-primary-bg">
-        <p class="text-small text-text-muted">@(Preview ? "They wrote" : "You wrote") to @TenantName · @Item.At</p>
-        <p class="whitespace-pre-line">@Item.Body</p>
+    <article class="flex gap-3 rounded-card border border-border-subtle bg-surface-raised px-4 py-4 sm:px-[22px]">
+        @Avatar(ViewerName ?? "You", mine: true)
+        <div class="grid min-w-0 flex-1 gap-1">
+            <p class="flex flex-wrap items-baseline gap-x-2">
+                <span class="font-heading">@(Preview ? "They wrote" : "You wrote") to @TenantName</span>
+                <span class="text-small text-text-muted">@Item.At</span>
+            </p>
+            <p class="whitespace-pre-line break-words">@Item.Body</p>
+            <p class="text-small font-strong text-action-primary-bg">@TenantName has @(Preview ? "their" : "your") message</p>
+        </div>
     </article>
 }
 else
 {
-    <MessageThread Side="Side.Owner" Model="@(new MessageModel(Item.Author ?? TenantName, Item.At, Scope.Owners, "", Item.Body,
-        Item.Replies.Select(r => new Reply(r.Author, "", r.At, r.Body, IsViewer: true)).ToList(), [], Title: Item.Title))" />
-}
+    <article class="grid gap-4 rounded-card border border-border-subtle bg-surface-raised px-4 py-4 sm:px-6 sm:py-[22px]">
+        <header class="flex items-center gap-3">
+            @Avatar(Item.Author ?? TenantName, mine: false)
+            <div class="grid min-w-0">
+                <p class="flex flex-wrap items-center gap-2">
+                    <span class="font-heading">@(Item.Title ?? $"Update from {Item.Author ?? TenantName}")</span>
+                    @NewBadge
+                </p>
+                <p class="text-small text-text-muted">@(Item.Author is null || Item.Author == TenantName ? TenantName : $"{Item.Author}, {TenantName}") · @Item.At</p>
+            </div>
+        </header>
 
-@if (Item.Prompt is { } prompt)
-{
-    <fieldset class="grid gap-3 rounded-card border-2 border-action-primary-bg p-4">
-        <legend class="px-1 font-strong">@prompt.Question</legend>
-        <div class="grid gap-3 @(prompt.Kind switch { "Count" => "grid-cols-4", "YesNo" => "grid-cols-2", _ => "grid-cols-1" })">
-            @foreach (var answer in prompt.Answers)
-            {
-                var chosen = prompt.Mine == answer;
-                <button type="button" aria-pressed="@(chosen ? "true" : "false")" disabled="@(Busy || Preview)"
-                        class="@(chosen ? "btn-primary" : "btn-secondary") min-h-[56px] w-full whitespace-normal px-2 text-title disabled:cursor-default"
-                        @onclick="() => OnAnswer.InvokeAsync(answer)">@answer</button>
-            }
-        </div>
-        <p class="text-text-muted" role="status">
-            @(Preview
-                ? prompt.Mine is { } theirs ? $"Their answer: {theirs}." : "Not answered yet."
-                : prompt.Mine is { } mine ? $"Your answer: {mine}. Tap another to change it." : "Tap your answer. You can change it later.")
-        </p>
-        @if (AnswerError is not null)
+        <div class="whitespace-pre-line break-words">@Item.Body</div>
+
+        @if (Item.Prompt is { } prompt)
         {
-            <p class="font-strong text-status-danger-fg" role="alert">@AnswerError</p>
+            var shown = _more || prompt.Kind != "Count" || prompt.Answers.Count <= 6 ? prompt.Answers : prompt.Answers.Take(5).ToList();
+            <fieldset class="grid gap-3 rounded-card bg-scope-owners-bg px-4 py-4">
+                <div class="flex flex-wrap items-center gap-3">
+                    <legend class="float-left mr-auto font-heading text-scope-owners-fg">@prompt.Question</legend>
+                    <div class="flex flex-wrap gap-2">
+                        @foreach (var answer in shown)
+                        {
+                            var chosen = prompt.Mine == answer;
+                            <button type="button" aria-pressed="@(chosen ? "true" : "false")" disabled="@(Busy || Preview)"
+                                    class="@(chosen ? "btn-primary" : "btn-secondary") min-w-[64px] whitespace-normal px-4 disabled:cursor-default"
+                                    @onclick="() => OnAnswer.InvokeAsync(answer)">@answer</button>
+                        }
+                        @if (shown.Count < prompt.Answers.Count)
+                        {
+                            <button type="button" class="btn-secondary px-4" @onclick="() => _more = true">More</button>
+                        }
+                    </div>
+                </div>
+                <p class="text-small text-scope-owners-fg" role="status">
+                    @(Preview
+                        ? prompt.Mine is { } theirs ? $"Their answer: {theirs}." : "Not answered yet."
+                        : prompt.Mine is { } mine ? $"Your answer: {mine}. Tap another to change it." : "Tap your answer. You can change it later.")
+                </p>
+                @if (AnswerError is not null)
+                {
+                    <p class="font-strong text-status-danger-fg" role="alert">@AnswerError</p>
+                }
+            </fieldset>
         }
-    </fieldset>
+
+        @foreach (var reply in Item.Replies)
+        {
+            <div class="flex gap-3 border-t border-border-subtle pt-4">
+                @Avatar(ViewerName ?? "You", mine: true)
+                <div class="grid min-w-0 flex-1 gap-1">
+                    <p class="flex flex-wrap items-baseline gap-x-2">
+                        <span class="font-heading">@(Preview ? "Their reply" : "You")</span>
+                        <span class="text-small text-text-muted">@reply.At</span>
+                    </p>
+                    <p class="whitespace-pre-line break-words">@reply.Body</p>
+                    <p class="text-small font-strong text-action-primary-bg">@TenantName has @(Preview ? "their" : "your") message</p>
+                </div>
+            </div>
+        }
+
+        @ChildContent
+    </article>
 }
 
 @code {
+    private bool _more;
+
     [Parameter, EditorRequired] public OwnerItem Item { get; set; } = null!;
 
     [Parameter, EditorRequired] public string TenantName { get; set; } = "";
@@ -59,9 +112,39 @@ else
     /// <summary>Staff looking as this owner: nothing can be answered or sent.</summary>
     [Parameter] public bool Preview { get; set; }
 
+    /// <summary>The owner's own name, for their avatar's initials.</summary>
+    [Parameter] public string? ViewerName { get; set; }
+
     [Parameter] public bool Busy { get; set; }
 
     [Parameter] public string? AnswerError { get; set; }
 
     [Parameter] public EventCallback<string> OnAnswer { get; set; }
+
+    /// <summary>Under a message: the owner's reply box.</summary>
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    /// <summary>"Acceptance — Randwick R6, 1400 m · Barrier 9 · Jockey T. Berry": a bare number gets its label.</summary>
+    private string FactLine
+    {
+        get
+        {
+            var values = string.Join(" · ", Item.Fields.Select(f => f.Value.Length > 0 && char.IsDigit(f.Value[0]) ? $"{f.Label} {f.Value}" : f.Value));
+            return values.Length == 0 ? Item.Title ?? "Update" : $"{Item.Title ?? "Update"} — {values}";
+        }
+    }
+
+    private RenderFragment NewBadge => __builder =>
+    {
+        if (Item.Unread)
+        {
+            <span class="badge bg-action-primary-bg text-action-primary-fg">New</span>
+        }
+    };
+
+    /// <summary>The mockup's avatars: the business's people in green, the owner themselves in the pale tint.</summary>
+    private static RenderFragment Avatar(string name, bool mine) => __builder =>
+    {
+        <span aria-hidden="true" class="grid size-[40px] shrink-0 place-items-center rounded-pill text-small font-heading @(mine ? "bg-scope-owners-bg text-scope-owners-fg" : "bg-action-primary-bg text-action-primary-fg")">@(name == "You" ? "Y" : Monograms.Of(name))</span>
+    };
 }

@@ -280,7 +280,7 @@ public static class EventEndpoints
     }
 
     /// <summary>For a corrected fact, the value it had before, when it changed.</summary>
-    private static string? WasValue(StreamItem item, FactField field, IReadOnlyDictionary<Guid, StreamItem> byId)
+    internal static string? WasValue(StreamItem item, FactField field, IReadOnlyDictionary<Guid, StreamItem> byId)
     {
         if (item.SupersedesId is not { } previousId || !byId.TryGetValue(previousId, out var previous)) return null;
         var before = previous.Fields.FirstOrDefault(f => f.Label == field.Label)?.Value;

@@ -86,6 +86,33 @@ public sealed partial class OwnerSignInTests
         Assert.DoesNotContain("Bob Owner", page);
     }
 
+    private sealed record GlanceField(string Label, string Value);
+
+    private sealed record ShareView(string Line, string Detail);
+
+    private sealed record PortalEventPanel(string Heading, string GlanceTitle, List<GlanceField> Glance, ShareView Share, object? Tickets, List<object> Earlier);
+
+    [Fact]
+    public async Task The_event_page_says_what_is_happening_and_their_share_without_naming_anyone()
+    {
+        var seed = await SeedAsync();
+        using var ann = await SignInAsync(seed.AnnEmail);
+        var page = (await ann.GetFromJsonAsync<PortalEventPanel>($"/api/my/events/{seed.EventId}"))!;
+
+        // Caulfield is five days away: named by its weekday.
+        var sydney = TimeZoneInfo.FindSystemTimeZoneById("Australia/Sydney");
+        var weekday = TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow.AddDays(5), sydney).ToString("dddd", System.Globalization.CultureInfo.GetCultureInfo("en-AU"));
+        Assert.Equal($"Bel Esprit races at Caulfield on {weekday}", page.Heading);
+        Assert.Equal($"{weekday} at a glance", page.GlanceTitle);
+        Assert.Equal(new GlanceField("Barrier", "9"), Assert.Single(page.Glance)); // the corrected barrier, once
+
+        // Half the horse, with one other owner: counted, never named.
+        Assert.Equal("50% of Bel Esprit", page.Share.Line);
+        Assert.EndsWith("with 1 other owner", page.Share.Detail);
+        Assert.Null(page.Tickets); // she hasn't been asked
+        Assert.Empty(page.Earlier);
+    }
+
     [Fact]
     public async Task Staff_view_an_event_as_one_owner_sees_it_and_nothing_is_marked_seen()
     {

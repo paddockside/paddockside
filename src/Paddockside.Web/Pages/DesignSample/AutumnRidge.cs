@@ -124,4 +124,18 @@ public static class AutumnRidge
 
     public static readonly IReadOnlyList<string> ComposeSteps =
         ["Owners tickets", "Trainer's pre-race", "Staff pre-race update", "Result", "Day after"];
+
+    /// <summary>Margaret's view of the tickets message: the question with her answer, and her own reply.</summary>
+    public static readonly Services.OwnerItem OwnerTicketsMessage = new(
+        Guid.Parse("00000000-0000-0000-0000-000000000101"), "Update", "Tuesday 13 October, 3:30 pm", "Your tickets for Saturday",
+        "Autumn Ridge runs on Saturday in Race 6 at Randwick. Tell us how many are coming by Thursday and we will have everything at the gate.",
+        "Kate Wells", null, [], null,
+        [new("You", "Today, 9:12 am", "Hi Kate, can I add one more for Saturday? My brother is down from Brisbane.")],
+        CanReply: true, Unread: true, Mine: false,
+        Prompt: new("Count", "How many are coming?", ["0", "1", "2", "3", "4", "5", "6", "7", "8"], "2"));
+
+    /// <summary>The corrected acceptance, as an owner reads it.</summary>
+    public static readonly Services.OwnerItem OwnerAcceptance = new(
+        Guid.Parse("00000000-0000-0000-0000-000000000102"), "Result", "Tuesday 13 October, 10:00 am", "Accepted", "", "Racing NSW", "Racing NSW",
+        [new("Race", "Race 6, 1400 m"), new("Barrier", "4", "7"), new("Jockey", "T. Berry")], "Updated by Racing NSW", [], false, false, false);
 }
