@@ -118,7 +118,7 @@ public sealed class SmsDispatcher(
             }
 
             var link = await links.IssueDeepLinkAsync(tenant.Id, party.Id, mobile.Value, message.Id, message.EventId, cancellationToken);
-            var text = SmsText.ForUpdate(tenant.Name, horse.Name, message.Title, message.Body, link);
+            var text = SmsText.ForUpdate(tenant.Name, horse.Name, message.Title, message.Body, link, message.Prompt?.Question);
             var result = await sender.SendAsync(mobile.Value, text, cancellationToken, StatusCallback);
             if (result.Accepted)
             {

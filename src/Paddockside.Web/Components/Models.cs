@@ -137,7 +137,9 @@ public sealed record ComposeDraft(
     Channel Channel,
     /// <summary>Ids of the chosen parties (from <see cref="PartyOption.Id"/>).</summary>
     IReadOnlyList<string> NamedParties,
-    string Body);
+    string Body,
+    /// <summary>A question for owners to answer with buttons, or null.</summary>
+    Services.PromptRequest? Prompt = null);
 
 /// <summary>Labels and colour classes, written out in full so Tailwind finds every class it must build.</summary>
 public static class Marks

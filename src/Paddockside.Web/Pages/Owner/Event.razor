@@ -66,6 +66,27 @@
                         item.Replies.Select(r => new Reply(r.Author, "", r.At, r.Body, IsViewer: true)).ToList(), [], Title: item.Title))" />
                 }
 
+                @if (item.Prompt is { } prompt)
+                {
+                    <fieldset class="grid gap-3 rounded-card border-2 border-action-primary-bg p-4">
+                        <legend class="px-1 font-strong">@prompt.Question</legend>
+                        <div class="grid gap-3 @(prompt.Kind switch { "Count" => "grid-cols-4", "YesNo" => "grid-cols-2", _ => "grid-cols-1" })">
+                            @foreach (var answer in prompt.Answers)
+                            {
+                                var chosen = prompt.Mine == answer;
+                                <button type="button" aria-pressed="@(chosen ? "true" : "false")" disabled="@(_answering == item.Id)"
+                                        class="@(chosen ? "btn-primary" : "btn-secondary") min-h-[56px] w-full whitespace-normal px-2 text-title"
+                                        @onclick="() => AnswerAsync(item, answer)">@answer</button>
+                            }
+                        </div>
+                        <p class="text-text-muted" role="status">@(prompt.Mine is { } mine ? $"Your answer: {mine}. Tap another to change it." : "Tap your answer. You can change it later.")</p>
+                        @if (_answerError.TryGetValue(item.Id, out var answerProblem))
+                        {
+                            <p class="font-strong text-status-danger-fg" role="alert">@answerProblem</p>
+                        }
+                    </fieldset>
+                }
+
                 @if (item.CanReply)
                 {
                     <form class="grid gap-3" @onsubmit="() => ReplyAsync(item)" @onsubmit:preventDefault>
@@ -147,6 +168,26 @@
     }
 
     private async Task FocusContact() => await JS.InvokeAsync<bool>("paddockside.scrollToItem", "contact-body");
+
+    private Guid? _answering;
+    private readonly Dictionary<Guid, string> _answerError = [];
+
+    /// <summary>A tap on an answer: recorded, shown as their reply, and the page reloads to show both.</summary>
+    private async Task AnswerAsync(OwnerItem item, string answer)
+    {
+        _answerError.Remove(item.Id);
+        _answering = item.Id;
+        try
+        {
+            var result = await Api.AnswerAsync(item.Id, answer);
+            if (!result.Succeeded) { _answerError[item.Id] = result.Error!; return; }
+            await LoadAsync();
+        }
+        finally
+        {
+            _answering = null;
+        }
+    }
 
     private async Task ReplyAsync(OwnerItem item)
     {

@@ -121,6 +121,85 @@ public sealed partial class OwnerSignInTests
         if (quiet) Assert.Equal(7, TimeZoneInfo.ConvertTime(SmsDispatcher.QuietEnds(DateTimeOffset.Parse(at)), SmsDispatcher.Sydney).Hour);
     }
 
+    private sealed record TallyOwner(Guid PartyId, string Name, string? Answer, string? How);
+
+    private sealed record Tally(string Question, string Summary, List<TallyOwner> Owners);
+
+    private sealed record StaffItem(Guid Id, string Body, List<Reply> Replies, Tally? Prompt);
+
+    private sealed record StaffPage(List<StaffItem> Items, Dictionary<string, PromptAsk> StepPrompts);
+
+    private sealed record PromptAsk(string Kind, string Question, int? Max);
+
+    private sealed record OwnerQuestion(string Question, List<string> Answers, string? Mine);
+
+    private sealed record QuestionItem(Guid Id, string Body, List<Reply> Replies, OwnerQuestion? Prompt);
+
+    private sealed record QuestionPage(List<QuestionItem> Items);
+
+    [Fact]
+    public async Task Owners_answer_a_question_with_buttons_and_staff_see_the_tally()
+    {
+        var seed = await SeedAsync();
+        using var staff = await Api.SignedInAsync(seed.TenantId, MemberRole.Coordinator);
+
+        // The tickets step suggests its own question.
+        var suggested = (await staff.GetFromJsonAsync<StaffPage>($"/api/events/{seed.EventId}"))!.StepPrompts["Owners tickets"];
+        Assert.Equal(("Count", 10), (suggested.Kind, suggested.Max));
+
+        var posted = (await (await staff.PostApiAsync($"/api/events/{seed.EventId}/items", new
+        {
+            audience = "Owners", scope = "Owners", step = "Owners tickets", channel = "Preferred", namedParties = (Guid[]?)null,
+            body = "The club has given us 8 owners tickets.", prompt = new { kind = "Count", question = "How many owners tickets would you like?", max = 6 },
+        })).Content.ReadFromJsonAsync<Sent>())!;
+        await DispatchAsync();
+        var email = Api.Emails.Sent.Last(e => e.Email.ToAddress == seed.AnnEmail && e.Email.Metadata.ContainsKey("deliveryId")).Email;
+        Assert.Contains("How many owners tickets would you like?", email.TextBody);
+        Assert.Contains("Reply with a number from 0 to 6", email.TextBody);
+
+        // Ann taps 2, then changes her mind to 3: her answer is the latest, and both show as her replies.
+        using var ann = await SignInAsync(seed.AnnEmail);
+        Assert.Equal(HttpStatusCode.BadRequest, (await ann.PostApiAsync($"/api/my/items/{posted.Id}/answer", new { value = "7" })).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await ann.PostApiAsync($"/api/my/items/{seed.NoteId}/answer", new { value = "1" })).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await ann.PostApiAsync($"/api/my/items/{posted.Id}/answer", new { value = "2" })).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await ann.PostApiAsync($"/api/my/items/{posted.Id}/answer", new { value = "3" })).StatusCode);
+        var mine = (await ann.GetFromJsonAsync<QuestionPage>($"/api/my/events/{seed.EventId}"))!.Items.Single(i => i.Id == posted.Id);
+        Assert.Equal(("3", 7), (mine.Prompt!.Mine, mine.Prompt.Answers.Count));
+        Assert.Equal(["My answer: 2", "Changed my answer to 3"], mine.Replies.Select(r => r.Body));
+
+        // Bob rang instead: staff set his answer.
+        Assert.Equal(HttpStatusCode.NoContent, (await staff.PostApiAsync($"/api/events/{seed.EventId}/items/{posted.Id}/answers", new { partyId = seed.BobId, value = "1" })).StatusCode);
+
+        var tally = (await staff.GetFromJsonAsync<StaffPage>($"/api/events/{seed.EventId}"))!.Items.Single(i => i.Id == posted.Id).Prompt!;
+        Assert.Equal("4 asked for by 2 owners · everyone has answered", tally.Summary);
+        Assert.Contains(tally.Owners, o => o.Name == "Ann Owner" && o.Answer == "3" && o.How == "in the portal");
+        Assert.Contains(tally.Owners, o => o.Name == "Bob Owner" && o.Answer == "1" && o.How!.StartsWith("set by", StringComparison.Ordinal));
+
+        // A viewer can't change answers.
+        using var viewer = await Api.SignedInAsync(seed.TenantId, MemberRole.Viewer);
+        Assert.Equal(HttpStatusCode.Forbidden, (await viewer.PostApiAsync($"/api/events/{seed.EventId}/items/{posted.Id}/answers", new { partyId = seed.BobId, value = "2" })).StatusCode);
+    }
+
+    [Fact]
+    public async Task A_text_reply_in_words_is_counted_as_the_answer()
+    {
+        var seed = await SeedAsync();
+        using var staff = await Api.SignedInAsync(seed.TenantId, MemberRole.Coordinator);
+        var posted = (await (await staff.PostApiAsync($"/api/events/{seed.EventId}/items", new
+        {
+            audience = "Owners", scope = "Owners", step = "Result", channel = "Preferred", namedParties = (Guid[]?)null,
+            body = "She ran second.", prompt = new { kind = "YesNo", question = "Will you come to the presentation?" },
+        })).Content.ReadFromJsonAsync<Sent>())!;
+        await DispatchTextsAsync();
+        Assert.Contains("Will you come to the presentation? Reply with your answer", Api.Texts.Sent.Last(t => t.To == Mobile(seed)).Body);
+
+        await TwilioAsync(TwilioWebhooks.IncomingPath, new() { ["From"] = Mobile(seed), ["To"] = "+61400000000", ["Body"] = "Yes, count me in!", ["MessageSid"] = $"SM{Guid.NewGuid():N}" });
+
+        var tally = (await staff.GetFromJsonAsync<StaffPage>($"/api/events/{seed.EventId}"))!.Items.Single(i => i.Id == posted.Id).Prompt!;
+        Assert.Contains(tally.Owners, o => o.Name == "Ann Owner" && o.Answer == "Yes" && o.How == "read from their reply");
+        Assert.StartsWith("Yes 1 · No 0 · 1 not answered yet", tally.Summary);
+    }
+
     private async Task DispatchTextsAsync()
     {
         await using var scope = Api.Services.CreateAsyncScope();

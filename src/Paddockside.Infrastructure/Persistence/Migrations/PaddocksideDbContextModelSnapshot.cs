@@ -622,6 +622,50 @@ namespace Paddockside.Infrastructure.Persistence.Migrations
                     b.ToTable("Parties");
                 });
 
+            modelBuilder.Entity("Paddockside.Domain.PromptAnswer", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset>("AnsweredAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<Guid>("PartyId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("RecordedBy")
+                        .IsRequired()
+                        .HasMaxLength(320)
+                        .HasColumnType("nvarchar(320)");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<Guid>("StreamItemId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Value")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PartyId");
+
+                    b.HasIndex("TenantId");
+
+                    b.HasIndex("StreamItemId", "PartyId")
+                        .IsUnique();
+
+                    b.ToTable("PromptAnswers");
+                });
+
             modelBuilder.Entity("Paddockside.Domain.RoutingAddress", b =>
                 {
                     b.Property<Guid>("Id")
@@ -737,6 +781,10 @@ namespace Paddockside.Infrastructure.Persistence.Migrations
 
                     b.Property<DateTimeOffset>("OccurredAt")
                         .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("Prompt")
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
 
                     b.Property<DateTimeOffset>("RecordedAt")
                         .HasColumnType("datetimeoffset");
@@ -1250,6 +1298,27 @@ namespace Paddockside.Infrastructure.Persistence.Migrations
                         });
 
                     b.Navigation("Contacts");
+                });
+
+            modelBuilder.Entity("Paddockside.Domain.PromptAnswer", b =>
+                {
+                    b.HasOne("Paddockside.Domain.Party", null)
+                        .WithMany()
+                        .HasForeignKey("PartyId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Paddockside.Domain.StreamItem", null)
+                        .WithMany()
+                        .HasForeignKey("StreamItemId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Paddockside.Domain.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("Paddockside.Domain.RoutingAddress", b =>

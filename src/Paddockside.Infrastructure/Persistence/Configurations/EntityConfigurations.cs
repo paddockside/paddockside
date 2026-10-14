@@ -194,6 +194,12 @@ internal sealed class StreamItemConfiguration : IEntityTypeConfiguration<StreamI
                     fields => fields.Aggregate(0, (hash, f) => HashCode.Combine(hash, f)),
                     fields => fields.ToList()));
 
+        b.Property(x => x.Prompt)
+            .HasConversion(
+                prompt => prompt == null ? null : JsonSerializer.Serialize(prompt, (JsonSerializerOptions?)null),
+                json => json == null ? null : JsonSerializer.Deserialize<MessagePrompt>(json, (JsonSerializerOptions?)null))
+            .HasMaxLength(2000);
+
         b.HasOne<Horse>().WithMany().HasForeignKey(x => x.HorseId).OnDelete(DeleteBehavior.Restrict);
         b.HasOne<Event>().WithMany().HasForeignKey(x => x.EventId).OnDelete(DeleteBehavior.Restrict);
         b.HasOne<Party>().WithMany().HasForeignKey(x => x.AuthorPartyId).OnDelete(DeleteBehavior.Restrict);
@@ -225,6 +231,21 @@ internal sealed class DeliveryConfiguration : IEntityTypeConfiguration<Delivery>
         b.HasIndex(x => new { x.StreamItemId, x.PartyId, x.Channel }).IsUnique();
         b.HasIndex(x => new { x.TenantId, x.Status, x.Channel });
         b.HasIndex(x => x.ProviderMessageId);
+    }
+}
+
+internal sealed class PromptAnswerConfiguration : IEntityTypeConfiguration<PromptAnswer>
+{
+    public void Configure(EntityTypeBuilder<PromptAnswer> b)
+    {
+        b.MapTenantOwned();
+        b.Property(x => x.Value).HasMaxLength(100);
+        b.Property(x => x.Source).AsString();
+        b.Property(x => x.RecordedBy).HasMaxLength(320);
+        b.Property(x => x.AnsweredAt);
+        b.HasOne<StreamItem>().WithMany().HasForeignKey(x => x.StreamItemId).OnDelete(DeleteBehavior.Restrict);
+        b.HasOne<Party>().WithMany().HasForeignKey(x => x.PartyId).OnDelete(DeleteBehavior.Restrict);
+        b.HasIndex(x => new { x.StreamItemId, x.PartyId }).IsUnique(); // the latest answer replaces the last
     }
 }
 

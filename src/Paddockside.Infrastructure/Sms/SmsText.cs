@@ -15,10 +15,13 @@ public static class SmsText
     // makes the whole text UCS-2 at 67 a segment.
     private const string Gsm = "@£$¥èéùìòÇ\nØø\rÅåΔ_ΦΓΛΩΠΨΣΘΞÆæßÉ !\"#¤%&'()*+,-./0123456789:;<=>?¡ABCDEFGHIJKLMNOPQRSTUVWXYZÄÖÑÜ§¿abcdefghijklmnopqrstuvwxyzäöñüà";
 
-    public static string ForUpdate(string tenantName, string horseName, string? title, string body, string? link)
+    /// <param name="question">A question on the message: kept whole, like the link, and answered by replying.</param>
+    public static string ForUpdate(string tenantName, string horseName, string? title, string body, string? link, string? question = null)
     {
         var head = $"{tenantName}: {horseName}{(string.IsNullOrWhiteSpace(title) ? "" : $" - {Plain(title)}")}.";
-        var tail = link is null ? "Reply to this text to answer." : $"Open: {link} or reply to this text.";
+        var tail = question is not null
+            ? $"{Plain(question)} Reply with your answer{(link is null ? "." : $", or open: {link}")}"
+            : link is null ? "Reply to this text to answer." : $"Open: {link} or reply to this text.";
         var summary = Plain(body);
 
         var full = $"{head} {summary} {tail}";

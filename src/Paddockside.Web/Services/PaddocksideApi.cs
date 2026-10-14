@@ -40,13 +40,24 @@ public sealed record ItemView(
     string? Correction,
     string? Audience,
     List<ReplyView> Replies,
-    List<RecipientView> Recipients);
+    List<RecipientView> Recipients,
+    PromptView? Prompt = null);
+
+public sealed record PromptView(string Kind, string Question, List<string> Answers, string Summary, List<TallyCount> Counts, List<PromptOwnerView> Owners);
+
+public sealed record TallyCount(string Answer, int Count);
+
+public sealed record PromptOwnerView(Guid PartyId, string Name, string? Answer, string? How, string? At);
+
+/// <param name="Kind">Count, YesNo or Choice.</param>
+public sealed record PromptRequest(string Kind, string Question, List<string>? Options, int? Max);
 
 public sealed record OwnerOption(Guid Id, string Name);
 
-public sealed record EventPage(EventSummary Event, Guid HorseId, string HorseName, List<ItemView> Items, List<string> StepOptions, List<OwnerOption> Owners);
+public sealed record EventPage(EventSummary Event, Guid HorseId, string HorseName, List<ItemView> Items, List<string> StepOptions, List<OwnerOption> Owners,
+    Dictionary<string, PromptRequest> StepPrompts);
 
-public sealed record ComposeRequest(string Audience, string Scope, string? Step, string Channel, IReadOnlyList<Guid> NamedParties, string Body);
+public sealed record ComposeRequest(string Audience, string Scope, string? Step, string Channel, IReadOnlyList<Guid> NamedParties, string Body, PromptRequest? Prompt = null);
 
 public sealed record Posted(Guid Id, int Recipients);
 
@@ -122,7 +133,9 @@ public sealed record OwnerField(string Label, string Value);
 public sealed record OwnerReply(string Author, string At, string Body);
 
 public sealed record OwnerItem(Guid Id, string Kind, string At, string? Title, string Body, string? Author, string? Source,
-    List<OwnerField> Fields, string? Corrected, List<OwnerReply> Replies, bool CanReply, bool Unread, bool Mine);
+    List<OwnerField> Fields, string? Corrected, List<OwnerReply> Replies, bool CanReply, bool Unread, bool Mine, OwnerPrompt? Prompt = null);
+
+public sealed record OwnerPrompt(string Kind, string Question, List<string> Answers, string? Mine);
 
 public sealed record OwnerEventPage(EventSummary Event, Guid HorseId, string Horse, List<OwnerItem> Items, List<string>? CoOwners);
 
@@ -176,6 +189,9 @@ public sealed class PaddocksideApi(HttpClient http)
     public Task<ApiResult<EventPage>> EventAsync(Guid id) => GetAsync<EventPage>($"api/events/{id}");
 
     public Task<ApiResult<Posted>> PostToEventAsync(Guid id, ComposeRequest request) => PostAsync<Posted>($"api/events/{id}/items", request);
+
+    public Task<ApiResult<object>> RecordAnswerAsync(Guid eventId, Guid itemId, Guid partyId, string value) =>
+        PostAsync<object>($"api/events/{eventId}/items/{itemId}/answers", new { partyId, value });
 
     public Task<ApiResult<List<InboundView>>> InboundAsync(string state) => GetAsync<List<InboundView>>($"api/inbound?state={Uri.EscapeDataString(state)}");
 
@@ -287,6 +303,8 @@ public sealed class PaddocksideApi(HttpClient http)
     public Task<ApiResult<OwnerEventPage>> MyEventAsync(Guid id) => GetAsync<OwnerEventPage>($"api/my/events/{id}");
 
     public Task<ApiResult<OwnerReply>> ReplyAsync(Guid itemId, string body) => PostAsync<OwnerReply>($"api/my/items/{itemId}/replies", new { body });
+
+    public Task<ApiResult<OwnerPrompt>> AnswerAsync(Guid itemId, string value) => PostAsync<OwnerPrompt>($"api/my/items/{itemId}/answer", new { value });
 
     public Task<ApiResult<object>> MarkEventSeenAsync(Guid eventId) => PostAsync<object>($"api/my/events/{eventId}/seen", new { });
 

@@ -34,13 +34,20 @@ public sealed class OwnerEmailRenderer
         if (message.Title is { Length: > 0 } heading) html.Append(Heading(heading));
         html.Append(Paragraph($"Hi {recipient.FirstName},"));
         foreach (var paragraph in Paragraphs(message.Body)) html.Append(Paragraph(paragraph));
+        if (message.Prompt is { } prompt)
+        {
+            html.Append($"<p style=\"margin:0 0 {T.Space2};font-weight:700;\">{E(prompt.Question)}</p>");
+            html.Append(Muted(AnswerHint(prompt, openLink is not null)));
+        }
+
         html.Append(Muted(signOff));
-        if (openLink is not null) html.Append(Button(openLink, "Open in the owners' portal"));
+        if (openLink is not null) html.Append(Button(openLink, message.Prompt is null ? "Open in the owners' portal" : "Answer in the owners' portal"));
 
         var text = new StringBuilder().AppendLine(context);
         if (message.Title is { Length: > 0 } t) text.AppendLine(t);
         text.AppendLine().AppendLine($"Hi {recipient.FirstName},").AppendLine();
         foreach (var paragraph in Paragraphs(message.Body)) text.AppendLine(paragraph).AppendLine();
+        if (message.Prompt is { } q) text.AppendLine(q.Question).AppendLine(AnswerHint(q, openLink is not null)).AppendLine();
         text.AppendLine($"- {signOff}").AppendLine();
         if (openLink is not null) text.AppendLine($"Open in the owners' portal: {openLink}").AppendLine();
 
@@ -152,6 +159,15 @@ public sealed class OwnerEmailRenderer
             Frame(Senders.Product, null, null, "Your password was changed", "Any other signed-in devices were signed out.", html.ToString(), null, why),
             TextFrame(text, null, Senders.Product, null, why));
     }
+
+    /// <summary>How to answer a question by email: the buttons in the portal, or a reply in words ("Two please").</summary>
+    private static string AnswerHint(MessagePrompt prompt, bool hasLink) =>
+        (prompt.Kind switch
+        {
+            PromptKind.Count => $"Reply with a number from 0 to {prompt.Max}",
+            PromptKind.YesNo => "Reply yes or no",
+            _ => $"Reply with one of: {string.Join(", ", prompt.Options)}",
+        }) + (hasLink ? ", or tap the button below." : ".");
 
     private static string E(string s) => WebUtility.HtmlEncode(s);
 

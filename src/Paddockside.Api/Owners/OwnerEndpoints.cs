@@ -34,7 +34,13 @@ public static class OwnerEndpoints
 
     /// <param name="Mine">Something they wrote themselves ("Contact {tenant}"), shown as theirs.</param>
     public sealed record OwnerItem(Guid Id, string Kind, string At, string? Title, string Body, string? Author, string? Source,
-        IReadOnlyList<OwnerField> Fields, string? Corrected, IReadOnlyList<OwnerReply> Replies, bool CanReply, bool Unread, bool Mine);
+        IReadOnlyList<OwnerField> Fields, string? Corrected, IReadOnlyList<OwnerReply> Replies, bool CanReply, bool Unread, bool Mine,
+        OwnerPrompt? Prompt = null);
+
+    /// <summary>The message's question, the buttons to answer it, and their own answer so far.</summary>
+    public sealed record OwnerPrompt(string Kind, string Question, IReadOnlyList<string> Answers, string? Mine);
+
+    public sealed record AnswerRequest(string Value);
 
     /// <param name="CoOwners">The other current owners' names, only when the tenant lets owners see each other.</param>
     public sealed record OwnerEventPage(HorseEndpoints.EventSummary Event, Guid HorseId, string Horse, IReadOnlyList<OwnerItem> Items, IReadOnlyList<string>? CoOwners);
@@ -64,6 +70,7 @@ public static class OwnerEndpoints
         my.MapPost("/events/{id:guid}/seen", Seen);
         my.MapPost("/events/{id:guid}/contact", Contact);
         my.MapPost("/items/{id:guid}/replies", Reply);
+        my.MapPost("/items/{id:guid}/answer", Answer);
         my.MapGet("/notifications", Notifications);
         my.MapPut("/notifications", SetNotification);
     }
@@ -188,6 +195,9 @@ public static class OwnerEndpoints
 
         // Only their own replies, ever (identity-access.md §5.1).
         var replies = items.Where(i => i.InReplyToId != null && i.AuthorPartyId == party.Id).ToLookup(i => i.InReplyToId!.Value);
+        var itemIds = items.Select(i => i.Id).ToList();
+        var myAnswers = await db.PromptAnswers.AsNoTracking().Where(a => a.PartyId == party.Id && itemIds.Contains(a.StreamItemId))
+            .ToDictionaryAsync(a => a.StreamItemId, a => a.Value, cancellationToken);
         var read = await ReadAsync(db, party.Id, cancellationToken);
 
         var now = clock.GetUtcNow();
@@ -212,7 +222,8 @@ public static class OwnerEndpoints
                     replies[i.Id].OrderBy(r => r.OccurredAt).Select(r => new OwnerReply("You", Words.Recently(r.OccurredAt, now), r.Body)).ToList(),
                     CanReplyTo(i),
                     IsUnread(i, party.Id, read),
-                    mine);
+                    mine,
+                    i.Prompt is { } p && CanReplyTo(i) ? new OwnerPrompt(p.Kind.ToString(), p.Question, p.Answers, myAnswers.GetValueOrDefault(i.Id)) : null);
             })
             .ToList(),
             tenant.OwnersSeeCoOwners ? await CoOwnersAsync(db, horse, party.Id, cancellationToken) : null));
@@ -338,6 +349,37 @@ public static class OwnerEndpoints
 
         await db.SaveChangesAsync(cancellationToken);
         return Results.NoContent();
+    }
+
+    /// <summary>
+    /// A tap on an answer button. Recorded as their answer (the latest replaces the last) and shown as their reply
+    /// in the thread, so staff read it where they read everything else.
+    /// </summary>
+    private static async Task<IResult> Answer(Guid id, AnswerRequest request, ClaimsPrincipal user, PaddocksideDbContext db, TimeProvider clock, CancellationToken cancellationToken)
+    {
+        var viewer = await ViewerAsync(user, db, cancellationToken);
+        var party = viewer.Party;
+        var item = await db.StreamItems.SingleOrDefaultAsync(i => i.Id == id, cancellationToken);
+        if (item?.Prompt is not { } prompt || !viewer.Horses.TryGetValue(item.HorseId, out var horse)
+            || !AccessRule.CanSee(Viewer.Client(party), viewer.Tenant, horse, item) || !CanReplyTo(item))
+            return Results.NotFound();
+        if (prompt.Normalise(request.Value) is not { } value)
+            return Results.Problem(statusCode: StatusCodes.Status400BadRequest, title: "Choose one of the answers.");
+
+        var now = clock.GetUtcNow();
+        var hadAnswer = await db.PromptAnswers.AnyAsync(a => a.StreamItemId == item.Id && a.PartyId == party.Id, cancellationToken);
+        var (_, changed) = await PromptAnswering.RecordAsync(db, item, party.Id, value, AnswerSource.Portal, party.DisplayName, now, cancellationToken);
+        if (changed)
+        {
+            var @event = item.EventId is { } eventId ? await db.Events.SingleAsync(e => e.Id == eventId, cancellationToken) : null;
+            db.StreamItems.Add(item.Reply(horse, @event, party.DisplayName, party.Id, "Portal", hadAnswer ? $"Changed my answer to {value}" : $"My answer: {value}", now));
+            @event?.RecordActivity();
+            foreach (var delivery in await db.Deliveries.Where(d => d.StreamItemId == item.Id && d.PartyId == party.Id).ToListAsync(cancellationToken))
+                delivery.Record(DeliveryStatus.Replied, now);
+        }
+
+        await db.SaveChangesAsync(cancellationToken);
+        return Results.Ok(new OwnerPrompt(prompt.Kind.ToString(), prompt.Question, prompt.Answers, value));
     }
 
     private static bool CanReplyTo(StreamItem item) =>

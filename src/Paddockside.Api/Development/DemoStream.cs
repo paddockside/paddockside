@@ -73,11 +73,14 @@ public static class DemoStream
 
         var tickets = StreamItem.Message(mare, race, "Owners tickets for race day",
             "She is accepted for Race 6 at Randwick, now from barrier 9.\n\nThe club has given us 8 owners tickets. Reply with how many you would like by 5 pm tomorrow and we will confirm them the day before the race.",
-            StreamItemScope.Owners, At(-3, 17, 30), Staff, stepCode: "TICKETS");
+            StreamItemScope.Owners, At(-3, 17, 30), Staff, stepCode: "TICKETS", prompt: MessagePrompt.Count("How many owners tickets would you like?", 10));
         var replies = new List<StreamItem>();
+        var answers = new List<PromptAnswer>();
         void ReplyFrom(string name, string channel, string body, DateTimeOffset at)
         {
-            if (parties.TryGetValue(name, out var party)) replies.Add(tickets.Reply(mare, race, name, party.Id, channel, body, at));
+            if (!parties.TryGetValue(name, out var party)) return;
+            replies.Add(tickets.Reply(mare, race, name, party.Id, channel, body, at));
+            if (tickets.Prompt!.ReadFrom(body) is { } answer) answers.Add(new PromptAnswer(tickets, party.Id, answer, AnswerSource.ReadFromReply, name, at));
         }
         ReplyFrom("Margaret Hale", "email", "Two please, for me and my sister. Can we see her in the mounting yard?", At(-3, 18, 12));
         ReplyFrom("Tom Okafor", "text message", "Just me this time, thanks.", At(-3, 19, 40));
@@ -114,6 +117,7 @@ public static class DemoStream
         db.AddRange(race, trial, vet);
         db.AddRange(nomination, acceptance, barrier, barrierCorrected, note, tickets);
         db.AddRange(replies);
+        db.AddRange(answers);
         db.AddRange(trialItems);
         db.AddRange(deliveries);
         await db.SaveChangesAsync();

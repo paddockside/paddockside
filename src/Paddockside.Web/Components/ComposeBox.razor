@@ -34,7 +34,7 @@
 
         <div class="field">
             <label class="field-label" for="@_id-step">Step</label>
-            <select id="@_id-step" class="input" @bind="_step">
+            <select id="@_id-step" class="input" @bind="_step" @bind:after="StepChanged">
                 <option value="">No step</option>
                 @foreach (var step in Steps)
                 {
@@ -74,6 +74,48 @@
         </fieldset>
     }
 
+    @if (_audience == Audience.Owners)
+    {
+        <fieldset class="grid gap-3 rounded-control border border-border-subtle p-4">
+            <legend class="px-1 field-label">Ask a question</legend>
+            <label class="inline-flex min-h-control cursor-pointer items-center gap-2">
+                <input type="checkbox" class="size-[18px] accent-action-primary-bg" checked="@_asking" @onchange="e => _asking = e.Value is true" />
+                Owners answer with buttons, and you see a tally
+            </label>
+            @if (_asking)
+            {
+                <div class="flex flex-wrap gap-2" role="radiogroup" aria-label="Kind of answer">
+                    @foreach (var (kind, label) in PromptKinds)
+                    {
+                        var selected = _promptKind == kind;
+                        <label class="inline-flex min-h-control cursor-pointer items-center gap-2 rounded-control border px-4 @(selected ? "border-action-primary-bg bg-action-secondary-bg font-strong" : "border-border-strong")">
+                            <input type="radio" name="@_id-kind" class="size-[18px] accent-action-primary-bg" checked="@selected" @onchange="() => _promptKind = kind" />
+                            @label
+                        </label>
+                    }
+                </div>
+                <div class="field">
+                    <label class="field-label" for="@_id-question">Question</label>
+                    <input id="@_id-question" class="input" @bind="_question" placeholder="How many owners tickets would you like?" />
+                </div>
+                @if (_promptKind == "Count")
+                {
+                    <div class="field max-w-[16rem]">
+                        <label class="field-label" for="@_id-max">Most anyone can ask for</label>
+                        <input id="@_id-max" class="input" type="number" min="1" max="20" @bind="_max" />
+                    </div>
+                }
+                else if (_promptKind == "Choice")
+                {
+                    <div class="field">
+                        <label class="field-label" for="@_id-options">Choices, one per line</label>
+                        <textarea id="@_id-options" class="input min-h-[6rem] py-3" @bind="_options" placeholder="10%&#10;5%&#10;Tell me more"></textarea>
+                    </div>
+                }
+            }
+        </fieldset>
+    }
+
     <div class="field">
         <label class="field-label" for="@_id-body">@(_audience == Audience.InternalNote ? "Note" : "Message")</label>
         <textarea id="@_id-body" class="input min-h-[8rem] py-3" @bind="_body" @bind:event="oninput" aria-describedby="@(_error is null ? null : $"{_id}-error")"></textarea>
@@ -99,6 +141,13 @@
     private string _step = "";
     private string _body = "";
     private string? _error;
+    private bool _asking;
+    private string _promptKind = "Count";
+    private string _question = "";
+    private int _max = 10;
+    private string _options = "";
+
+    private static readonly (string, string)[] PromptKinds = [("Count", "A number"), ("YesNo", "Yes or no"), ("Choice", "A choice")];
 
     private static readonly (Audience, string)[] AudienceOptions =
     [
@@ -112,6 +161,9 @@
 
     /// <summary>The current owners, for a named-parties message.</summary>
     [Parameter] public IReadOnlyList<PartyOption> NamedPartyChoices { get; set; } = [];
+
+    /// <summary>Questions the event's steps suggest, by step label (the tickets step asks "How many?").</summary>
+    [Parameter] public IReadOnlyDictionary<string, Services.PromptRequest> StepPrompts { get; set; } = new Dictionary<string, Services.PromptRequest>();
 
     [Parameter] public bool Busy { get; set; }
 
@@ -144,6 +196,17 @@
         _error = null;
     }
 
+    /// <summary>A step that suggests a question fills it in, unless one is already being written.</summary>
+    private void StepChanged()
+    {
+        if (_audience != Audience.Owners || !StepPrompts.TryGetValue(_step, out var suggested) || (_asking && _question.Length > 0)) return;
+        (_asking, _promptKind, _question, _max, _options) = (true, suggested.Kind, suggested.Question, suggested.Max ?? 10, string.Join('\n', suggested.Options ?? []));
+    }
+
+    private Services.PromptRequest? Prompt => !_asking || _audience != Audience.Owners ? null
+        : new(_promptKind, _question.Trim(), _promptKind == "Choice" ? _options.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList() : null,
+            _promptKind == "Count" ? _max : null);
+
     private void Toggle(string id)
     {
         if (!_named.Remove(id)) _named.Add(id);
@@ -153,11 +216,14 @@
     {
         _error = string.IsNullOrWhiteSpace(_body) ? "Write something first."
             : _scope == Scope.NamedParties && _named.Count == 0 ? "Choose at least one owner."
+            : Prompt is { } p && p.Question.Length == 0 ? "Write the question, or untick \"Ask a question\"."
+            : Prompt is { Kind: "Choice" } c && c.Options!.Count < 2 ? "Give at least two choices, one per line."
             : null;
         if (_error is not null) return;
 
-        await OnSend.InvokeAsync(new ComposeDraft(_audience, _scope, _step == "" ? null : _step, _channel, _named.ToList(), _body.Trim()));
+        await OnSend.InvokeAsync(new ComposeDraft(_audience, _scope, _step == "" ? null : _step, _channel, _named.ToList(), _body.Trim(), Prompt));
         _body = "";
         _named.Clear();
+        (_asking, _question, _options) = (false, "", "");
     }
 }

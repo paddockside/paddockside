@@ -38,7 +38,16 @@ public static class EventEndpoints
         string? Correction,
         string? Audience,
         IReadOnlyList<ReplyView> Replies,
-        IReadOnlyList<RecipientView> Recipients);
+        IReadOnlyList<RecipientView> Recipients,
+        PromptView? Prompt = null);
+
+    /// <summary>A message's question, with the tally: totals, then each owner's answer and how it was given.</summary>
+    public sealed record PromptView(string Kind, string Question, IReadOnlyList<string> Answers, string Summary,
+        IReadOnlyList<TallyCount> Counts, IReadOnlyList<PromptOwnerView> Owners);
+
+    public sealed record TallyCount(string Answer, int Count);
+
+    public sealed record PromptOwnerView(Guid PartyId, string Name, string? Answer, string? How, string? At);
 
     public sealed record OwnerOption(Guid Id, string Name);
 
@@ -48,10 +57,18 @@ public static class EventEndpoints
         string HorseName,
         IReadOnlyList<ItemView> Items,
         IReadOnlyList<string> StepOptions,
-        IReadOnlyList<OwnerOption> Owners);
+        IReadOnlyList<OwnerOption> Owners,
+        IReadOnlyDictionary<string, PromptRequest> StepPrompts);
+
+    /// <param name="Kind">Count, YesNo or Choice.</param>
+    public sealed record PromptRequest(string Kind, string Question, IReadOnlyList<string>? Options, int? Max);
 
     /// <param name="Audience">Owners, Trainer or InternalNote: one class only (D12).</param>
-    public sealed record ComposeRequest(string Audience, string Scope, string? Step, string Channel, IReadOnlyList<Guid>? NamedParties, string Body);
+    public sealed record ComposeRequest(string Audience, string Scope, string? Step, string Channel, IReadOnlyList<Guid>? NamedParties, string Body,
+        PromptRequest? Prompt = null);
+
+    /// <summary>Staff recording an owner's answer for them, e.g. from a phone call.</summary>
+    public sealed record AnswerRequest(Guid PartyId, string Value);
 
     public sealed record Posted(Guid Id, int Recipients);
 
@@ -62,6 +79,7 @@ public static class EventEndpoints
         var events = app.MapGroup("/api/events").RequireAuthorization(StaffPolicy.Name);
         events.MapGet("/{id:guid}", GetEvent);
         events.MapPost("/{id:guid}/items", Post);
+        events.MapPost("/{id:guid}/items/{itemId:guid}/answers", RecordAnswer);
     }
 
     private static async Task<IResult> GetEvent(Guid id, PaddocksideDbContext db, TimeProvider clock, CancellationToken cancellationToken)
@@ -75,7 +93,10 @@ public static class EventEndpoints
         var itemIds = items.Select(i => i.Id).ToList();
         var deliveries = await db.Deliveries.AsNoTracking().Where(d => itemIds.Contains(d.StreamItemId)).ToListAsync(cancellationToken);
         var partyIds = deliveries.Select(d => d.PartyId).Concat(horse.Interests.Select(i => i.PartyId)).Distinct().ToList();
+        var answers = (await db.PromptAnswers.AsNoTracking().Where(a => itemIds.Contains(a.StreamItemId)).ToListAsync(cancellationToken)).ToLookup(a => a.StreamItemId);
+        partyIds = partyIds.Concat(answers.SelectMany(g => g).Select(a => a.PartyId)).Distinct().ToList();
         var parties = await db.Parties.AsNoTracking().Where(p => partyIds.Contains(p.Id)).ToDictionaryAsync(p => p.Id, p => p.DisplayName, cancellationToken);
+        var tenant = await db.Tenants.AsNoTracking().SingleAsync(cancellationToken);
 
         var now = clock.GetUtcNow();
         var type = EventTypes.Find(e.EventType);
@@ -114,7 +135,8 @@ public static class EventEndpoints
                     itemDeliveries
                         .OrderBy(d => parties.GetValueOrDefault(d.PartyId))
                         .Select(d => new RecipientView(parties.GetValueOrDefault(d.PartyId) ?? "Unknown", Channel(d.Channel), d.Status.ToString(), d.Note))
-                        .ToList());
+                        .ToList(),
+                    i.Prompt is null ? null : Tally(i, tenant, horse, answers[i.Id].ToList(), parties, now));
             })
             .ToList();
 
@@ -127,7 +149,9 @@ public static class EventEndpoints
             .ToList();
 
         var summary = HorseEndpoints.Summarise(e, items.Select(i => i.StepCode), items.Count == 0 ? null : items.Max(i => i.OccurredAt), now);
-        return Results.Ok(new EventPage(summary, horse.Id, horse.Name, views, type.Steps.Select(s => s.Label).ToList(), owners));
+        var stepPrompts = type.Steps.Where(s => s.Prompt is not null)
+            .ToDictionary(s => s.Label, s => new PromptRequest(s.Prompt!.Kind.ToString(), s.Prompt.Question, s.Prompt.Options, s.Prompt.Max));
+        return Results.Ok(new EventPage(summary, horse.Id, horse.Name, views, type.Steps.Select(s => s.Label).ToList(), owners, stepPrompts));
     }
 
     private static async Task<IResult> Post(
@@ -183,7 +207,21 @@ public static class EventEndpoints
                     if (named.Count == 0 || !named.All(current.Contains)) return Problem("Choose at least one current owner.");
                 }
 
-                item = StreamItem.Message(horse, e, null, request.Body.Trim(), scope, now, author, scope == StreamItemScope.NamedParties ? named : null, stepCode);
+                MessagePrompt? prompt = null;
+                if (request.Prompt is { } asked)
+                {
+                    if (!Enum.TryParse<PromptKind>(asked.Kind, out var kind)) return Problem("Choose what kind of answer you want.");
+                    try
+                    {
+                        prompt = MessagePrompt.Create(kind, asked.Question ?? "", asked.Options ?? [], asked.Max ?? 10);
+                    }
+                    catch (DomainException ex)
+                    {
+                        return Problem(ex.Message);
+                    }
+                }
+
+                item = StreamItem.Message(horse, e, null, request.Body.Trim(), scope, now, author, scope == StreamItemScope.NamedParties ? named : null, stepCode, prompt);
                 // Recipients are worked out now, at send time, and each gets its own routing token (messaging-channels.md §1).
                 db.StreamItems.Add(item);
                 deliveries = await OutboundQueue.QueueAsync(db, tenant, horse, e, item, ToChannel(request.Channel), texts.IsConfigured, now, cancellationToken);
@@ -229,6 +267,65 @@ public static class EventEndpoints
         DeliveryChannel.Portal => "Portal",
         _ => "Email",
     };
+
+    /// <summary>
+    /// The tally for a message's question: who it was asked of (the owners the access rule admits now, plus anyone
+    /// who has answered), what each said and how, and the totals. Words for staff, not raw numbers.
+    /// </summary>
+    private static PromptView Tally(StreamItem item, Tenant tenant, Horse horse, List<PromptAnswer> answers, IReadOnlyDictionary<Guid, string> names, DateTimeOffset now)
+    {
+        var prompt = item.Prompt!;
+        var asked = AccessRule.CurrentOwnerAudience(tenant, horse, item).Concat(answers.Select(a => a.PartyId)).Distinct().ToList();
+        var byParty = answers.ToDictionary(a => a.PartyId);
+        var owners = asked
+            .Select(id => byParty.TryGetValue(id, out var a)
+                ? new PromptOwnerView(id, names.GetValueOrDefault(id) ?? "Unknown", a.Value, How(a), Words.Recently(a.AnsweredAt, now))
+                : new PromptOwnerView(id, names.GetValueOrDefault(id) ?? "Unknown", null, null, null))
+            .OrderBy(o => o.Answer is null).ThenBy(o => o.Name)
+            .ToList();
+        var waiting = owners.Count(o => o.Answer is null);
+        var waitingText = waiting == 0 ? "everyone has answered" : $"{waiting} not answered yet";
+
+        var counts = prompt.Answers.Select(a => new TallyCount(a, answers.Count(x => x.Value == a))).ToList();
+        var summary = answers.Count == 0 ? $"No answers yet · asked of {owners.Count} {(owners.Count == 1 ? "owner" : "owners")}"
+            : prompt.Kind == PromptKind.Count
+            ? $"{answers.Sum(a => int.Parse(a.Value))} asked for by {answers.Count(a => a.Value != "0")} {(answers.Count(a => a.Value != "0") == 1 ? "owner" : "owners")} · {waitingText}"
+            : $"{string.Join(" · ", counts.Select(c => $"{c.Answer} {c.Count}"))} · {waitingText}";
+
+        return new PromptView(prompt.Kind.ToString(), prompt.Question, prompt.Answers, summary,
+            prompt.Kind == PromptKind.Count ? [] : counts, owners);
+
+        static string How(PromptAnswer a) => a.Source switch
+        {
+            AnswerSource.Portal => "in the portal",
+            AnswerSource.ReadFromReply => "read from their reply",
+            _ => $"set by {a.RecordedBy}",
+        };
+    }
+
+    /// <summary>Staff set an owner's answer, e.g. taken over the phone, or correcting one read from a reply.</summary>
+    private static async Task<IResult> RecordAnswer(Guid id, Guid itemId, AnswerRequest request, ClaimsPrincipal user, PaddocksideDbContext db, TimeProvider clock,
+        CancellationToken cancellationToken)
+    {
+        if (!CanPost.Contains(user.FindFirstValue(SessionClaims.Role)))
+            return Results.Problem(statusCode: StatusCodes.Status403Forbidden, title: "Your role can read events but not change answers.");
+        var item = await db.StreamItems.SingleOrDefaultAsync(i => i.Id == itemId && i.EventId == id, cancellationToken);
+        if (item?.Prompt is null) return Results.NotFound();
+        if (!await db.Parties.AnyAsync(p => p.Id == request.PartyId, cancellationToken)) return Results.NotFound();
+
+        try
+        {
+            var by = user.FindFirstValue(ClaimTypes.Email) ?? "staff";
+            await PromptAnswering.RecordAsync(db, item, request.PartyId, request.Value, AnswerSource.Staff, by, clock.GetUtcNow(), cancellationToken);
+        }
+        catch (DomainException ex)
+        {
+            return Problem(ex.Message);
+        }
+
+        await db.SaveChangesAsync(cancellationToken);
+        return Results.NoContent();
+    }
 
     /// <summary>Staff's channel override; null is "Preferred", each owner by their notification choices.</summary>
     private static DeliveryChannel? ToChannel(string channel) => channel switch

@@ -2,9 +2,10 @@ namespace Paddockside.Domain;
 
 /// <summary>
 /// One step an event type expects (event-library.md §3): its code (what stream items carry as their step), a
-/// label, when it is due relative to the key date, and whether owners see it on their stage strip.
+/// label, when it is due relative to the key date, and whether owners see it on their stage strip. A step can
+/// suggest a question for its message (event-library.md: "step templates can pre-attach a prompt").
 /// </summary>
-public sealed record ExpectedStep(string Code, string Label, int DaysFromKeyDate, bool ClientVisible = true);
+public sealed record ExpectedStep(string Code, string Label, int DaysFromKeyDate, bool ClientVisible = true, MessagePrompt? Prompt = null);
 
 /// <summary>
 /// When traffic about an event is expected, in days around the key date (event-library.md §4 "Window"). An event
@@ -37,7 +38,7 @@ public static class EventTypes
         new("TRAINER_PLAN", "Trainer's plan", -14, ClientVisible: false),
         new("ACC_FACT", "Accepted", -3),
         new("BARRIER", "Barrier", -2),
-        new("TICKETS", "Owners tickets", -2),
+        new("TICKETS", "Owners tickets", -2, Prompt: MessagePrompt.Count("How many owners tickets would you like?", 10)),
         new("TRAINER_PRE", "Trainer's pre-race", -1, ClientVisible: false),
         new("STAFF_PRE", "Pre-race update", -1),
         new("RESULT_FACT", "Result", 0),

@@ -54,6 +54,7 @@ public sealed class SmsInbox(TenantScopedDb tenants, TimeProvider clock, ILogger
             delivery.Record(DeliveryStatus.Replied, now);
             @event?.RecordActivity();
             db.AddRange(inbound, reply);
+            await PromptAnswering.ReadFromReplyAsync(db, message, party, body, now, cancellationToken);
             await db.SaveChangesAsync(cancellationToken);
             return null;
         }

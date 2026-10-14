@@ -74,7 +74,7 @@ public sealed class IsolationDatabase : IAsyncLifetime
 
         var raceStart = new Event(horse, "RaceStart", $"{name} race", bought.AddMonths(6));
         raceStart.Open(bought.AddMonths(5));
-        var update = new StreamItem(horse, raceStart, StreamItemKind.Message, StreamItemScope.Owners, StreamItemDirection.Outbound, bought.AddMonths(6), $"{name} update");
+        var update = StreamItem.Message(horse, raceStart, null, $"{name} update", StreamItemScope.Owners, bought.AddMonths(6), "Staff", prompt: MessagePrompt.Count("How many tickets?"));
         var personal = new StreamItem(horse, null, StreamItemKind.Message, StreamItemScope.NamedParties, StreamItemDirection.Outbound, bought.AddMonths(7), $"{name} personal", namedPartyIds: [ann.Id]);
         var note = new StreamItem(horse, raceStart, StreamItemKind.Note, StreamItemScope.Internal, StreamItemDirection.Internal, bought.AddMonths(6), $"{name} note");
 
@@ -97,6 +97,7 @@ public sealed class IsolationDatabase : IAsyncLifetime
         context.AddRange(routing);
         context.Add(new ItemRead(update, ann.Id, bought.AddMonths(6)));
         context.Add(new NotificationPreference(ann, NotificationCategories.Media, DeliveryChannel.Email, true, bought));
+        context.Add(new PromptAnswer(update, ann.Id, "2", AnswerSource.Portal, ann.DisplayName, bought.AddMonths(6)));
         context.AddRange(deliveries);
         await context.SaveChangesAsync();
 

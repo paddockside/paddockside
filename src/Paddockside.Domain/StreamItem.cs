@@ -142,6 +142,9 @@ public sealed class StreamItem
     /// <summary>How it arrived or went: email, text message, portal.</summary>
     public string? Channel { get; private set; }
 
+    /// <summary>A question owners answer with buttons (a count, yes or no, a choice); outbound messages only.</summary>
+    public MessagePrompt? Prompt { get; private set; }
+
     /// <summary>Data from a source system, shown as a structured card.</summary>
     public static StreamItem Fact(
         Horse horse,
@@ -188,7 +191,8 @@ public sealed class StreamItem
         DateTimeOffset sentAt,
         string authorName,
         IEnumerable<Guid>? namedPartyIds = null,
-        string? stepCode = null)
+        string? stepCode = null,
+        MessagePrompt? prompt = null)
     {
         if (string.IsNullOrWhiteSpace(body)) throw new DomainException("A message needs a body.");
         if (scope == StreamItemScope.Internal) throw new DomainException("An internal item is a note, not a message.");
@@ -196,6 +200,7 @@ public sealed class StreamItem
         {
             Title = subject,
             AuthorName = authorName,
+            Prompt = prompt,
         };
     }
 

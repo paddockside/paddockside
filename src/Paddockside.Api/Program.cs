@@ -104,7 +104,18 @@ app.UseHttpsRedirection();
 
 // The Blazor app is served from here, so the session cookie never has to cross origins.
 app.UseBlazorFrameworkFiles();
-app.UseStaticFiles();
+// The page, its stylesheets and scripts keep their names between releases, so browsers must check for a newer copy
+// every time (a cheap "not modified" when nothing changed). Without this they guess, and after a deploy owners kept
+// yesterday's styles until a hard refresh. Blazor's _framework files carry their own versioning and are left alone.
+var revalidate = new StaticFileOptions
+{
+    OnPrepareResponse = context =>
+    {
+        if (!context.Context.Request.Path.StartsWithSegments("/_framework"))
+            context.Context.Response.Headers.CacheControl = "no-cache";
+    },
+};
+app.UseStaticFiles(revalidate);
 
 app.UseRateLimiter();
 app.UseAuthentication();
@@ -125,7 +136,7 @@ app.MapAuditEndpoints();
 app.MapPostmarkWebhooks();
 app.MapTwilioWebhooks();
 app.MapFallback("/api/{**rest}", () => Results.NotFound());
-app.MapFallbackToFile("index.html");
+app.MapFallbackToFile("index.html", revalidate);
 
 app.Run();
 
