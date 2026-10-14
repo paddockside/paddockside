@@ -92,7 +92,7 @@ public static class NotificationCategories
     {
         "NOM_FACT" or "TRIAL_ENTRY" => Entries,
         "ACC_FACT" or "BARRIER" => Acceptances,
-        "TICKETS" or "STAFF_PRE" => RaceDayArrangements,
+        "TICKETS" or "TICKETS_CONFIRM" or "STAFF_PRE" => RaceDayArrangements,
         "RESULT_FACT" or "TRIAL_RESULT" => Results,
         "VET_BOOKED" or "VET_REPORT" => SalesBreedingCare,
         _ when @event?.EventType == EventTypes.Veterinary.Code => SalesBreedingCare,

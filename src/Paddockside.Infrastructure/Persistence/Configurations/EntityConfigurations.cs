@@ -235,6 +235,32 @@ internal sealed class DeliveryConfiguration : IEntityTypeConfiguration<Delivery>
     }
 }
 
+internal sealed class TicketAllocationConfiguration : IEntityTypeConfiguration<TicketAllocation>
+{
+    public void Configure(EntityTypeBuilder<TicketAllocation> b)
+    {
+        b.MapTenantOwned();
+        b.Property(x => x.Available);
+        b.Property(x => x.UpdatedAt);
+        b.Property(x => x.ConfirmedAt);
+        b.Property(x => x.ConfirmedBy).HasMaxLength(320);
+        b.Ignore(x => x.Given);
+        b.Ignore(x => x.IsOver);
+        b.Property(x => x.Grants)
+            .HasField("_grants")
+            .UsePropertyAccessMode(PropertyAccessMode.Field)
+            .HasConversion(
+                grants => JsonSerializer.Serialize(grants, (JsonSerializerOptions?)null),
+                json => JsonSerializer.Deserialize<List<TicketGrant>>(json, (JsonSerializerOptions?)null) ?? new List<TicketGrant>(),
+                new ValueComparer<IReadOnlyList<TicketGrant>>(
+                    (a, c) => a!.SequenceEqual(c!),
+                    grants => grants.Aggregate(0, (hash, g) => HashCode.Combine(hash, g)),
+                    grants => grants.ToList()));
+        b.HasOne<Event>().WithMany().HasForeignKey(x => x.EventId).OnDelete(DeleteBehavior.Restrict);
+        b.HasIndex(x => x.EventId).IsUnique(); // one allocation per race start
+    }
+}
+
 internal sealed class PromptAnswerConfiguration : IEntityTypeConfiguration<PromptAnswer>
 {
     public void Configure(EntityTypeBuilder<PromptAnswer> b)

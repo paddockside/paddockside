@@ -126,6 +126,7 @@ app.UseMiddleware<SupportSessionGuard>();
 app.MapAuthEndpoints();
 app.MapHorseEndpoints();
 app.MapEventEndpoints();
+app.MapTicketEndpoints();
 app.MapInboundEndpoints();
 app.MapClientAuthEndpoints();
 app.MapOwnerEndpoints();

@@ -39,6 +39,7 @@ public static class EventTypes
         new("ACC_FACT", "Accepted", -3),
         new("BARRIER", "Barrier", -2),
         new("TICKETS", "Owners tickets", -2, Prompt: MessagePrompt.Count("How many owners tickets would you like?", 10)),
+        new("TICKETS_CONFIRM", "Tickets confirmed", -1, ClientVisible: false),
         new("TRAINER_PRE", "Trainer's pre-race", -1, ClientVisible: false),
         new("STAFF_PRE", "Pre-race update", -1),
         new("RESULT_FACT", "Result", 0),

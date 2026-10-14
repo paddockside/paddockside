@@ -55,7 +55,14 @@ public sealed record PromptRequest(string Kind, string Question, List<string>? O
 public sealed record OwnerOption(Guid Id, string Name);
 
 public sealed record EventPage(EventSummary Event, Guid HorseId, string HorseName, List<ItemView> Items, List<string> StepOptions, List<OwnerOption> Owners,
-    Dictionary<string, PromptRequest> StepPrompts);
+    Dictionary<string, PromptRequest> StepPrompts, string? Tickets = null);
+
+public sealed record TicketLine(Guid PartyId, string Name, bool IsHouse, int? Asked, int Given, int? Confirmed);
+
+public sealed record TicketsView(Guid EventId, string EventTitle, Guid HorseId, string HorseName, int? Available, List<TicketLine> Lines,
+    int AskedTotal, int GivenTotal, string Summary, string? Question, Guid? QuestionItemId, int ToTell, string? LastConfirmed);
+
+public sealed record TicketsConfirmed(int Told);
 
 public sealed record ComposeRequest(string Audience, string Scope, string? Step, string Channel, IReadOnlyList<Guid> NamedParties, string Body, PromptRequest? Prompt = null);
 
@@ -189,6 +196,14 @@ public sealed class PaddocksideApi(HttpClient http)
     public Task<ApiResult<EventPage>> EventAsync(Guid id) => GetAsync<EventPage>($"api/events/{id}");
 
     public Task<ApiResult<Posted>> PostToEventAsync(Guid id, ComposeRequest request) => PostAsync<Posted>($"api/events/{id}/items", request);
+
+    public Task<ApiResult<TicketsView>> TicketsAsync(Guid eventId) => GetAsync<TicketsView>($"api/events/{eventId}/tickets");
+
+    public Task<ApiResult<TicketsView>> SaveTicketsAsync(Guid eventId, int? available, IEnumerable<(Guid PartyId, int Given)> lines) =>
+        PutAsync<TicketsView>($"api/events/{eventId}/tickets", new { available, lines = lines.Select(l => new { partyId = l.PartyId, given = l.Given }) });
+
+    public Task<ApiResult<TicketsConfirmed>> ConfirmTicketsAsync(Guid eventId, string? note) =>
+        PostAsync<TicketsConfirmed>($"api/events/{eventId}/tickets/confirm", new { note });
 
     public Task<ApiResult<object>> RecordAnswerAsync(Guid eventId, Guid itemId, Guid partyId, string value) =>
         PostAsync<object>($"api/events/{eventId}/items/{itemId}/answers", new { partyId, value });

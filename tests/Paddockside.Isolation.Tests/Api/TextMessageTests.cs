@@ -200,6 +200,79 @@ public sealed partial class OwnerSignInTests
         Assert.StartsWith("Yes 1 · No 0 · 1 not answered yet", tally.Summary);
     }
 
+    private sealed record TicketLine(Guid PartyId, string Name, bool IsHouse, int? Asked, int Given, int? Confirmed);
+
+    private sealed record TicketsView(int? Available, List<TicketLine> Lines, string Summary, int ToTell);
+
+    private sealed record TicketsTold(int Told);
+
+    private sealed record EventTickets(string? Tickets);
+
+    [Fact]
+    public async Task Owners_tickets_are_allocated_and_each_owner_is_told_their_number()
+    {
+        var seed = await SeedAsync();
+        Guid houseId;
+        await using (var context = db.ContextFor(seed.TenantId))
+        {
+            var tenant = await context.Tenants.SingleAsync();
+            var horse = await context.Horses.Include(h => h.ManagementPeriods).Include(h => h.Interests).SingleAsync();
+            var house = new Party(tenant.Id, "House share", PartyKind.Organisation);
+            var holding = new HoldingEntity(tenant.Id, "House", HoldingEntityType.HouseShare);
+            context.AddRange(house, holding);
+            horse.AddInterest(house, holding, 100, DateTimeOffset.UtcNow.AddDays(-1));
+            tenant.SetHouseParty(house);
+            await context.SaveChangesAsync();
+            houseId = house.Id;
+        }
+
+        using var staff = await Api.SignedInAsync(seed.TenantId, MemberRole.Coordinator);
+        var question = (await (await staff.PostApiAsync($"/api/events/{seed.EventId}/items", new
+        {
+            audience = "Owners", scope = "Owners", step = "Owners tickets", channel = "Preferred", namedParties = (Guid[]?)null,
+            body = "The club has given us 4 owners tickets.", prompt = new { kind = "Count", question = "How many owners tickets would you like?", max = 6 },
+        })).Content.ReadFromJsonAsync<Sent>())!;
+        Assert.Equal(2, question.Recipients); // Ann and Bob by email; never the house share
+
+        using var ann = await SignInAsync(seed.AnnEmail);
+        await ann.PostApiAsync($"/api/my/items/{question.Id}/answer", new { value = "2" });
+        await staff.PostApiAsync($"/api/events/{seed.EventId}/items/{question.Id}/answers", new { partyId = seed.BobId, value = "3" });
+
+        var view = (await staff.GetFromJsonAsync<TicketsView>($"/api/events/{seed.EventId}/tickets"))!;
+        Assert.Equal([("Ann Owner", (int?)2), ("Bob Owner", 3), ("House share", null)], view.Lines.Select(l => (l.Name, l.Asked)));
+        Assert.True(view.Lines.Single(l => l.Name == "House share").IsHouse);
+
+        // Ann 2, Bob 1, the house 1: all four given; the two owners are told.
+        var saved = await staff.PutApiAsync($"/api/events/{seed.EventId}/tickets", new
+        {
+            available = 4,
+            lines = new[] { new { partyId = seed.AnnId, given = 2 }, new { partyId = seed.BobId, given = 1 }, new { partyId = houseId, given = 1 } },
+        });
+        Assert.Equal("4 available · 5 asked for · 4 given · all given", (await saved.Content.ReadFromJsonAsync<TicketsView>())!.Summary);
+        Assert.Equal(2, (await (await staff.PostApiAsync($"/api/events/{seed.EventId}/tickets/confirm", new { note = "Gate 3 by 12:30." })).Content.ReadFromJsonAsync<TicketsTold>())!.Told);
+
+        // Each sees only their own message.
+        var annPage = await ann.GetStringAsync($"/api/my/events/{seed.EventId}");
+        Assert.Contains("You have 2 owners tickets for Caulfield, Saturday", annPage);
+        Assert.Contains("Gate 3 by 12:30.", annPage);
+        Assert.DoesNotContain("You have 1 owners ticket", annPage);
+        Assert.Equal("4 available · 5 asked for · 4 given · all given", (await staff.GetFromJsonAsync<EventTickets>($"/api/events/{seed.EventId}"))!.Tickets);
+
+        // Nothing changed: nobody to tell. Too many given: refused.
+        Assert.Equal(0, (await (await staff.PostApiAsync($"/api/events/{seed.EventId}/tickets/confirm", new { note = (string?)null })).Content.ReadFromJsonAsync<TicketsTold>())!.Told);
+        await staff.PutApiAsync($"/api/events/{seed.EventId}/tickets", new
+        {
+            available = 3,
+            lines = new[] { new { partyId = seed.AnnId, given = 2 }, new { partyId = seed.BobId, given = 2 }, new { partyId = houseId, given = 1 } },
+        });
+        Assert.Equal(HttpStatusCode.Conflict, (await staff.PostApiAsync($"/api/events/{seed.EventId}/tickets/confirm", new { note = (string?)null })).StatusCode);
+
+        // Viewers look but don't change.
+        using var viewer = await Api.SignedInAsync(seed.TenantId, MemberRole.Viewer);
+        Assert.Equal(HttpStatusCode.OK, (await viewer.GetAsync($"/api/events/{seed.EventId}/tickets")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await viewer.PostApiAsync($"/api/events/{seed.EventId}/tickets/confirm", new { note = (string?)null })).StatusCode);
+    }
+
     private async Task DispatchTextsAsync()
     {
         await using var scope = Api.Services.CreateAsyncScope();

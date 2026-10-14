@@ -45,6 +45,14 @@
         <h1 class="sr-only">@_page.Event.Title</h1>
         <EventCard Model="_page.Event.ToCard()" />
 
+        @if (_page.Tickets is { } tickets)
+        {
+            <a href="events/@Id/tickets" class="card flex flex-wrap items-center justify-between gap-2 hover:border-border-strong">
+                <span><span class="font-strong">Owners tickets:</span> @tickets</span>
+                <span class="btn-link">Allocate tickets →</span>
+            </a>
+        }
+
         <section class="grid grid-cols-[minmax(0,1fr)] gap-4 border-l-2 border-border-subtle pl-4 sm:pl-6" aria-label="Updates, newest first">
             @if (_page.Items.Count == 0)
             {

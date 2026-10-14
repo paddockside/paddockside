@@ -98,6 +98,9 @@ public sealed class IsolationDatabase : IAsyncLifetime
         context.Add(new ItemRead(update, ann.Id, bought.AddMonths(6)));
         context.Add(new NotificationPreference(ann, NotificationCategories.Media, DeliveryChannel.Email, true, bought));
         context.Add(new PromptAnswer(update, ann.Id, "2", AnswerSource.Portal, ann.DisplayName, bought.AddMonths(6)));
+        var tickets = new TicketAllocation(raceStart, bought.AddMonths(6));
+        tickets.Set(8, [(ann.Id, 2)], bought.AddMonths(6));
+        context.Add(tickets);
         context.AddRange(deliveries);
         await context.SaveChangesAsync();
 

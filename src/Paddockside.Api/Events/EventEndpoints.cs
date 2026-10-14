@@ -58,7 +58,8 @@ public static class EventEndpoints
         IReadOnlyList<ItemView> Items,
         IReadOnlyList<string> StepOptions,
         IReadOnlyList<OwnerOption> Owners,
-        IReadOnlyDictionary<string, PromptRequest> StepPrompts);
+        IReadOnlyDictionary<string, PromptRequest> StepPrompts,
+        string? Tickets = null);
 
     /// <param name="Kind">Count, YesNo or Choice.</param>
     public sealed record PromptRequest(string Kind, string Question, IReadOnlyList<string>? Options, int? Max);
@@ -151,7 +152,17 @@ public static class EventEndpoints
         var summary = HorseEndpoints.Summarise(e, items.Select(i => i.StepCode), items.Count == 0 ? null : items.Max(i => i.OccurredAt), now);
         var stepPrompts = type.Steps.Where(s => s.Prompt is not null)
             .ToDictionary(s => s.Label, s => new PromptRequest(s.Prompt!.Kind.ToString(), s.Prompt.Question, s.Prompt.Options, s.Prompt.Max));
-        return Results.Ok(new EventPage(summary, horse.Id, horse.Name, views, type.Steps.Select(s => s.Label).ToList(), owners, stepPrompts));
+        // Race starts carry owners tickets: the one-line state, linking to the allocation screen.
+        string? tickets = null;
+        if (e.EventType == EventTypes.RaceStart.Code)
+        {
+            var allocation = await db.TicketAllocations.AsNoTracking().SingleOrDefaultAsync(a => a.EventId == id, cancellationToken);
+            var question = items.Where(i => i.StepCode == "TICKETS" && i.InReplyToId == null && i.Prompt is { Kind: PromptKind.Count }).MaxBy(i => i.OccurredAt);
+            var asked = question is null ? 0 : answers[question.Id].Sum(a => int.Parse(a.Value));
+            tickets = TicketEndpoints.Summary(allocation?.Available, asked, allocation?.Given ?? 0);
+        }
+
+        return Results.Ok(new EventPage(summary, horse.Id, horse.Name, views, type.Steps.Select(s => s.Label).ToList(), owners, stepPrompts, tickets));
     }
 
     private static async Task<IResult> Post(

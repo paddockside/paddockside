@@ -1,0 +1,236 @@
+@page "/events/{Id:guid}/tickets"
+@inject PaddocksideApi Api
+@inject SessionState Session
+@inject NavigationManager Navigation
+
+<PageTitle>Owners tickets · @(_view?.EventTitle ?? "Race") · Paddockside</PageTitle>
+
+@*
+    Allocate owners tickets for one race start (event-page-mockup-notes.md, spec items 2 and 3): the allocation the
+    club gave, each owner's request (their answer to the tickets question), what staff give each owner and the house
+    share, and a running total against the allocation. "Confirm to owners" tells each owner their number in a
+    message to them alone; after a change, only those whose number changed are told. Staff only.
+*@
+<div class="mx-auto grid w-full max-w-[48rem] grid-cols-[minmax(0,1fr)] gap-6">
+    @if (_view is null)
+    {
+        @if (_error is not null)
+        {
+            <Error Message="@_error" />
+        }
+        else
+        {
+            <p class="text-text-muted" role="status">Loading…</p>
+        }
+    }
+    else
+    {
+        <a href="events/@Id" class="btn-link justify-self-start">← @_view.HorseName · @_view.EventTitle</a>
+        <h1>Owners tickets</h1>
+
+        <p class="card font-strong" role="status" aria-live="polite">@Summary</p>
+
+        @if (_view.Question is null)
+        {
+            <p class="rounded-control bg-status-info-bg px-4 py-3 text-status-info-fg">
+                No owner has been asked yet. Write to owners on the race with the step <strong>Owners tickets</strong>: it asks
+                "How many owners tickets would you like?" and their answers appear here.
+            </p>
+        }
+
+        <div class="field max-w-[16rem]">
+            <label class="field-label" for="available">Tickets the club gave</label>
+            <input id="available" class="input" type="number" min="0" max="500" @bind="_available" @bind:event="oninput" />
+        </div>
+
+        <table class="w-full border-collapse text-left">
+            <caption class="sr-only">Tickets asked for and given, by owner</caption>
+            <thead>
+                <tr class="border-b border-border-strong text-small text-text-muted">
+                    <th scope="col" class="py-2 pr-4 font-medium">Owner</th>
+                    <th scope="col" class="py-2 pr-4 font-medium">Asked for</th>
+                    <th scope="col" class="py-2 font-medium">Given</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var line in _view.Lines)
+                {
+                    var id = $"given-{line.PartyId:N}";
+                    <tr class="border-b border-border-subtle last:border-b-0">
+                        <th scope="row" class="py-3 pr-4 align-top">
+                            <span class="font-strong">@line.Name</span>
+                            @if (line.IsHouse)
+                            {
+                                <span class="block text-small text-text-muted">House share: the business's own, never messaged</span>
+                            }
+                            else if (Changed(line))
+                            {
+                                <span class="block text-small text-status-warning-fg">@(line.Confirmed is null ? "Not told yet" : $"Told {line.Confirmed}; will be told the change")</span>
+                            }
+                        </th>
+                        <td class="py-3 pr-4 align-top">
+                            @if (line.IsHouse)
+                            {
+                                <span class="text-text-muted">—</span>
+                            }
+                            else if (line.Asked is { } asked)
+                            {
+                                <span class="font-strong">@asked</span>
+                                @if (_given[line.PartyId] != asked)
+                                {
+                                    <span class="block text-small text-text-muted">@(_given[line.PartyId] > asked ? $"{_given[line.PartyId] - asked} more than asked" : $"{asked - _given[line.PartyId]} short")</span>
+                                }
+                            }
+                            else
+                            {
+                                <span class="text-text-muted">No answer</span>
+                            }
+                        </td>
+                        <td class="py-3 align-top">
+                            <label for="@id" class="sr-only">Tickets given to @line.Name</label>
+                            <input id="@id" class="input w-[6rem]" type="number" min="0" max="50"
+                                   value="@_given[line.PartyId]" @oninput="e => SetGiven(line.PartyId, e.Value)" />
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+
+        @if (_error is not null)
+        {
+            <Error Message="@_error" />
+        }
+        @if (_notice is not null)
+        {
+            <p class="rounded-control bg-status-success-bg px-4 py-3 text-status-success-fg" role="status">@_notice</p>
+        }
+
+        <div class="flex flex-wrap gap-3">
+            <button type="button" class="btn-primary" disabled="@_busy" @onclick="SaveAsync">Save</button>
+            <button type="button" class="btn-secondary" disabled="@_busy" @onclick="GiveWhatWasAsked">Give everyone what they asked for</button>
+        </div>
+
+        <section class="card grid gap-3" aria-labelledby="confirm-heading">
+            <h2 id="confirm-heading">Confirm to owners</h2>
+            <p>
+                @(ToTell == 0
+                    ? "Everyone who asked has been told their number."
+                    : $"{ToTell} {(ToTell == 1 ? "owner" : "owners")} will get a message, to them alone, with their number{(Changes ? " (saving first)" : "")}. Owners who asked for none and were given none aren't messaged.")
+            </p>
+            @if (_view.LastConfirmed is { } last)
+            {
+                <p class="text-small text-text-muted">@last</p>
+            }
+            <div class="field">
+                <label class="field-label" for="note">Add a note to everyone told (optional)</label>
+                <textarea id="note" class="input min-h-[5rem] py-3" @bind="_note" placeholder="Collect them from the owners' entrance on Gate 3 by 12:30."></textarea>
+            </div>
+            <button type="button" class="btn-primary justify-self-start" disabled="@(_busy || ToTell == 0 || Over)" @onclick="ConfirmAsync">Confirm to owners</button>
+            @if (Over)
+            {
+                <p class="font-strong text-status-danger-fg" role="alert">More are given than the club gave. Take some off before confirming.</p>
+            }
+        </section>
+    }
+</div>
+
+@code {
+    [Parameter] public Guid Id { get; set; }
+
+    private TicketsView? _view;
+    private int? _available;
+    private readonly Dictionary<Guid, int> _given = [];
+    private string? _note;
+    private string? _error;
+    private string? _notice;
+    private bool _busy;
+
+    private int Given => _given.Values.Sum();
+
+    private bool Over => _available is { } a && Given > a;
+
+    /// <summary>Unsaved changes: the number boxes differ from what the server holds.</summary>
+    private bool Changes => _view is not null && (_available != _view.Available || _view.Lines.Any(l => _given[l.PartyId] != l.Given));
+
+    private bool Changed(TicketLine line) => _given[line.PartyId] != line.Confirmed && (_given[line.PartyId] > 0 || line.Asked > 0 || line.Confirmed > 0);
+
+    /// <summary>As the server counts it, but live while typing: those whose number differs from what they were told.</summary>
+    private int ToTell => _view?.Lines.Count(l => !l.IsHouse && Changed(l)) ?? 0;
+
+    private string Summary
+    {
+        get
+        {
+            var asked = _view!.AskedTotal;
+            var parts = new List<string> { _available is { } a ? $"{a} available" : "Type in how many the club gave", $"{asked} asked for", $"{Given} given" };
+            if (_available is { } total) parts.Add(Given > total ? $"{Given - total} too many given" : Given < total ? $"{total - Given} left" : "all given");
+            return string.Join(" · ", parts);
+        }
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (Session.Current is null && await Session.RefreshAsync() is null)
+        {
+            Navigation.NavigateTo("sign-in");
+            return;
+        }
+
+        var result = await Api.TicketsAsync(Id);
+        if (result.Succeeded) Show(result.Value!);
+        else _error = result.Status == System.Net.HttpStatusCode.NotFound ? "Owners tickets belong to a race start." : result.Error;
+    }
+
+    private void Show(TicketsView view)
+    {
+        _view = view;
+        _available = view.Available;
+        _given.Clear();
+        foreach (var line in view.Lines) _given[line.PartyId] = line.Given;
+    }
+
+    private void SetGiven(Guid partyId, object? value) => _given[partyId] = int.TryParse(value?.ToString(), out var n) && n >= 0 ? n : 0;
+
+    /// <summary>A starting point, not a rule: everyone gets what they asked for; the house share is left as it is.</summary>
+    private void GiveWhatWasAsked()
+    {
+        foreach (var line in _view!.Lines.Where(l => !l.IsHouse)) _given[line.PartyId] = line.Asked ?? 0;
+        _notice = null;
+    }
+
+    private async Task<bool> SaveAsync()
+    {
+        (_busy, _error, _notice) = (true, null, null);
+        try
+        {
+            var result = await Api.SaveTicketsAsync(Id, _available, _given.Select(g => (g.Key, g.Value)));
+            if (!result.Succeeded) { _error = result.Error; return false; }
+            Show(result.Value!);
+            _notice = "Saved.";
+            return true;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task ConfirmAsync()
+    {
+        if (Changes && !await SaveAsync()) return;
+        (_busy, _error, _notice) = (true, null, null);
+        try
+        {
+            var result = await Api.ConfirmTicketsAsync(Id, _note);
+            if (!result.Succeeded) { _error = result.Error; return; }
+            _notice = $"Told {result.Value!.Told} {(result.Value.Told == 1 ? "owner" : "owners")}. Their messages are on the race, each visible only to them.";
+            _note = null;
+            var fresh = await Api.TicketsAsync(Id);
+            if (fresh.Succeeded) Show(fresh.Value!);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}

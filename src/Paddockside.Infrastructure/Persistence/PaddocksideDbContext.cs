@@ -39,6 +39,8 @@ public sealed class PaddocksideDbContext(DbContextOptions<PaddocksideDbContext> 
 
     public DbSet<PromptAnswer> PromptAnswers => Set<PromptAnswer>();
 
+    public DbSet<TicketAllocation> TicketAllocations => Set<TicketAllocation>();
+
     public DbSet<RoutingAddress> RoutingAddresses => Set<RoutingAddress>();
 
     public DbSet<InboundMessage> InboundMessages => Set<InboundMessage>();
@@ -57,6 +59,7 @@ public sealed class PaddocksideDbContext(DbContextOptions<PaddocksideDbContext> 
         // Value objects stored inside their owner's row (as JSON), not tables of their own.
         modelBuilder.Ignore<FactField>();
         modelBuilder.Ignore<MessagePrompt>();
+        modelBuilder.Ignore<TicketGrant>();
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(PaddocksideDbContext).Assembly);
         ApplyTenantFilters(modelBuilder);
     }

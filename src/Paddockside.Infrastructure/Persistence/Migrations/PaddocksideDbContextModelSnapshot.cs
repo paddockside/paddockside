@@ -943,6 +943,44 @@ namespace Paddockside.Infrastructure.Persistence.Migrations
                     b.ToTable("Tenants");
                 });
 
+            modelBuilder.Entity("Paddockside.Domain.TicketAllocation", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int?>("Available")
+                        .HasColumnType("int");
+
+                    b.Property<DateTimeOffset?>("ConfirmedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("ConfirmedBy")
+                        .HasMaxLength(320)
+                        .HasColumnType("nvarchar(320)");
+
+                    b.Property<Guid>("EventId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Grants")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("EventId")
+                        .IsUnique();
+
+                    b.HasIndex("TenantId");
+
+                    b.ToTable("TicketAllocations");
+                });
+
             modelBuilder.Entity("Paddockside.Domain.AuditEntry", b =>
                 {
                     b.HasOne("Paddockside.Domain.Tenant", null)
@@ -1391,6 +1429,21 @@ namespace Paddockside.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("Paddockside.Domain.SupportSession", b =>
                 {
+                    b.HasOne("Paddockside.Domain.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Paddockside.Domain.TicketAllocation", b =>
+                {
+                    b.HasOne("Paddockside.Domain.Event", null)
+                        .WithMany()
+                        .HasForeignKey("EventId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
                     b.HasOne("Paddockside.Domain.Tenant", null)
                         .WithMany()
                         .HasForeignKey("TenantId")

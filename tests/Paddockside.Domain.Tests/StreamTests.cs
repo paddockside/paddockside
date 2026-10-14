@@ -119,7 +119,8 @@ public sealed class StreamTests
         var stages = EventTypes.Stages(EventTypes.RaceStart, raceDay, ["NOM_FACT", "TRAINER_PLAN", "ACC_FACT", "BARRIER"], On(2026, 10, 16).AddHours(9));
 
         Assert.Equal(StageState.Missing, stages.Single(st => st.Step.Code == "TICKETS").State);   // due 15 Oct
-        Assert.Equal(StageState.Current, stages.Single(st => st.Step.Code == "TRAINER_PRE").State); // due 16 Oct
+        Assert.Equal(StageState.Current, stages.Single(st => st.Step.Code == "TICKETS_CONFIRM").State); // due 16 Oct, first that day
+        Assert.Equal(StageState.Upcoming, stages.Single(st => st.Step.Code == "TRAINER_PRE").State);    // also 16 Oct, after it
     }
 
     [Fact]
