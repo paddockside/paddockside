@@ -76,4 +76,9 @@ internal static class EmailTokens
     public const string ColorKindMediaBg = "#dfe7e2";
     public const string ColorKindNoteFg = "#6b5400";
     public const string ColorKindNoteBg = "#fffbea";
+    public const string ColorRailBg = "#1e5a3c";
+    public const string ColorRailFg = "#ffffff";
+    public const string ColorRailMuted = "#cfe0d5";
+    public const string ColorRailFaint = "#9fb7a8";
+    public const string ColorRailActive = "#3c7158";
 }

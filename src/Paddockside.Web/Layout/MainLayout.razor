@@ -3,56 +3,211 @@
 @inject SessionState Session
 @inject PaddocksideApi Api
 @inject NavigationManager Navigation
+@inject StaffRail Rail
 
-<div class="grid min-h-screen grid-cols-[minmax(0,1fr)] grid-rows-[auto_auto_1fr]">
-    <AppHeader TenantName="@Session.Current?.TenantName" OtherTenants="_otherTenants" OnSwitchTenant="SwitchTenant">
-        <Actions>
-            @if (Session.Current is not null)
+@*
+    The staff console's frame, after the event-page mockup: on wide screens a solid green rail on the left with the
+    business, Today / Horses / Pending (with its count), the horse being looked at and its events, and the person signed
+    in at the bottom. On phones and tablets the rail folds into the top header. The event page runs edge to edge (it
+    has its own right-hand panel); every other page sits in a centred column.
+*@
+<div class="min-h-screen lg:grid lg:grid-cols-[264px_minmax(0,1fr)]">
+    @if (Session.Current is { } me)
+    {
+        <aside class="sticky top-0 hidden h-screen flex-col overflow-y-auto bg-rail-bg px-[14px] py-[20px] text-rail-fg lg:flex" aria-label="Staff console">
+            <div class="flex items-center gap-3 px-2 pb-4">
+                <span class="grid size-[40px] shrink-0 place-items-center rounded-control bg-surface-raised font-heading text-action-primary-bg" aria-hidden="true">@Monogram(me.TenantName)</span>
+                <span class="grid leading-tight">
+                    <span class="font-heading">@me.TenantName</span>
+                    <span class="text-small text-rail-muted">Staff console</span>
+                </span>
+            </div>
+
+            <nav aria-label="Main" class="grid gap-1">
+                @NavItem("today", "Today", Icons.Clock)
+                @NavItem("horses", "Horses", Icons.House)
+                @NavItem("inbound", "Pending", Icons.Mail, _pending)
+            </nav>
+
+            @if (Rail.Horse is { } horse)
             {
-                <nav aria-label="Main" class="flex flex-wrap items-center gap-x-4 gap-y-2">
-                    <a href="horses" class="btn-link">Horses</a>
-                    <a href="inbound" class="btn-link">Inbound mail</a>
-                    @if (Session.Current.Role == "TenantAdmin")
+                <div class="mx-2 my-[18px] h-px bg-rail-active" aria-hidden="true"></div>
+                <a href="horses/@horse.Id" class="flex items-center gap-2 rounded-control px-2 pb-2 hover:bg-rail-active">
+                    <span class="grid size-[36px] shrink-0 place-items-center rounded-control bg-rail-muted text-small font-strong text-action-primary-bg" aria-hidden="true">@Monogram(horse.Name)</span>
+                    <span class="grid leading-tight">
+                        <span class="font-heading">@horse.Name</span>
+                        <span class="text-small text-rail-muted">@horse.Subtitle</span>
+                    </span>
+                </a>
+                <p class="px-3 py-1 text-small font-strong uppercase tracking-wide text-rail-faint">Events · @horse.Events.Count</p>
+                <ol class="grid gap-1" aria-label="Events for @horse.Name">
+                    @foreach (var e in horse.Events)
                     {
-                        <a href="members" class="btn-link">Members</a>
-                        <a href="audit" class="btn-link">Audit log</a>
+                        <li>
+                            <a href="events/@e.Id" aria-current="@(e.Current ? "page" : null)"
+                               class="grid gap-1 rounded-control px-3 py-2 @(e.Current ? "bg-rail-active text-rail-fg" : "text-rail-muted hover:bg-rail-active")">
+                                <span>@e.Title</span>
+                                <span class="text-small @(e.Current ? "text-rail-muted" : "text-rail-faint")">@e.Sub</span>
+                            </a>
+                        </li>
                     }
-                    @if (Session.Current.IsOperator && Session.Current.SupportUntil is null)
+                </ol>
+            }
+
+            @if (me.Role == "TenantAdmin" || (me.IsOperator && me.SupportUntil is null))
+            {
+                <div class="mx-2 my-[18px] h-px bg-rail-active" aria-hidden="true"></div>
+                <nav aria-label="Administration" class="grid gap-1">
+                    @if (me.Role == "TenantAdmin")
                     {
-                        <a href="ops" class="btn-link">Operator console</a>
+                        @NavItem("members", "Members", Icons.People)
+                        @NavItem("audit", "Audit log", Icons.List)
+                    }
+                    @if (me.IsOperator && me.SupportUntil is null)
+                    {
+                        @NavItem("ops", "Operator console", Icons.Gear)
                     }
                 </nav>
-                <button type="button" class="btn-secondary" @onclick="SignOut">Sign out</button>
             }
-        </Actions>
-    </AppHeader>
 
-    @if (Session.Current?.SupportUntil is { } until)
-    {
-        @* An operator inside a tenant: never mistakable for the tenant's own staff (identity-access.md §7). *@
-        <div class="flex flex-wrap items-center gap-3 bg-status-warning-bg px-4 py-3 text-status-warning-fg sm:px-6" role="status">
-            <span class="font-strong">Paddockside support session: you are viewing @Session.Current.TenantName read-only until @until. Everything you open is in their audit log.</span>
-            <button type="button" class="btn-secondary ml-auto" @onclick="LeaveSupport">Leave</button>
-        </div>
+            <div class="mt-auto grid gap-2 px-2 pt-6">
+                <div class="flex items-center gap-2">
+                    <span class="grid size-[36px] shrink-0 place-items-center rounded-pill bg-rail-muted text-small font-strong text-action-primary-bg" aria-hidden="true">@Monogram(me.Email)</span>
+                    <span class="grid min-w-0 text-small leading-tight">
+                        <span class="truncate font-strong">@me.Email</span>
+                        <span class="text-rail-muted">@RoleLabel(me.Role)</span>
+                    </span>
+                </div>
+                <div class="flex flex-wrap gap-x-4">
+                    @foreach (var other in _otherTenants)
+                    {
+                        <button type="button" class="min-h-control text-small text-rail-muted underline underline-offset-4" @onclick="() => SwitchTenant(other)">Switch to @other.Name</button>
+                    }
+                    <button type="button" class="min-h-control text-small text-rail-muted underline underline-offset-4" @onclick="SignOut">Sign out</button>
+                </div>
+            </div>
+        </aside>
     }
     else
     {
-        <div></div>
+        <div class="hidden lg:block"></div>
     }
 
-    <main class="mx-auto w-full max-w-5xl px-4 py-6 sm:px-6 sm:py-8">
-        @Body
-    </main>
+    <div class="grid min-h-screen grid-cols-[minmax(0,1fr)] grid-rows-[auto_auto_1fr]">
+        @* Phones and tablets: the rail's links in the top header instead. *@
+        <div class="lg:hidden">
+            <AppHeader TenantName="@Session.Current?.TenantName" OtherTenants="_otherTenants" OnSwitchTenant="SwitchTenant">
+                <Actions>
+                    @if (Session.Current is not null)
+                    {
+                        <nav aria-label="Main" class="flex flex-wrap items-center gap-x-4 gap-y-2">
+                            <a href="today" class="btn-link">Today</a>
+                            <a href="horses" class="btn-link">Horses</a>
+                            <a href="inbound" class="btn-link">Pending@(_pending > 0 ? $" ({_pending})" : null)</a>
+                            @if (Session.Current.Role == "TenantAdmin")
+                            {
+                                <a href="members" class="btn-link">Members</a>
+                                <a href="audit" class="btn-link">Audit log</a>
+                            }
+                            @if (Session.Current.IsOperator && Session.Current.SupportUntil is null)
+                            {
+                                <a href="ops" class="btn-link">Operator console</a>
+                            }
+                        </nav>
+                        <button type="button" class="btn-secondary" @onclick="SignOut">Sign out</button>
+                    }
+                </Actions>
+            </AppHeader>
+        </div>
+
+        @if (Session.Current?.SupportUntil is { } until)
+        {
+            @* An operator inside a tenant: never mistakable for the tenant's own staff (identity-access.md §7). *@
+            <div class="flex flex-wrap items-center gap-3 bg-status-warning-bg px-4 py-3 text-status-warning-fg sm:px-6" role="status">
+                <span class="font-strong">Paddockside support session: you are viewing @Session.Current.TenantName read-only until @until. Everything you open is in their audit log.</span>
+                <button type="button" class="btn-secondary ml-auto" @onclick="LeaveSupport">Leave</button>
+            </div>
+        }
+        else
+        {
+            <div></div>
+        }
+
+        @if (FullBleed)
+        {
+            <main class="min-w-0">@Body</main>
+        }
+        else
+        {
+            <main class="mx-auto w-full min-w-0 max-w-5xl px-4 py-6 sm:px-6 sm:py-8">@Body</main>
+        }
+    </div>
 </div>
 
 @code {
     private IReadOnlyList<TenantOption> _otherTenants = [];
+    private int _pending;
 
-    protected override void OnInitialized() => Session.Changed += Refresh;
+    /// <summary>The event page brings its own columns (centre and right panel), so it is not boxed in.</summary>
+    private bool FullBleed
+    {
+        get
+        {
+            var path = Navigation.ToBaseRelativePath(Navigation.Uri).Split('?', '#')[0];
+            return path.StartsWith("events/", StringComparison.Ordinal) && path.Count(c => c == '/') == 1;
+        }
+    }
+
+    private RenderFragment NavItem(string href, string label, string icon, int count = 0) => __builder =>
+    {
+        var current = IsCurrent(href);
+        <a href="@href" aria-current="@(current ? "page" : null)"
+           class="flex min-h-control items-center gap-3 rounded-control px-3 font-medium @(current ? "bg-rail-active text-rail-fg" : "text-rail-fg hover:bg-rail-active")">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">@((MarkupString)icon)</svg>
+            <span class="flex-1">@label</span>
+            @if (count > 0)
+            {
+                <span class="rounded-pill bg-surface-raised px-2 py-1 text-small font-strong text-action-primary-bg">@count<span class="sr-only"> waiting</span></span>
+            }
+        </a>
+    };
+
+    private bool IsCurrent(string href)
+    {
+        var path = Navigation.ToBaseRelativePath(Navigation.Uri).Split('?', '#')[0];
+        return path == href || path.StartsWith(href + "/", StringComparison.Ordinal);
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        Session.Changed += Refresh;
+        Rail.Changed += Redraw;
+        Navigation.LocationChanged += Moved;
+        await LoadPendingAsync();
+    }
+
+    private void Redraw() => InvokeAsync(StateHasChanged);
+
+    /// <summary>A new page: the Pending count is refreshed, and the horse block goes unless that page sets it again.</summary>
+    private void Moved(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs args) => InvokeAsync(async () =>
+    {
+        var path = Navigation.ToBaseRelativePath(args.Location).Split('?', '#')[0];
+        if (!path.StartsWith("horses/", StringComparison.Ordinal) && !path.StartsWith("events/", StringComparison.Ordinal)) Rail.Clear();
+        await LoadPendingAsync();
+        StateHasChanged();
+    });
+
+    private async Task LoadPendingAsync()
+    {
+        if (Session.Current is null) return;
+        var counts = await Api.InboundCountsAsync();
+        _pending = counts.Succeeded ? counts.Value!.Waiting : 0;
+    }
 
     private void Refresh() => InvokeAsync(async () =>
     {
         await LoadOtherTenantsAsync();
+        await LoadPendingAsync();
         StateHasChanged();
     });
 
@@ -84,5 +239,42 @@
         Navigation.NavigateTo("ops", forceLoad: true);
     }
 
-    public void Dispose() => Session.Changed -= Refresh;
+    /// <summary>Initials for a tile: "Laurel Oak Bloodstock" → "LO", "kate@laurel-oak.test" → "KA".</summary>
+    private static string Monogram(string text)
+    {
+        var words = text.Split('@')[0].Split([' ', '.', '-', '_'], StringSplitOptions.RemoveEmptyEntries).Where(w => char.IsLetterOrDigit(w[0])).ToList();
+        return words.Count switch
+        {
+            0 => "?",
+            1 => words[0][..Math.Min(2, words[0].Length)].ToUpperInvariant(),
+            _ => $"{char.ToUpperInvariant(words[0][0])}{char.ToUpperInvariant(words[1][0])}",
+        };
+    }
+
+    private static string RoleLabel(string role) => role switch
+    {
+        "TenantAdmin" => "Tenant admin",
+        "Coordinator" => "Coordinator",
+        "Manager" => "Manager",
+        "Viewer" => "Viewer",
+        _ => role,
+    };
+
+    public void Dispose()
+    {
+        Session.Changed -= Refresh;
+        Rail.Changed -= Redraw;
+        Navigation.LocationChanged -= Moved;
+    }
+
+    /// <summary>The rail's line icons (24-unit paths, as drawn in the mockup).</summary>
+    private static class Icons
+    {
+        public const string Clock = "<circle cx=\"12\" cy=\"12\" r=\"9\"></circle><path d=\"M12 7v5l3 2\"></path>";
+        public const string House = "<path d=\"M4 20V9l8-5 8 5v11\"></path><path d=\"M9 20v-6h6v6\"></path>";
+        public const string Mail = "<path d=\"M4 6h16v12H4z\"></path><path d=\"M4 8l8 5 8-5\"></path>";
+        public const string People = "<circle cx=\"9\" cy=\"8\" r=\"3\"></circle><path d=\"M3 20a6 6 0 0 1 12 0\"></path><path d=\"M16 4a3 3 0 0 1 0 6\"></path><path d=\"M18 14a5 5 0 0 1 3 6\"></path>";
+        public const string List = "<path d=\"M8 6h12\"></path><path d=\"M8 12h12\"></path><path d=\"M8 18h12\"></path><path d=\"M4 6h.01\"></path><path d=\"M4 12h.01\"></path><path d=\"M4 18h.01\"></path>";
+        public const string Gear = "<circle cx=\"12\" cy=\"12\" r=\"3\"></circle><path d=\"M19 12a7 7 0 0 0-.1-1.2l2-1.5-2-3.4-2.4.9a7 7 0 0 0-2-1.2L14 3h-4l-.5 2.6a7 7 0 0 0-2 1.2l-2.4-.9-2 3.4 2 1.5A7 7 0 0 0 5 12a7 7 0 0 0 .1 1.2l-2 1.5 2 3.4 2.4-.9a7 7 0 0 0 2 1.2L10 21h4l.5-2.6a7 7 0 0 0 2-1.2l2.4.9 2-3.4-2-1.5A7 7 0 0 0 19 12z\"></path>";
+    }
 }

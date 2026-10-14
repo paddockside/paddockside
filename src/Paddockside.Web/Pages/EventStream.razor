@@ -1,143 +1,252 @@
 @page "/events/{Id:guid}"
 @inject PaddocksideApi Api
 @inject SessionState Session
+@inject StaffRail Rail
 @inject NavigationManager Navigation
 
 <PageTitle>@(_page?.Event.Title ?? "Event") · Paddockside</PageTitle>
 
 @*
-    The event page (search-reporting.md §3, event stream; event-page-mockup-notes.md "Timeline model"): the horse's
-    events in a rail on the left, so the timeline is only ever one event deep; then this event and its step strip,
-    every item newest first on one vertical spine (facts, messages with their replies and delivery line, staff-only
-    notes), and the compose box at the bottom. Staff view.
+    The event page (search-reporting.md §3, event stream; event-page-mockup-notes.md "Timeline model"), laid out as
+    the staff mockup: the horse's events are in the green rail (MainLayout), so this page is one event deep. A header
+    with the event and its step strip; every item newest first on one spine, a marker for each kind (facts,
+    messages with their replies and delivery line, staff-only notes); the compose bar at the bottom; and a panel on
+    the right with what the event needs: race-day facts, owners tickets, the horse's address, and what is still to
+    do. Staff view.
 *@
-<div class="grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-[15rem_minmax(0,1fr)] lg:items-start">
-    @if (_page is not null && _events is { Count: > 1 })
-    {
-        @* Phones: the other events fold away above the timeline. Wide screens: a rail that stays in view. *@
-        <details class="card lg:hidden">
-            <summary class="cursor-pointer font-strong">All events for @_page.HorseName (@_events.Count)</summary>
-            <div class="mt-3">@EventRail</div>
-        </details>
-        <nav class="sticky top-6 hidden lg:block" aria-label="Events for @_page.HorseName">@EventRail</nav>
-    }
-    else if (_page is not null)
-    {
-        <div class="hidden lg:block"></div>
-    }
-<div class="grid grid-cols-[minmax(0,1fr)] gap-6">
-    @if (_error is not null && _page is null)
-    {
+@if (_error is not null && _page is null)
+{
+    <div class="grid gap-6 px-4 py-6 sm:px-8">
         <a href="horses" class="btn-link justify-self-start">← All horses</a>
         <Error Message="@_error" />
-    }
-    else if (_page is null)
-    {
-        <p class="text-text-muted" role="status">Loading…</p>
-    }
-    else
-    {
-        <div class="flex flex-wrap items-center justify-between gap-4">
-            <a href="horses/@_page.HorseId" class="btn-link">← @_page.HorseName</a>
-            <a href="events/@Id#write" class="btn-secondary">Write an update</a>
+    </div>
+}
+else if (_page is null)
+{
+    <p class="px-4 py-6 text-text-muted sm:px-8" role="status">Loading…</p>
+}
+else
+{
+    var ev = _page.Event;
+    <div class="grid min-h-screen grid-cols-[minmax(0,1fr)] xl:grid-cols-[minmax(0,1fr)_320px]">
+        <div class="flex min-w-0 flex-col">
+            <header class="grid gap-4 border-b border-border-subtle bg-surface-raised px-4 pb-4 pt-[20px] sm:px-8">
+                <div class="flex flex-wrap items-start justify-between gap-4">
+                    <div class="grid min-w-0 gap-1">
+                        <nav class="flex flex-wrap items-center gap-2 text-small text-text-muted" aria-label="Breadcrumb">
+                            <a href="horses/@_page.HorseId" class="underline-offset-4 hover:underline">@_page.HorseName</a>
+                            <span aria-hidden="true">›</span>
+                            <span>@ev.Type</span>
+                        </nav>
+                        <h1 class="text-heading font-heading leading-tight">@ev.Title</h1>
+                        <p class="text-text-muted">@HeaderDetail</p>
+                    </div>
+                    <span class="badge @StatusClasses(ev.Status) py-1">@ev.Status</span>
+                </div>
+
+                @if (ev.Steps.Count > 0)
+                {
+                    <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
+                        <ol class="flex min-w-0 flex-1 flex-wrap items-center gap-2" aria-label="Progress">
+                            @for (var i = 0; i < ev.Steps.Count; i++)
+                            {
+                                var step = ev.Steps[i];
+                                if (i > 0)
+                                {
+                                    <li aria-hidden="true" class="hidden h-[2px] min-w-[16px] flex-1 sm:block @(step.State is "Done" or "Current" ? "bg-action-primary-bg" : "bg-border-subtle")"></li>
+                                }
+                                <li class="flex items-center gap-2 font-strong @StepText(step.State)" aria-current="@(step.State == "Current" ? "step" : null)">
+                                    <span aria-hidden="true" class="size-[14px] shrink-0 rounded-pill @StepDot(step.State)"></span>
+                                    @step.Label<span class="sr-only">, @StepWord(step.State)</span>
+                                </li>
+                            }
+                        </ol>
+                        @if (StepSummary is { } summary)
+                        {
+                            <p class="w-full text-small text-text-muted 2xl:w-auto">@summary</p>
+                        }
+                    </div>
+                }
+            </header>
+
+            <div class="grid flex-1 content-start gap-4 px-4 py-6 sm:px-8">
+                @if (ev.Status == "Draft")
+                {
+                    <section class="flex flex-wrap items-center gap-3 rounded-control bg-status-warning-bg px-4 py-3 text-status-warning-fg" aria-label="Draft">
+                        <p class="flex-1"><strong>Draft.</strong> Owners can't see this event and nothing can be sent from it. Staff notes are fine.</p>
+                        <button type="button" class="btn-primary" disabled="@_busy" @onclick="OpenEventAsync">Open event</button>
+                    </section>
+                }
+
+                <section aria-label="Updates, newest first">
+                    @if (_page.Items.Count == 0)
+                    {
+                        <p class="text-text-muted">Nothing posted yet. Facts, messages and notes for this event will appear here.</p>
+                    }
+                    <ol>
+                        @foreach (var item in _page.Items)
+                        {
+                            var (day, time) = When(item.At);
+                            <li class="grid grid-cols-[20px_minmax(0,1fr)] gap-x-2 sm:grid-cols-[96px_32px_minmax(0,1fr)] sm:gap-x-0">
+                                <p class="hidden pr-2 pt-[18px] text-right text-small leading-snug text-text-muted sm:block">
+                                    @day@if (time is not null)
+                                    {
+                                        <br /><span class="text-meta">@time</span>
+                                    }
+                                </p>
+                                <div class="relative flex justify-center" aria-hidden="true">
+                                    <span class="absolute inset-y-0 w-[2px] bg-border-subtle"></span>
+                                    <span class="relative mt-[18px] size-[18px] rounded-pill border-[3px] @Marker(item.Kind)"></span>
+                                </div>
+                                <div class="grid min-w-0 gap-3 pb-[20px] pt-2">
+                                    <p class="text-small text-text-muted sm:hidden">@item.At</p>
+                                    @switch (item.Kind)
+                                    {
+                                        case "Fact":
+                                            <FactCard Model="item.ToFact()" />
+                                            break;
+                                        case "Note":
+                                            <article class="grid gap-2 rounded-card border border-dashed border-border-strong bg-kind-note-bg p-4">
+                                                <header class="flex flex-wrap items-center gap-2">
+                                                    <KindMark Kind="Kind.Note" />
+                                                    <span class="text-small text-text-muted">@item.Author@(item.Step is null ? null : $" · Step: {item.Step}")</span>
+                                                    <span class="ml-auto"><ScopeMark Scope="Scope.Internal" /></span>
+                                                </header>
+                                                <p class="whitespace-pre-line">@item.Body</p>
+                                            </article>
+                                            break;
+                                        default:
+                                            <MessageThread Model="item.ToMessage()" />
+                                            @if (item.CanReplyToSender)
+                                            {
+                                                <ReplyToSender ItemId="item.Id" Author="@item.Author" OnSent="Load" />
+                                            }
+                                            @if (item.Prompt is { } prompt)
+                                            {
+                                                <PromptTally Model="prompt" ItemId="item.Id" Busy="_busy" OnSet="answer => SetAnswer(item, answer.PartyId, answer.Value)" />
+                                            }
+                                            break;
+                                    }
+                                </div>
+                            </li>
+                        }
+                    </ol>
+                </section>
+            </div>
+
+            <section id="write" class="z-10 grid gap-3 border-t lg:sticky lg:bottom-0 border-border-subtle bg-surface-raised px-4 pb-[20px] pt-4 sm:px-8" aria-label="Write an update">
+                @if (_saved is not null)
+                {
+                    <p class="rounded-control bg-status-success-bg px-4 py-3 text-status-success-fg" role="status">@_saved</p>
+                }
+                @if (_error is not null)
+                {
+                    <Error Message="@_error" />
+                }
+                <ComposeBox Steps="_page.StepOptions" StepPrompts="_page.StepPrompts" NamedPartyChoices="Owners" HorseName="@_page.HorseName" Busy="_busy" OnSend="Send" />
+            </section>
         </div>
 
-        <h1 class="sr-only">@_page.Event.Title</h1>
-        <EventCard Model="_page.Event.ToCard()" />
-
-        @if (_page.Event.Status == "Draft")
-        {
-            <section class="flex flex-wrap items-center gap-3 rounded-control bg-status-warning-bg px-4 py-3 text-status-warning-fg" aria-label="Draft">
-                <p class="flex-1"><strong>Draft.</strong> Owners can't see this event and nothing can be sent from it. Staff notes are fine.</p>
-                <button type="button" class="btn-primary" disabled="@_busy" @onclick="OpenEventAsync">Open event</button>
+        <aside class="grid grid-cols-[minmax(0,1fr)] content-start gap-[26px] border-t border-border-subtle bg-surface-raised px-4 py-6 sm:px-8 xl:sticky xl:top-0 xl:h-screen xl:overflow-y-auto xl:border-l xl:border-t-0 xl:px-[22px]" aria-label="About this event">
+            <section class="grid gap-2">
+                <h2 class="@SideHeading">@ev.Type</h2>
+                <dl class="grid grid-cols-[96px_minmax(0,1fr)] gap-x-3 gap-y-1">
+                    <dt class="text-text-muted">When</dt>
+                    <dd class="font-strong">@ev.KeyDate</dd>
+                    @foreach (var (label, value) in RaceDay)
+                    {
+                        <dt class="text-text-muted">@label</dt>
+                        <dd>@value</dd>
+                    }
+                </dl>
             </section>
-        }
 
-        @if (_page.Tickets is { } tickets)
-        {
-            <a href="events/@Id/tickets" class="card flex flex-wrap items-center justify-between gap-2 hover:border-border-strong">
-                <span><span class="font-strong">Owners tickets:</span> @tickets</span>
-                <span class="btn-link">Allocate tickets →</span>
-            </a>
-        }
-
-        <section class="grid grid-cols-[minmax(0,1fr)] gap-4 border-l-2 border-border-subtle pl-4 sm:pl-6" aria-label="Updates, newest first">
-            @if (_page.Items.Count == 0)
+            @if (_tickets is { } t)
             {
-                <div class="card"><p>Nothing posted yet. Facts, messages and notes for this event will appear here.</p></div>
-            }
-            @foreach (var item in _page.Items)
-            {
-                @switch (item.Kind)
-                {
-                    case "Fact":
-                        <FactCard Model="item.ToFact()" />
-                        break;
-                    case "Note":
-                        <article class="grid gap-2 rounded-card border border-dashed border-border-strong border-l-4 border-l-kind-note-fg bg-kind-note-bg p-4">
-                            <header class="flex flex-wrap items-center gap-2">
-                                <KindMark Kind="Kind.Note" />
-                                <span class="text-small text-text-muted">@item.Author · @item.At@(item.Step is null ? null : $" · Step: {item.Step}")</span>
-                                <span class="ml-auto"><ScopeMark Scope="Scope.Internal" /></span>
-                            </header>
-                            <p class="whitespace-pre-line">@item.Body</p>
-                        </article>
-                        break;
-                    default:
-                        <MessageThread Model="item.ToMessage()" />
-                        @if (item.CanReplyToSender)
+                <section class="grid grid-cols-[minmax(0,1fr)] gap-3">
+                    <h2 class="@SideHeading">Owners tickets</h2>
+                    <div class="grid grid-cols-3 gap-2">
+                        <div class="rounded-control bg-surface-default px-2 py-2">
+                            <p class="text-title font-heading leading-tight">@(t.Available?.ToString() ?? "—")</p>
+                            <p class="text-small text-text-muted">available</p>
+                        </div>
+                        <div class="rounded-control bg-status-warning-bg px-2 py-2 text-status-warning-fg">
+                            <p class="text-title font-heading leading-tight">@t.AskedTotal</p>
+                            <p class="whitespace-nowrap text-small">asked for</p>
+                        </div>
+                        <div class="rounded-control bg-scope-owners-bg px-2 py-2 text-scope-owners-fg">
+                            <p class="text-title font-heading leading-tight">@t.GivenTotal</p>
+                            <p class="text-small">allocated</p>
+                        </div>
+                    </div>
+                    <p class="text-small text-text-muted">@t.Summary</p>
+                    <ul class="grid grid-cols-[minmax(0,1fr)]">
+                        @foreach (var line in t.Lines.Take(6))
                         {
-                            <ReplyToSender ItemId="item.Id" Author="@item.Author" OnSent="Load" />
+                            <li class="flex items-center gap-2 border-b border-border-subtle py-2 text-small">
+                                <span aria-hidden="true" class="size-2 shrink-0 rounded-pill @(line.Asked is null && !line.IsHouse ? "border border-border-strong" : "bg-action-primary-bg")"></span>
+                                <span class="min-w-0 flex-1 truncate">@line.Name@(line.IsHouse ? " (house)" : null)</span>
+                                @if (line.Asked is { } asked)
+                                {
+                                    <span class="font-strong">@asked</span>
+                                }
+                                else if (!line.IsHouse)
+                                {
+                                    <span class="text-text-muted">no reply yet</span>
+                                }
+                                <span class="w-[64px] text-right text-text-muted">@(line.Given > 0 ? $"{line.Given} given" : "—")</span>
+                            </li>
                         }
-                        @if (item.Prompt is { } prompt)
+                    </ul>
+                    <p class="flex flex-wrap justify-between gap-2 text-small">
+                        @if (t.Lines.Count > 6)
                         {
-                            <PromptTally Model="prompt" ItemId="item.Id" Busy="_busy" OnSet="answer => SetAnswer(item, answer.PartyId, answer.Value)" />
+                            <a href="events/@Id/tickets" class="underline underline-offset-4">All @t.Lines.Count owners</a>
                         }
-                        break;
-                }
+                        <a href="events/@Id/tickets" class="ml-auto underline underline-offset-4">Adjust allocation</a>
+                    </p>
+                </section>
             }
-        </section>
 
-        <section id="write" class="grid grid-cols-[minmax(0,1fr)] gap-3" aria-labelledby="write-heading">
-            <h2 id="write-heading">Write an update</h2>
-            @if (_saved is not null)
+            @if (_horse?.InboxAddress is { } inbox)
             {
-                <p class="rounded-control bg-status-success-bg px-4 py-3 text-status-success-fg" role="status">@_saved</p>
+                <section class="grid gap-1">
+                    <h2 class="@SideHeading">Trainer</h2>
+                    <p class="text-small">Mail about @_page.HorseName comes to</p>
+                    <p class="break-all text-small"><a href="mailto:@inbox" class="underline underline-offset-4">@inbox</a></p>
+                </section>
             }
-            @if (_error is not null)
+
+            @if (StillToDo is { Count: > 0 } todo)
             {
-                <Error Message="@_error" />
+                <section class="grid gap-2">
+                    <h2 class="@SideHeading">Still to do</h2>
+                    <ul class="grid gap-2">
+                        @foreach (var (text, urgent) in todo)
+                        {
+                            <li class="flex gap-2">
+                                <span aria-hidden="true" class="font-heading @(urgent ? "text-status-warning-fg" : "text-text-muted")">•</span>
+                                <span class="@(urgent ? "font-strong text-status-warning-fg" : null)">@text</span>
+                            </li>
+                        }
+                    </ul>
+                </section>
             }
-            <ComposeBox Steps="_page.StepOptions" StepPrompts="_page.StepPrompts" NamedPartyChoices="Owners" Busy="_busy" OnSend="Send" />
-        </section>
-    }
-</div>
-</div>
+        </aside>
+    </div>
+}
 
 @code {
     [Parameter] public Guid Id { get; set; }
 
     private EventPage? _page;
-    private List<EventSummary>? _events;
-
-    /// <summary>The horse's events, newest first, this one marked as the current page.</summary>
-    private RenderFragment EventRail => @<ol class="grid gap-1">
-        <li class="px-3 pb-2 text-small font-strong text-text-muted">@_page!.HorseName</li>
-        @foreach (var e in _events!)
-        {
-            var current = e.Id == Id;
-            <li>
-                <a href="events/@e.Id" aria-current="@(current ? "page" : null)"
-                   class="grid gap-0.5 rounded-control px-3 py-2 @(current ? "bg-action-secondary-bg font-strong" : "hover:bg-surface-sunken") @(e.Status is "Closed" or "Cancelled" ? "text-text-muted" : null)">
-                    <span class="@(e.Status == "Cancelled" ? "line-through" : null)">@e.Title</span>
-                    <span class="text-small text-text-muted">@e.Type · @e.KeyDate@(e.Status == "Open" ? null : $" · {e.Status}")</span>
-                </a>
-            </li>
-        }
-    </ol>;
+    private HorseDetail? _horse;
+    private TicketsView? _tickets;
     private string? _error;
     private string? _saved;
     private bool _busy;
+
+    private const string SideHeading = "text-small font-strong uppercase tracking-wide text-text-muted";
 
     private IReadOnlyList<PartyOption> Owners => _page?.Owners.Select(o => new PartyOption(o.Id.ToString(), o.Name)).ToList() ?? [];
 
@@ -156,11 +265,109 @@
     {
         var result = await Api.EventAsync(Id);
         if (!result.Succeeded) { _error = result.Error; return; }
-        _page = result.Value;
+        _page = result.Value!;
 
-        var events = await Api.HorseEventsAsync(_page!.HorseId);
-        _events = events.Succeeded ? events.Value : null; // the rail is a convenience; the page works without it
+        // The rail, the horse's address and the tickets panel are conveniences; the page works without them.
+        var horse = await Api.HorseAsync(_page.HorseId);
+        _horse = horse.Succeeded ? horse.Value : null;
+        var events = await Api.HorseEventsAsync(_page.HorseId);
+        if (_horse is not null && events.Succeeded) Rail.Show(StaffRail.From(_horse, events.Value!, Id));
+        _tickets = _page.Tickets is null ? null : (await Api.TicketsAsync(Id)) is { Succeeded: true } tickets ? tickets.Value : null;
     }
+
+    /// <summary>"Thursday 10 October, 9:12 am" as two lines for the "when" column.</summary>
+    private static (string Day, string? Time) When(string at)
+    {
+        var comma = at.LastIndexOf(", ", StringComparison.Ordinal);
+        return comma < 0 ? (at, null) : (at[..comma], at[(comma + 2)..]);
+    }
+
+    /// <summary>The latest value of each field the source systems have reported for this event: barrier, jockey and so on.</summary>
+    private List<(string Label, string Value)> RaceDay =>
+        _page!.Items.Where(i => i.Kind == "Fact")
+            .SelectMany(i => i.Fields)
+            .DistinctBy(f => f.Label)
+            .Take(6)
+            .Select(f => (f.Label, f.Value))
+            .ToList();
+
+    private string HeaderDetail => string.Join(" · ", new[] { _page!.Event.KeyDate }.Concat(RaceDay.Take(3).Select(f => $"{f.Label} {f.Value}")));
+
+    private string? StepSummary
+    {
+        get
+        {
+            var replies = _page!.Items.Sum(i => i.Replies.Count);
+            var missing = _page.Event.Steps.Count(s => s.State == "Missing");
+            var parts = new List<string>();
+            if (replies > 0) parts.Add(replies == 1 ? "1 reply" : $"{replies} replies");
+            if (missing > 0) parts.Add(missing == 1 ? "1 step not received" : $"{missing} steps not received");
+            return parts.Count == 0 ? null : string.Join(" · ", parts);
+        }
+    }
+
+    /// <summary>What the event is waiting on: missing steps, owners yet to answer, tickets to give out or tell.</summary>
+    private List<(string Text, bool Urgent)> StillToDo
+    {
+        get
+        {
+            var list = new List<(string, bool)>();
+            foreach (var step in _page!.Event.Steps.Where(s => s.State == "Missing"))
+                list.Add(($"{step.Label} — not received", true));
+            if (_tickets is { } t)
+            {
+                var short_ = t.Lines.Count(l => l.Asked is { } asked && l.Given < asked);
+                if (short_ > 0) list.Add(($"Allocate owners tickets — {short_} {(short_ == 1 ? "owner" : "owners")} still short", true));
+                if (t.ToTell > 0) list.Add(($"Tell {t.ToTell} {(t.ToTell == 1 ? "owner" : "owners")} their tickets", true));
+            }
+            foreach (var item in _page.Items.Where(i => i.Prompt is not null))
+            {
+                var waiting = item.Prompt!.Owners.Count(o => o.Answer is null);
+                if (waiting > 0) list.Add(($"{waiting} {(waiting == 1 ? "owner" : "owners")} still to answer “{item.Prompt.Question}”", false));
+            }
+            foreach (var step in _page.Event.Steps.Where(s => s.State == "Current"))
+                list.Add(($"{step.Label}{(step.Detail is null ? null : $" — {step.Detail}")}", false));
+            return list;
+        }
+    }
+
+    private static string StatusClasses(string status) => status switch
+    {
+        "Open" => "bg-scope-owners-bg text-scope-owners-fg",
+        "Draft" => "bg-status-warning-bg text-status-warning-fg",
+        _ => "bg-surface-sunken text-text-muted",
+    };
+
+    private static string StepDot(string state) => state switch
+    {
+        "Done" => "bg-action-primary-bg",
+        "Current" => "border-4 border-action-primary-bg bg-surface-raised",
+        "Missing" => "border-2 border-status-warning-fg bg-status-warning-bg",
+        _ => "border-2 border-border-strong bg-surface-raised",
+    };
+
+    private static string StepText(string state) => state switch
+    {
+        "Done" => "text-text-primary",
+        "Current" => "text-action-primary-bg",
+        "Missing" => "text-status-warning-fg",
+        _ => "text-text-muted",
+    };
+
+    private static string StepWord(string state) => state switch
+    {
+        "Done" => "done",
+        "Current" => "now",
+        "Missing" => "not received",
+        _ => "to come",
+    };
+
+    private static string Marker(string kind) => kind switch
+    {
+        "Fact" => "border-kind-fact-fg bg-kind-fact-fg",
+        "Note" => "border-kind-note-fg bg-kind-note-bg",
+        _ => "border-action-primary-bg bg-surface-raised",
+    };
 
     private async Task OpenEventAsync()
     {

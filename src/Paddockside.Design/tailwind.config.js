@@ -104,6 +104,13 @@ module.exports = {
           "fg": "var(--color-kind-note-fg)",
           "bg": "var(--color-kind-note-bg)"
         }
+      },
+      "rail": {
+        "bg": "var(--color-rail-bg)",
+        "fg": "var(--color-rail-fg)",
+        "muted": "var(--color-rail-muted)",
+        "faint": "var(--color-rail-faint)",
+        "active": "var(--color-rail-active)"
       }
     },
     "fontFamily": {

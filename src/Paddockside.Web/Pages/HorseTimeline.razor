@@ -3,6 +3,7 @@
 @inject SessionState Session
 @inject NavigationManager Navigation
 @inject IJSRuntime JS
+@inject StaffRail Rail
 
 <PageTitle>@(_horse?.Name ?? "Horse") · Paddockside</PageTitle>
 
@@ -201,7 +202,7 @@
 
         _onHorse = (await Api.OnTheHorseAsync(Id)).Value;
         var events = await Api.HorseEventsAsync(Id);
-        if (events.Succeeded) _events = events.Value;
+        if (events.Succeeded) { _events = events.Value; Rail.Show(StaffRail.From(_horse!, _events!, null)); }
         else _error = events.Error;
     }
 }
