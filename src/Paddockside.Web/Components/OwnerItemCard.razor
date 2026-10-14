@@ -1,0 +1,67 @@
+@*
+    One item as an owner sees it on their event page: a fact (a result), something they wrote themselves, or a message
+    from the business with only their own replies; and, under a question, the buttons to answer it. Shared by the
+    owner's own page and the staff "View as an owner" preview, so the preview is exactly what the owner gets. In the
+    preview the answer buttons show their state but do nothing.
+*@
+@if (Item.Unread)
+{
+    <span class="badge justify-self-start bg-action-primary-bg text-action-primary-fg">New</span>
+}
+@if (Item.Kind == "Result")
+{
+    <FactCard Side="Side.Owner" Model="@(new FactModel(Item.Title ?? "Result", Item.Source ?? "", Item.At, Scope.Owners,
+        Item.Fields.Select(f => new Components.FactField(f.Label, f.Value)).ToList(), Correction: Item.Corrected))" />
+}
+else if (Item.Mine)
+{
+    <article class="card grid gap-2 border-l-4 border-l-action-primary-bg">
+        <p class="text-small text-text-muted">@(Preview ? "They wrote" : "You wrote") to @TenantName · @Item.At</p>
+        <p class="whitespace-pre-line">@Item.Body</p>
+    </article>
+}
+else
+{
+    <MessageThread Side="Side.Owner" Model="@(new MessageModel(Item.Author ?? TenantName, Item.At, Scope.Owners, "", Item.Body,
+        Item.Replies.Select(r => new Reply(r.Author, "", r.At, r.Body, IsViewer: true)).ToList(), [], Title: Item.Title))" />
+}
+
+@if (Item.Prompt is { } prompt)
+{
+    <fieldset class="grid gap-3 rounded-card border-2 border-action-primary-bg p-4">
+        <legend class="px-1 font-strong">@prompt.Question</legend>
+        <div class="grid gap-3 @(prompt.Kind switch { "Count" => "grid-cols-4", "YesNo" => "grid-cols-2", _ => "grid-cols-1" })">
+            @foreach (var answer in prompt.Answers)
+            {
+                var chosen = prompt.Mine == answer;
+                <button type="button" aria-pressed="@(chosen ? "true" : "false")" disabled="@(Busy || Preview)"
+                        class="@(chosen ? "btn-primary" : "btn-secondary") min-h-[56px] w-full whitespace-normal px-2 text-title disabled:cursor-default"
+                        @onclick="() => OnAnswer.InvokeAsync(answer)">@answer</button>
+            }
+        </div>
+        <p class="text-text-muted" role="status">
+            @(Preview
+                ? prompt.Mine is { } theirs ? $"Their answer: {theirs}." : "Not answered yet."
+                : prompt.Mine is { } mine ? $"Your answer: {mine}. Tap another to change it." : "Tap your answer. You can change it later.")
+        </p>
+        @if (AnswerError is not null)
+        {
+            <p class="font-strong text-status-danger-fg" role="alert">@AnswerError</p>
+        }
+    </fieldset>
+}
+
+@code {
+    [Parameter, EditorRequired] public OwnerItem Item { get; set; } = null!;
+
+    [Parameter, EditorRequired] public string TenantName { get; set; } = "";
+
+    /// <summary>Staff looking as this owner: nothing can be answered or sent.</summary>
+    [Parameter] public bool Preview { get; set; }
+
+    [Parameter] public bool Busy { get; set; }
+
+    [Parameter] public string? AnswerError { get; set; }
+
+    [Parameter] public EventCallback<string> OnAnswer { get; set; }
+}

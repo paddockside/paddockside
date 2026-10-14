@@ -1,0 +1,106 @@
+@page "/events/{Id:guid}/as-owner"
+@inject PaddocksideApi Api
+@inject SessionState Session
+@inject NavigationManager Navigation
+
+<PageTitle>View as an owner · Paddockside</PageTitle>
+
+@*
+    "View as an owner" (staff mockup, event panel): the event exactly as one owner sees it in the portal, at the
+    portal's width, built by the same server code and the same item cards as their page. Choose whose view to see:
+    what each owner gets differs (a message to chosen owners, their own replies and answers). Nothing here can be
+    sent or answered, and looking marks nothing as read for them.
+*@
+<div class="grid gap-6">
+    <a href="events/@Id" class="btn-link justify-self-start">← Back to the event</a>
+
+    @if (_error is not null)
+    {
+        <Error Message="@_error" />
+    }
+
+    @if (_owners is { Count: 0 })
+    {
+        <p>This horse has no owners to show it as.</p>
+    }
+    else if (_owners is not null)
+    {
+        <section class="grid gap-3 rounded-control bg-status-warning-bg px-4 py-3 text-status-warning-fg" aria-label="Preview">
+            <p><strong>What an owner sees.</strong> Nothing here is sent, and looking doesn't mark anything as read for them.</p>
+            <div class="flex flex-wrap items-center gap-3">
+                <label for="as-owner" class="font-strong">Show it as</label>
+                <select id="as-owner" class="input w-auto max-w-full bg-surface-raised text-text-primary" @bind="PartyId" @bind:after="ShowAsync">
+                    @foreach (var owner in _owners)
+                    {
+                        <option value="@owner.Id">@owner.Name</option>
+                    }
+                </select>
+            </div>
+        </section>
+    }
+
+    @if (_view is { } view)
+    {
+        @* The portal's own width (OwnerLayout), so lines wrap where they will for the owner. *@
+        <div class="mx-auto grid w-full max-w-xl grid-cols-[minmax(0,1fr)] gap-6 rounded-card border border-border-subtle bg-surface-default p-4 text-body-owner">
+            <p class="text-small text-text-muted">← @view.Horse</p>
+            <EventCard Side="Side.Owner" Model="view.Event.ToCard()" />
+            <p class="btn-secondary justify-self-start opacity-70">Contact @TenantName</p>
+
+            @if (view.Items.Count == 0)
+            {
+                <div class="card"><p>Nothing posted yet. You'll get an email when there is.</p></div>
+            }
+            @foreach (var item in view.Items)
+            {
+                <section class="grid gap-3" aria-label="@(item.Title ?? item.Kind)">
+                    <OwnerItemCard Item="item" TenantName="@TenantName" Preview />
+                    @if (item.CanReply)
+                    {
+                        <p class="text-small text-text-muted">Here they can reply to @TenantName.</p>
+                    }
+                </section>
+            }
+        </div>
+    }
+    else if (_owners is { Count: > 0 } && _error is null)
+    {
+        <p class="text-text-muted" role="status">Loading…</p>
+    }
+</div>
+
+@code {
+    [Parameter] public Guid Id { get; set; }
+
+    private List<OwnerOption>? _owners;
+    private OwnerEventPage? _view;
+    private string? _error;
+
+    private Guid PartyId { get; set; }
+
+    private string TenantName => Session.Current?.TenantName ?? "us";
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (Session.Current is null && await Session.RefreshAsync() is null)
+        {
+            Navigation.NavigateTo("sign-in");
+            return;
+        }
+
+        var page = await Api.EventAsync(Id);
+        if (!page.Succeeded) { _error = page.Error; return; }
+        _owners = page.Value!.Owners;
+        if (_owners.Count == 0) return;
+        PartyId = _owners[0].Id;
+        await ShowAsync();
+    }
+
+    private async Task ShowAsync()
+    {
+        (_view, _error) = (null, null);
+        var result = await Api.EventAsOwnerAsync(Id, PartyId);
+        if (result.Succeeded) _view = result.Value;
+        else _error = result.Error ?? "This owner can't see this event.";
+    }
+}

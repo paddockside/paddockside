@@ -86,6 +86,33 @@ public sealed partial class OwnerSignInTests
         Assert.DoesNotContain("Bob Owner", page);
     }
 
+    [Fact]
+    public async Task Staff_view_an_event_as_one_owner_sees_it_and_nothing_is_marked_seen()
+    {
+        var seed = await SeedAsync();
+        using var ann = await SignInAsync(seed.AnnEmail);
+        Assert.Equal(HttpStatusCode.Created, (await ann.PostApiAsync($"/api/my/events/{seed.EventId}/contact", new { body = "Ann's private question" })).StatusCode);
+
+        using var staff = await Api.SignedInAsync(seed.TenantId, MemberRole.Coordinator);
+        var asAnn = await staff.GetFromJsonAsync<PortalEvent>($"/api/events/{seed.EventId}/as-owner/{seed.AnnId}");
+        var asBob = await staff.GetFromJsonAsync<PortalEvent>($"/api/events/{seed.EventId}/as-owner/{seed.BobId}");
+
+        // The same page each owner gets: no staff notes, her own message only for her, and nobody else named.
+        Assert.DoesNotContain(asAnn!.Items, i => i.Id == seed.NoteId);
+        Assert.Contains(asAnn.Items, i => i.Body == "Ann's private question" && i.Mine);
+        Assert.DoesNotContain(asBob!.Items, i => i.Body == "Ann's private question");
+        Assert.DoesNotContain("Ann Owner", await staff.GetStringAsync($"/api/events/{seed.EventId}/as-owner/{seed.BobId}"));
+
+        // Looking as Bob doesn't read his updates for him.
+        using var bob = await SignInAsync(BobEmail(seed));
+        Assert.Equal(2, (await bob.GetFromJsonAsync<List<HomeHorse>>("/api/my/horses"))!.Single().Unread);
+
+        // Not someone who isn't an owner here, not another tenant's event, and not for owners themselves.
+        Assert.Equal(HttpStatusCode.NotFound, (await staff.GetAsync($"/api/events/{seed.EventId}/as-owner/{Guid.NewGuid()}")).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await staff.GetAsync($"/api/events/{db.A.EventId}/as-owner/{seed.AnnId}")).StatusCode);
+        Assert.NotEqual(HttpStatusCode.OK, (await ann.GetAsync($"/api/events/{seed.EventId}/as-owner/{seed.AnnId}")).StatusCode);
+    }
+
     private sealed record Choice(string Code, bool Important, string Email, string Text);
 
     private sealed record Choices(List<Choice> Categories, string? Email, string? Mobile, bool TextsAvailable);

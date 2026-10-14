@@ -184,10 +184,17 @@ public static class OwnerEndpoints
     /// One event as an owner sees it: the same spine as staff, but only items scoped to them, only their own
     /// replies, no delivery figures, and other owners' names only if the tenant allows.
     /// </summary>
-    private static async Task<IResult> EventPage(Guid id, ClaimsPrincipal user, PaddocksideDbContext db, TimeProvider clock, CancellationToken cancellationToken)
+    private static async Task<IResult> EventPage(Guid id, ClaimsPrincipal user, PaddocksideDbContext db, TimeProvider clock, CancellationToken cancellationToken) =>
+        await EventPageForAsync(PartyId(user), id, db, clock.GetUtcNow(), cancellationToken) is { } page ? Results.Ok(page) : Results.NotFound();
+
+    /// <summary>
+    /// The event page for one owner. Staff use it too ("View as an owner"), so what they preview is exactly what that
+    /// owner is shown. It only reads: nothing is marked as seen.
+    /// </summary>
+    internal static async Task<OwnerEventPage?> EventPageForAsync(Guid partyId, Guid id, PaddocksideDbContext db, DateTimeOffset now, CancellationToken cancellationToken)
     {
-        var viewer = await ViewerAsync(user, db, cancellationToken);
-        if (await OpenEventAsync(db, viewer, id, cancellationToken) is not { } opened) return Results.NotFound();
+        var viewer = await ViewerAsync(partyId, db, cancellationToken);
+        if (await OpenEventAsync(db, viewer, id, cancellationToken) is not { } opened) return null;
         var (e, horse, items) = opened;
         var (tenant, party) = (viewer.Tenant, viewer.Party);
 
@@ -200,11 +207,10 @@ public static class OwnerEndpoints
             .ToDictionaryAsync(a => a.StreamItemId, a => a.Value, cancellationToken);
         var read = await ReadAsync(db, party.Id, cancellationToken);
 
-        var now = clock.GetUtcNow();
         var summary = HorseEndpoints.Summarise(e, visible.Select(i => i.StepCode), visible.Count == 0 ? null : visible.Max(i => i.OccurredAt), now);
         summary = summary with { Steps = summary.Steps.Where(s => s.ClientVisible).ToList(), Unread = visible.Count(i => IsUnread(i, party.Id, read)) };
 
-        return Results.Ok(new OwnerEventPage(summary, horse.Id, horse.Name, visible
+        return new OwnerEventPage(summary, horse.Id, horse.Name, visible
             .OrderByDescending(i => i.OccurredAt)
             .Select(i =>
             {
@@ -225,7 +231,7 @@ public static class OwnerEndpoints
                     mine,
                     i.Prompt is { } p && CanReplyTo(i) ? new OwnerPrompt(p.Kind.ToString(), p.Question, p.Answers, myAnswers.GetValueOrDefault(i.Id)) : null);
             })
-            .ToList()));
+            .ToList());
     }
 
     /// <summary>They have looked at this event: everything on it they can see is no longer new to them.</summary>
@@ -386,9 +392,11 @@ public static class OwnerEndpoints
 
     private sealed record OwnerViewer(Tenant Tenant, Party Party, Dictionary<Guid, Horse> Horses);
 
-    private static async Task<OwnerViewer> ViewerAsync(ClaimsPrincipal user, PaddocksideDbContext db, CancellationToken cancellationToken)
+    private static Task<OwnerViewer> ViewerAsync(ClaimsPrincipal user, PaddocksideDbContext db, CancellationToken cancellationToken) =>
+        ViewerAsync(PartyId(user), db, cancellationToken);
+
+    private static async Task<OwnerViewer> ViewerAsync(Guid partyId, PaddocksideDbContext db, CancellationToken cancellationToken)
     {
-        var partyId = PartyId(user);
         var tenant = await db.Tenants.AsNoTracking().SingleAsync(cancellationToken);
         var party = await db.Parties.AsNoTracking().SingleAsync(p => p.Id == partyId, cancellationToken);
         var horses = await db.Horses.AsNoTracking().Include(h => h.ManagementPeriods).Include(h => h.Interests).AsSplitQuery()

@@ -33,11 +33,13 @@ public static class ComponentMapping
         ToScope(i.Scope),
         i.Audience ?? "",
         i.Body,
-        i.Replies.Select(r => new Reply(r.Author, r.Channel, r.At, r.Body)).ToList(),
+        i.Replies.Select(r => new Reply(r.Author, r.Channel, r.At, r.Body, Answer: r.Answer)).ToList(),
         i.Recipients.Select(r => new Recipient(r.Name, r.Channel,
             Enum.TryParse<DeliveryStatus>(r.Status, out var s) ? s : DeliveryStatus.Queued, r.Note)).ToList(),
         i.Step,
-        i.Title);
+        i.Title,
+        Inbound: i.Audience is null,
+        Channel: i.Channel);
 
     public static Scope ToScope(string scope) => Enum.TryParse<Scope>(scope, out var s) ? s : Scope.Internal;
 

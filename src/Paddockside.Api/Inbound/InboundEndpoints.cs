@@ -73,8 +73,11 @@ public static class InboundEndpoints
 
     private static string StaffName(ClaimsPrincipal user) => user.FindFirstValue(ClaimTypes.Email) ?? "staff";
 
-    /// <summary>One state, newest first; or "Waiting" (the queue): Suggested and Pending together, oldest first.</summary>
-    private static async Task<IResult> List(string? state, ClaimsPrincipal user, PaddocksideDbContext db, TimeProvider clock, CancellationToken cancellationToken)
+    /// <summary>
+    /// One state, newest first; or "Waiting" (the queue): Suggested and Pending together, oldest first. With an event,
+    /// only the mail suggested for it: the event page shows those inline, to confirm with one click.
+    /// </summary>
+    private static async Task<IResult> List(string? state, Guid? eventId, ClaimsPrincipal user, PaddocksideDbContext db, TimeProvider clock, CancellationToken cancellationToken)
     {
         var queue = string.Equals(state, "Waiting", StringComparison.OrdinalIgnoreCase);
         var wanted = queue ? InboundState.Pending : Enum.TryParse<InboundState>(state, ignoreCase: true, out var parsed) ? parsed : InboundState.Pending;
@@ -83,6 +86,7 @@ public static class InboundEndpoints
 
         var query = db.InboundMessages.AsNoTracking()
             .Where(m => queue ? m.State == InboundState.Pending || m.State == InboundState.Suggested : m.State == wanted);
+        if (eventId is { } forEvent) query = query.Where(m => m.State == InboundState.Suggested && m.EventId == forEvent);
         var messages = await (queue ? query.OrderBy(m => m.ReceivedAt) : query.OrderByDescending(m => m.ReceivedAt)).Take(200).ToListAsync(cancellationToken);
 
         var messageIds = messages.Select(m => m.Id).ToList();

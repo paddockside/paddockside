@@ -248,6 +248,10 @@ public sealed class InboundEmailTests(IsolationDatabase db, ApiFactoryFixture ap
         Assert.Contains(waiting.Candidates!, c => c.EventId == seed.EventId && c.Reasons.Contains("\"Caulfield\" mentioned"));
         Assert.Equal(1, (await coordinator.GetFromJsonAsync<QueueCounts>("/api/inbound/counts"))!.Suggested);
 
+        // The event page asks for what is suggested for it, to show inline; another event has nothing suggested.
+        Assert.Equal(message.Id, (await coordinator.GetFromJsonAsync<List<QueueItem>>($"/api/inbound?state=Waiting&eventId={seed.EventId}"))!.Single().Id);
+        Assert.Empty((await coordinator.GetFromJsonAsync<List<QueueItem>>($"/api/inbound?state=Waiting&eventId={Guid.NewGuid()}"))!);
+
         // A viewer can look but not place; a coordinator confirms in one click.
         using var viewer = await Api.SignedInAsync(seed.TenantId, MemberRole.Viewer);
         Assert.Equal(HttpStatusCode.Forbidden, (await viewer.PostApiAsync($"/api/inbound/{message.Id}/place", new { horseId = seed.HorseId, eventId = seed.EventId })).StatusCode);

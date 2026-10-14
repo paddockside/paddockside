@@ -79,56 +79,70 @@ else
                 }
 
                 <section aria-label="Updates, newest first">
-                    @if (_page.Items.Count == 0)
+                    @if (_page.Items.Count == 0 && _suggested.Count == 0)
                     {
                         <p class="text-text-muted">Nothing posted yet. Facts, messages and notes for this event will appear here.</p>
                     }
                     <ol>
+                        @foreach (var mail in _suggested)
+                        {
+                            @* Mail the matcher thinks is for this event (tier 3): confirm it here in one click, or place it from the queue. *@
+                            @Moment(mail.Received, "border-action-primary-bg bg-surface-raised", @<article class="grid gap-2 rounded-card border border-dashed border-border-strong bg-surface-default p-4 sm:px-[20px]">
+                                <div class="flex flex-wrap items-center justify-between gap-2">
+                                    <span class="kind-label">
+                                        <svg aria-hidden="true" viewBox="0 0 24 24" class="size-4" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16v12H4z"></path><path d="M4 8l8 5 8-5"></path></svg>
+                                        @(mail.Channel == "Sms" ? "Text" : "Email") · suggested for this event
+                                    </span>
+                                    <span class="text-small text-text-muted">From @mail.From</span>
+                                </div>
+                                @if (mail.Subject is not null)
+                                {
+                                    <p class="font-strong">@mail.Subject</p>
+                                }
+                                <p class="line-clamp-4 whitespace-pre-line break-words">@mail.Body</p>
+                                @if (mail.Reason is not null)
+                                {
+                                    <p class="text-small text-text-muted">@mail.Reason</p>
+                                }
+                                <div class="flex flex-wrap gap-3 pt-1">
+                                    <button type="button" class="btn-primary min-h-[36px] px-4" disabled="@_busy" @onclick="() => ConfirmSuggestionAsync(mail)">Yes, it belongs here</button>
+                                    <a href="inbound" class="btn-secondary min-h-[36px] px-4">Choose another</a>
+                                </div>
+                            </article>)
+                        }
                         @foreach (var item in _page.Items)
                         {
-                            var (day, time) = When(item.At);
-                            <li class="grid grid-cols-[20px_minmax(0,1fr)] gap-x-2 sm:grid-cols-[96px_32px_minmax(0,1fr)] sm:gap-x-0">
-                                <p class="hidden pr-2 pt-[18px] text-right text-small leading-snug text-text-muted sm:block">
-                                    @day@if (time is not null)
-                                    {
-                                        <br /><span class="text-meta">@time</span>
-                                    }
-                                </p>
-                                <div class="relative flex justify-center" aria-hidden="true">
-                                    <span class="absolute inset-y-0 w-[2px] bg-border-subtle"></span>
-                                    <span class="relative mt-[18px] size-[18px] rounded-pill border-[3px] @Marker(item.Kind)"></span>
-                                </div>
-                                <div class="grid min-w-0 gap-3 pb-[20px] pt-2">
-                                    <p class="text-small text-text-muted sm:hidden">@item.At</p>
-                                    @switch (item.Kind)
-                                    {
-                                        case "Fact":
-                                            <FactCard Model="item.ToFact()" />
-                                            break;
-                                        case "Note":
-                                            <article class="grid gap-2 rounded-card border border-dashed border-border-strong bg-kind-note-bg p-4">
-                                                <header class="flex flex-wrap items-center gap-2">
-                                                    <KindMark Kind="Kind.Note" />
-                                                    <span class="text-small text-text-muted">@item.Author@(item.Step is null ? null : $" · Step: {item.Step}")</span>
-                                                    <span class="ml-auto"><ScopeMark Scope="Scope.Internal" /></span>
-                                                </header>
-                                                <p class="whitespace-pre-line">@item.Body</p>
-                                            </article>
-                                            break;
-                                        default:
-                                            <MessageThread Model="item.ToMessage()" />
-                                            @if (item.CanReplyToSender)
-                                            {
-                                                <ReplyToSender ItemId="item.Id" Author="@item.Author" OnSent="Load" />
-                                            }
+                            @Moment(item.At, Marker(item.Kind), @<text>
+                                @switch (item.Kind)
+                                {
+                                    case "Fact":
+                                        <FactCard Compact Model="item.ToFact()" />
+                                        break;
+                                    case "Note":
+                                        <article class="grid gap-2 rounded-card border border-border-subtle bg-kind-note-bg p-4 sm:px-[20px]">
+                                            <div class="flex flex-wrap items-center justify-between gap-2">
+                                                <span class="kind-label text-kind-note-fg">Internal note</span>
+                                                <ScopeMark Scope="Scope.Internal" />
+                                            </div>
+                                            <p class="whitespace-pre-line break-words">@item.Body</p>
+                                            <p class="text-small text-text-muted">@item.Author@(item.Step is null ? null : $" · Step: {item.Step}")</p>
+                                        </article>
+                                        break;
+                                    default:
+                                        <MessageThread Model="item.ToMessage()">
                                             @if (item.Prompt is { } prompt)
                                             {
-                                                <PromptTally Model="prompt" ItemId="item.Id" Busy="_busy" OnSet="answer => SetAnswer(item, answer.PartyId, answer.Value)" />
+                                                <PromptTally Model="prompt" ItemId="item.Id" Busy="_busy" TicketsHref="@(_page.Tickets is not null && prompt.Kind == "Count" ? $"events/{Id}/tickets" : null)"
+                                                             OnSet="answer => SetAnswer(item, answer.PartyId, answer.Value)" />
                                             }
-                                            break;
-                                    }
-                                </div>
-                            </li>
+                                        </MessageThread>
+                                        @if (item.CanReplyToSender)
+                                        {
+                                            <ReplyToSender ItemId="item.Id" Author="@item.Author" OnSent="Load" />
+                                        }
+                                        break;
+                                }
+                            </text>)
                         }
                     </ol>
                 </section>
@@ -232,6 +246,7 @@ else
                     </ul>
                 </section>
             }
+            <a href="events/@Id/as-owner" class="btn-secondary w-full">View as an owner</a>
         </aside>
     </div>
 }
@@ -242,6 +257,7 @@ else
     private EventPage? _page;
     private HorseDetail? _horse;
     private TicketsView? _tickets;
+    private List<InboundView> _suggested = [];
     private string? _error;
     private string? _saved;
     private bool _busy;
@@ -272,7 +288,47 @@ else
         _horse = horse.Succeeded ? horse.Value : null;
         var events = await Api.HorseEventsAsync(_page.HorseId);
         if (_horse is not null && events.Succeeded) Rail.Show(StaffRail.From(_horse, events.Value!, Id));
+        _suggested = (await Api.SuggestedForEventAsync(Id)) is { Succeeded: true } suggested ? suggested.Value! : [];
         _tickets = _page.Tickets is null ? null : (await Api.TicketsAsync(Id)) is { Succeeded: true } tickets ? tickets.Value : null;
+    }
+
+    /// <summary>One moment on the spine: when, on the left (above, on a phone), its marker, and the card.</summary>
+    private RenderFragment Moment(string at, string marker, RenderFragment card) => __builder =>
+    {
+        var (day, time) = When(at);
+        <li class="grid grid-cols-[20px_minmax(0,1fr)] gap-x-2 sm:grid-cols-[96px_32px_minmax(0,1fr)] sm:gap-x-0">
+            <p class="hidden pr-2 pt-[18px] text-right text-small leading-snug text-text-muted sm:block">
+                @day@if (time is not null)
+                {
+                    <br /><span class="text-meta">@time</span>
+                }
+            </p>
+            <div class="relative flex justify-center" aria-hidden="true">
+                <span class="absolute inset-y-0 w-[2px] bg-border-subtle"></span>
+                <span class="relative mt-[18px] size-[18px] rounded-pill border-[3px] @marker"></span>
+            </div>
+            <div class="grid min-w-0 gap-3 pb-[20px] pt-2">
+                <p class="text-small text-text-muted sm:hidden">@at</p>
+                @card
+            </div>
+        </li>
+    };
+
+    /// <summary>"Yes, it belongs here": the suggestion confirmed, the mail becomes an item on this event.</summary>
+    private async Task ConfirmSuggestionAsync(InboundView mail)
+    {
+        (_busy, _error, _saved) = (true, null, null);
+        try
+        {
+            var result = await Api.PlaceInboundAsync(mail.Id, mail.HorseId!.Value, Id);
+            if (result.Succeeded) _saved = $"Placed on this event: {mail.Subject ?? "the message"} from {mail.From}.";
+            else _error = result.Error;
+            await Load();
+        }
+        finally
+        {
+            _busy = false;
+        }
     }
 
     /// <summary>"Thursday 10 October, 9:12 am" as two lines for the "when" column.</summary>

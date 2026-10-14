@@ -170,7 +170,9 @@ public sealed partial class OwnerSignInTests
         // Bob rang instead: staff set his answer.
         Assert.Equal(HttpStatusCode.NoContent, (await staff.PostApiAsync($"/api/events/{seed.EventId}/items/{posted.Id}/answers", new { partyId = seed.BobId, value = "1" })).StatusCode);
 
-        var tally = (await staff.GetFromJsonAsync<StaffPage>($"/api/events/{seed.EventId}"))!.Items.Single(i => i.Id == posted.Id).Prompt!;
+        var staffItem = (await staff.GetFromJsonAsync<StaffPage>($"/api/events/{seed.EventId}"))!.Items.Single(i => i.Id == posted.Id);
+        Assert.All(staffItem.Replies.Where(r => r.Author == "Ann Owner"), r => Assert.Equal("Answered 3 tickets", r.Answer)); // her latest answer, under her replies
+        var tally = staffItem.Prompt!;
         Assert.Equal("4 asked for by 2 owners · everyone has answered", tally.Summary);
         Assert.Contains(tally.Owners, o => o.Name == "Ann Owner" && o.Answer == "3" && o.How == "in the portal");
         Assert.Contains(tally.Owners, o => o.Name == "Bob Owner" && o.Answer == "1" && o.How!.StartsWith("set by", StringComparison.Ordinal));

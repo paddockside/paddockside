@@ -26,7 +26,7 @@ public sealed partial class OwnerSignInTests(IsolationDatabase db, ApiFactoryFix
 
     private sealed record Horse(Guid Id, string Name);
 
-    private sealed record Reply(string Author, string Body);
+    private sealed record Reply(string Author, string Body, string? Answer = null);
 
     private sealed record Item(Guid Id, string Kind, string? Title, string Body, List<Reply> Replies, bool CanReply);
 

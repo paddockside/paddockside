@@ -108,9 +108,9 @@ public static class AutumnRidge
         Body: "Autumn Ridge is accepted for Race 6 at Randwick on Saturday, from barrier 9.\n\nThe club has given us 8 owners tickets. Reply with how many you would like by Thursday 5 pm and we will confirm on Friday.",
         Replies:
         [
-            new("Margaret Hale", "email", "Wednesday 6:12 pm", "Two please, for me and my sister. Can we see her in the mounting yard?", IsViewer: true),
-            new("Tom Okafor", "text message", "Wednesday 7:40 pm", "Just me this time, thanks."),
-            new("Priya Nair", "email", "Thursday 8:05 am", "None for us, we will watch from home. Good luck!"),
+            new("Margaret Hale", "email", "Wednesday 6:12 pm", "Two please, for me and my sister. Can we see her in the mounting yard?", IsViewer: true, Answer: "Answered 2 tickets"),
+            new("Tom Okafor", "text message", "Wednesday 7:40 pm", "Just me this time, thanks.", Answer: "Answered 1 ticket"),
+            new("Priya Nair", "email", "Thursday 8:05 am", "None for us, we will watch from home. Good luck!", Answer: "Answered 0 tickets"),
         ],
         Recipients:
         [
@@ -118,6 +118,7 @@ public static class AutumnRidge
             new("Tom Okafor", "Text", DeliveryStatus.Replied),
             new("Priya Nair", "Email", DeliveryStatus.Replied),
             new("Graham Lowe", "Email", DeliveryStatus.Opened),
+            new("Helen Price", "Email", DeliveryStatus.Delivered),
             new("Laurel Oak house share", "Email", DeliveryStatus.Bounced),
         ]);
 

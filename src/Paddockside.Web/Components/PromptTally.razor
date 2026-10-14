@@ -1,14 +1,23 @@
 @*
-    The tally under a message that asks a question (event-page-mockup-notes.md, spec item 1): the totals first, then
-    every owner it was asked of, with their answer, how it came (tapped in the portal, read from their reply, or set
-    by staff) and when. Staff can set or correct anyone's answer, e.g. one taken over the phone. Staff only.
+    The tally inside a message that asks a question (event-page-mockup-notes.md, spec item 1; the staff mockup's
+    strip): the question and the totals on one line, then, on request, every owner it was asked of, with their answer,
+    how it came (tapped in the portal, read from their reply, or set by staff) and when. Staff can set or correct
+    anyone's answer, e.g. one taken over the phone. Staff only.
 *@
-<section class="grid gap-3 rounded-card border border-border-subtle bg-surface-raised p-4" aria-label="Answers to: @Model.Question">
-    <header class="grid gap-1">
-        <p class="text-small font-strong uppercase tracking-wide text-text-muted">Question</p>
-        <p class="font-strong">@Model.Question</p>
-        <p>@Model.Summary</p>
-    </header>
+<section class="grid gap-3 rounded-control bg-surface-default px-4 py-3" aria-label="Answers to: @Model.Question">
+    <div class="flex flex-wrap items-center gap-x-4 gap-y-1">
+        <p class="font-strong">Asked “@Model.Question”</p>
+        <p class="text-small text-text-muted">@Model.Summary</p>
+        <p class="flex flex-wrap gap-4 xl:ml-auto">
+            @if (TicketsHref is not null)
+            {
+                <a href="@TicketsHref" class="font-strong underline underline-offset-4">Allocate tickets</a>
+            }
+            <button type="button" class="font-strong underline underline-offset-4" aria-expanded="@_open" aria-controls="@_id" @onclick="() => _open = !_open">
+                @(_open ? "Hide answers" : "Answers by owner")
+            </button>
+        </p>
+    </div>
 
     @if (Model.Counts.Count > 0)
     {
@@ -20,7 +29,9 @@
         </ul>
     }
 
-    <table class="w-full border-collapse text-left">
+    @if (_open)
+    {
+    <table id="@_id" class="w-full border-collapse text-left">
         <caption class="sr-only">Each owner's answer</caption>
         <thead class="hidden sm:table-header-group">
             <tr class="border-b border-border-subtle text-small text-text-muted">
@@ -61,9 +72,16 @@
             }
         </tbody>
     </table>
+    }
 </section>
 
 @code {
+    private readonly string _id = $"answers-{Guid.NewGuid():N}";
+    private bool _open;
+
+    /// <summary>The tickets question links to the allocation screen.</summary>
+    [Parameter] public string? TicketsHref { get; set; }
+
     [Parameter, EditorRequired] public Services.PromptView Model { get; set; } = null!;
 
     [Parameter, EditorRequired] public Guid ItemId { get; set; }

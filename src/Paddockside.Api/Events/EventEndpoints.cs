@@ -20,7 +20,8 @@ public static class EventEndpoints
 {
     public sealed record FieldView(string Label, string Value, string? Was);
 
-    public sealed record ReplyView(string Author, string Channel, string At, string Body);
+    /// <param name="Answer">What this owner answered the message's question ("Answered 2 tickets"), shown with their reply.</param>
+    public sealed record ReplyView(string Author, string Channel, string At, string Body, string? Answer = null);
 
     public sealed record RecipientView(string Name, string Channel, string Status, string? Note);
 
@@ -40,7 +41,8 @@ public static class EventEndpoints
         IReadOnlyList<ReplyView> Replies,
         IReadOnlyList<RecipientView> Recipients,
         PromptView? Prompt = null,
-        bool CanReplyToSender = false);
+        bool CanReplyToSender = false,
+        string? Channel = null);
 
     /// <summary>A message's question, with the tally: totals, then each owner's answer and how it was given.</summary>
     public sealed record PromptView(string Kind, string Question, IReadOnlyList<string> Answers, string Summary,
@@ -82,6 +84,20 @@ public static class EventEndpoints
         events.MapGet("/{id:guid}", GetEvent);
         events.MapPost("/{id:guid}/items", Post);
         events.MapPost("/{id:guid}/items/{itemId:guid}/answers", RecordAnswer);
+        events.MapGet("/{id:guid}/as-owner/{partyId:guid}", AsOwner);
+    }
+
+    /// <summary>
+    /// "View as an owner": the event exactly as one of the horse's owners sees it in the portal, built by the same code
+    /// as their page. Read-only; it marks nothing as seen. Not the house share, which has no portal.
+    /// </summary>
+    private static async Task<IResult> AsOwner(Guid id, Guid partyId, PaddocksideDbContext db, TimeProvider clock, CancellationToken cancellationToken)
+    {
+        var tenant = await db.Tenants.AsNoTracking().SingleAsync(cancellationToken);
+        if (partyId == tenant.HousePartyId || !await db.Parties.AnyAsync(p => p.Id == partyId, cancellationToken)) return Results.NotFound();
+        return await Owners.OwnerEndpoints.EventPageForAsync(partyId, id, db, clock.GetUtcNow(), cancellationToken) is { } page
+            ? Results.Ok(page)
+            : Results.NotFound();
     }
 
     private static async Task<IResult> GetEvent(Guid id, PaddocksideDbContext db, TimeProvider clock, CancellationToken cancellationToken)
@@ -132,21 +148,23 @@ public static class EventEndpoints
                         ? $"{Audience(i.Scope)} ({itemDeliveries.Count})"
                         : null,
                     replies[i.Id].OrderBy(r => r.OccurredAt)
-                        .Select(r => new ReplyView(r.AuthorName ?? "Unknown sender", r.Channel ?? "email", Words.Recently(r.OccurredAt, now), r.Body))
+                        .Select(r => new ReplyView(r.AuthorName ?? "Unknown sender", r.Channel ?? "email", Words.Recently(r.OccurredAt, now), r.Body,
+                            AnswerWords(i, answers[i.Id].FirstOrDefault(a => a.PartyId == r.AuthorPartyId))))
                         .ToList(),
                     itemDeliveries
                         .OrderBy(d => parties.GetValueOrDefault(d.PartyId))
                         .Select(d => new RecipientView(parties.GetValueOrDefault(d.PartyId) ?? "Unknown", Channel(d.Channel), d.Status.ToString(), d.Note))
                         .ToList(),
                     i.Prompt is null ? null : Tally(i, tenant, horse, answers[i.Id].ToList(), parties, now),
-                    i is { Kind: StreamItemKind.Message, Direction: StreamItemDirection.Inbound });
+                    i is { Kind: StreamItemKind.Message, Direction: StreamItemDirection.Inbound },
+                    i.Direction == StreamItemDirection.Inbound ? i.Channel : null);
             })
             .ToList();
 
         var period = horse.CurrentManagementPeriod;
         var owners = period is null ? [] : horse.Interests
             .Where(i => i.ManagementPeriodId == period.Id && i.IsActive)
-            .Select(i => i.PartyId).Distinct()
+            .Select(i => i.PartyId).Distinct().Where(pid => pid != tenant.HousePartyId) // the house share is never written to
             .Select(pid => new OwnerOption(pid, parties.GetValueOrDefault(pid) ?? "Unknown"))
             .OrderBy(o => o.Name)
             .ToList();
@@ -319,6 +337,11 @@ public static class EventEndpoints
             _ => $"set by {a.RecordedBy}",
         };
     }
+
+    /// <summary>"Answered 2 tickets" under an owner's reply: their answer to the message's question, if they gave one.</summary>
+    private static string? AnswerWords(StreamItem item, PromptAnswer? answer) => answer is null || item.Prompt is null ? null
+        : item.StepCode == "TICKETS" && item.Prompt.Kind == PromptKind.Count ? $"Answered {answer.Value} {(answer.Value == "1" ? "ticket" : "tickets")}"
+        : $"Answered {answer.Value}";
 
     /// <summary>Staff set an owner's answer, e.g. taken over the phone, or correcting one read from a reply.</summary>
     private static async Task<IResult> RecordAnswer(Guid id, Guid itemId, AnswerRequest request, ClaimsPrincipal user, PaddocksideDbContext db, TimeProvider clock,

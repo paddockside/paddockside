@@ -115,6 +115,11 @@
     @apply rounded-control border-l-4 border-current bg-status-danger-bg px-4 py-3 text-status-danger-fg;
   }
 
+  /* What an item is, above it on the event page: "SENT · OWNERS TICKETS", "INTERNAL NOTE" (staff mockup). */
+  .kind-label {
+    @apply inline-flex items-center gap-2 text-small font-strong uppercase tracking-wide text-text-muted;
+  }
+
   .badge {
     @apply inline-block whitespace-nowrap rounded-pill px-3 text-small font-medium;
   }

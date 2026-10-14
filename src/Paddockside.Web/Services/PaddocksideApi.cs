@@ -22,7 +22,7 @@ public sealed record EventSummary(Guid Id, string Type, string Title, string Key
 
 public sealed record FieldView(string Label, string Value, string? Was);
 
-public sealed record ReplyView(string Author, string Channel, string At, string Body);
+public sealed record ReplyView(string Author, string Channel, string At, string Body, string? Answer = null);
 
 public sealed record RecipientView(string Name, string Channel, string Status, string? Note);
 
@@ -42,7 +42,8 @@ public sealed record ItemView(
     List<ReplyView> Replies,
     List<RecipientView> Recipients,
     PromptView? Prompt = null,
-    bool CanReplyToSender = false);
+    bool CanReplyToSender = false,
+    string? Channel = null);
 
 public sealed record PromptView(string Kind, string Question, List<string> Answers, string Summary, List<TallyCount> Counts, List<PromptOwnerView> Owners);
 
@@ -237,6 +238,12 @@ public sealed class PaddocksideApi(HttpClient http)
         PostAsync<object>($"api/events/{eventId}/items/{itemId}/answers", new { partyId, value });
 
     public Task<ApiResult<List<InboundView>>> InboundAsync(string state) => GetAsync<List<InboundView>>($"api/inbound?state={Uri.EscapeDataString(state)}");
+
+    /// <summary>Mail the matcher suggested for this event, waiting for someone to confirm it.</summary>
+    public Task<ApiResult<List<InboundView>>> SuggestedForEventAsync(Guid eventId) => GetAsync<List<InboundView>>($"api/inbound?state=Waiting&eventId={eventId}");
+
+    /// <summary>"View as an owner": the event exactly as that owner sees it in the portal.</summary>
+    public Task<ApiResult<OwnerEventPage>> EventAsOwnerAsync(Guid eventId, Guid partyId) => GetAsync<OwnerEventPage>($"api/events/{eventId}/as-owner/{partyId}");
 
     public Task<ApiResult<InboundCounts>> InboundCountsAsync() => GetAsync<InboundCounts>("api/inbound/counts");
 

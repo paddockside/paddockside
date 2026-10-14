@@ -98,7 +98,8 @@ public enum DeliveryStatus
 public sealed record Recipient(string Name, string Channel, DeliveryStatus Status, string? Note = null);
 
 /// <param name="IsViewer">This reply was written by the owner looking at it (the only replies an owner sees).</param>
-public sealed record Reply(string Author, string Channel, string At, string Body, bool IsViewer = false);
+/// <param name="Answer">Their answer to the message's question, in words ("Answered 2 tickets"). Staff only.</param>
+public sealed record Reply(string Author, string Channel, string At, string Body, bool IsViewer = false, string? Answer = null);
 
 public sealed record MessageModel(
     string Author,
@@ -109,7 +110,9 @@ public sealed record MessageModel(
     IReadOnlyList<Reply> Replies,
     IReadOnlyList<Recipient> Recipients,
     string? Step = null,
-    string? Title = null);
+    string? Title = null,
+    bool Inbound = false,
+    string? Channel = null);
 
 /// <summary>The one audience class a message goes to (data-model.md D12), or an internal note.</summary>
 public enum Audience

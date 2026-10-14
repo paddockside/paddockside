@@ -1,58 +1,71 @@
 @*
-    An outbound message with its replies threaded inside it (event-page-mockup-notes.md, timeline model).
-    Staff see every reply, the scope mark and the delivery line, which opens the recipient table
-    (messaging-channels.md §8). Owners see the message and only their own replies: never another owner's
-    (identity-access.md §5.1), and no delivery detail.
+    A message with its replies threaded inside it (event-page-mockup-notes.md, timeline model; the staff mockup's
+    message card). Staff see what it is and who it went to above it, the body, anything placed with it (a question's
+    answers), the delivery line in words ("Sent to 5 owners by email · 2 replied · 1 opened, no reply · 2 not seen")
+    with the list of who has not seen it, and every reply with what that owner answered. Owners see the message and
+    only their own replies: never another owner's (identity-access.md §5.1), and no delivery detail.
 *@
 @{
     var owner = Side == Side.Owner;
     var replies = owner ? Model.Replies.Where(r => r.IsViewer).ToList() : Model.Replies.ToList();
+    var shown = owner || _allReplies || replies.Count <= RepliesShown ? replies : replies.Take(RepliesShown).ToList();
 }
-<article class="grid gap-4 rounded-card border border-border-subtle border-l-4 border-l-kind-message-fg bg-surface-raised p-4 @(owner ? "text-body-owner" : "text-body")">
-    <header class="flex flex-wrap items-center gap-2">
-        @if (!owner)
-        {
-            <KindMark Kind="Kind.Message" />
-        }
-        <h3 class="font-heading">@(Model.Title ?? $"From {Model.Author}")</h3>
-        @if (!owner)
-        {
-            <span class="ml-auto"><ScopeMark Scope="Model.Scope" /></span>
-        }
-    </header>
-
-    <p class="text-small text-text-muted">
-        @Model.Author · @Model.At@(owner || string.IsNullOrEmpty(Model.Audience) ? null : $" · To {Model.Audience}")@(!owner && Model.Step is not null ? $" · Step: {Model.Step}" : null)
-    </p>
-
-    <div class="whitespace-pre-line">@Model.Body</div>
-
-    @if (replies.Count > 0)
+<article class="grid gap-3 rounded-card border border-border-subtle bg-surface-raised p-4 sm:px-[20px] @(owner ? "text-body-owner" : "text-body")">
+    @if (owner)
     {
-        <section aria-label="@(owner ? "Your replies" : $"{replies.Count} {(replies.Count == 1 ? "reply" : "replies")}")">
-            <ol class="grid gap-3 border-l-2 border-border-subtle pl-4">
-                @foreach (var reply in replies)
-                {
-                    <li class="grid gap-1 rounded-control bg-surface-sunken p-3">
-                        <p class="text-small text-text-muted">
-                            <span class="font-strong text-text-primary">@(reply.IsViewer && owner ? "You" : reply.Author)</span>
-                            · @reply.At@(string.IsNullOrEmpty(reply.Channel) ? null : $" · by {reply.Channel}")
-                        </p>
-                        <p class="whitespace-pre-line">@reply.Body</p>
-                    </li>
-                }
-            </ol>
-        </section>
+        <header class="grid gap-1">
+            <h3 class="font-heading">@(Model.Title ?? $"From {Model.Author}")</h3>
+            <p class="text-small text-text-muted">@Model.Author · @Model.At</p>
+        </header>
     }
+    else
+    {
+        <header class="grid gap-1">
+            <div class="flex flex-wrap items-center justify-between gap-2">
+                <span class="kind-label">
+                    <svg aria-hidden="true" viewBox="0 0 24 24" class="size-4" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                        @if (Model.Inbound)
+                        {
+                            <path d="M4 6h16v12H4z"></path><path d="M4 8l8 5 8-5"></path>
+                        }
+                        else
+                        {
+                            <path d="M21 3L3 10l7 3 3 7z"></path>
+                        }
+                    </svg>
+                    @KindLine
+                </span>
+                <ScopeMark Scope="Model.Scope" />
+            </div>
+            @if (Model.Title is not null && Model.Inbound)
+            {
+                <h3 class="font-heading">@Model.Title</h3>
+            }
+            <p class="text-small text-text-muted">
+                @Model.Author · @Model.At@(string.IsNullOrEmpty(Model.Audience) ? null : $" · To {Model.Audience}")@(Model.Step is not null ? $" · Step: {Model.Step}" : null)
+            </p>
+        </header>
+    }
+
+    <div class="whitespace-pre-line break-words">@Model.Body</div>
+
+    @ChildContent
 
     @if (!owner && Model.Recipients.Count > 0)
     {
-        var problems = Model.Recipients.Count(r => Marks.IsProblem(r.Status));
-        <footer class="grid gap-2 border-t border-border-subtle pt-3">
-            <button type="button" class="btn-link justify-start text-small" aria-expanded="@_showRecipients" aria-controls="@_tableId"
-                    @onclick="() => _showRecipients = !_showRecipients">
-                @DeliveryLine@(problems > 0 ? $" · {problems} not delivered" : null)
-            </button>
+        <div class="grid gap-2">
+            <div class="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 text-small">
+                <p class="text-text-muted">
+                    @foreach (var (part, i) in DeliveryParts.Select((p, i) => (p, i)))
+                    {
+                        @(i > 0 ? " · " : null)<span class="@(part.Style switch { "strong" => "font-strong text-text-primary", "warn" => "font-strong text-status-warning-fg", "danger" => "font-strong text-status-danger-fg", _ => null })">@part.Text</span>
+                    }
+                </p>
+                <button type="button" class="font-strong underline underline-offset-4" aria-expanded="@_showRecipients" aria-controls="@_tableId"
+                        @onclick="() => _showRecipients = !_showRecipients">
+                    @(_showRecipients ? "Hide the list" : NotSeen > 0 ? "Who has not seen this" : "Who it went to")
+                </button>
+            </div>
 
             @if (_showRecipients)
             {
@@ -66,12 +79,12 @@
                         </tr>
                     </thead>
                     <tbody>
-                        @foreach (var recipient in Model.Recipients)
+                        @foreach (var recipient in Model.Recipients.OrderBy(r => Seen(r.Status)))
                         {
                             <tr class="border-t border-border-subtle">
                                 <td class="py-2 pr-4">@recipient.Name</td>
                                 <td class="py-2 pr-4">@recipient.Channel</td>
-                                <td class="py-2 @(Marks.IsProblem(recipient.Status) ? "font-strong text-status-danger-fg" : null)">
+                                <td class="py-2 @(Marks.IsProblem(recipient.Status) ? "font-strong text-status-danger-fg" : !Seen(recipient.Status) ? "font-strong text-status-warning-fg" : null)">
                                     @Marks.Label(recipient.Status)
                                     @if (recipient.Note is not null)
                                     {
@@ -83,36 +96,131 @@
                     </tbody>
                 </table>
             }
-        </footer>
+        </div>
+    }
+
+    @if (shown.Count > 0)
+    {
+        <section aria-label="@(owner ? "Your replies" : $"{replies.Count} {(replies.Count == 1 ? "reply" : "replies")}")">
+            <ol class="grid">
+                @foreach (var reply in shown)
+                {
+                    var name = reply.IsViewer && owner ? "You" : reply.Author;
+                    <li class="flex gap-3 border-t border-border-subtle pt-3 [&:not(:first-child)]:mt-3">
+                        <span aria-hidden="true" class="grid size-[36px] shrink-0 place-items-center rounded-pill bg-scope-owners-bg text-small font-heading text-scope-owners-fg">@Initials(name)</span>
+                        <div class="grid min-w-0 flex-1 gap-1">
+                            <p class="flex flex-wrap items-baseline gap-x-2">
+                                <span class="font-strong">@name</span>
+                                <span class="text-small text-text-muted">@reply.At@ChannelWords(reply.Channel)</span>
+                            </p>
+                            <p class="whitespace-pre-line break-words">@reply.Body</p>
+                            @if (!owner && reply.Answer is not null)
+                            {
+                                <p class="text-small text-text-muted">@AnswerLine(reply.Answer)</p>
+                            }
+                        </div>
+                    </li>
+                }
+            </ol>
+            @if (shown.Count < replies.Count)
+            {
+                <button type="button" class="mt-3 text-small font-strong underline underline-offset-4" @onclick="() => _allReplies = true">
+                    Show @(replies.Count - shown.Count) more @(replies.Count - shown.Count == 1 ? "reply" : "replies")
+                </button>
+            }
+        </section>
     }
 </article>
 
 @code {
+    private const int RepliesShown = 2;
     private readonly string _tableId = $"recipients-{Guid.NewGuid():N}";
     private bool _showRecipients;
+    private bool _allReplies;
 
     [Parameter, EditorRequired] public MessageModel Model { get; set; } = null!;
 
     [Parameter] public Side Side { get; set; } = Side.Staff;
 
-    /// <summary>
-    /// "Sent to 5 · 4 delivered · 3 opened · 2 replied": each count includes everyone further along. Recipients
-    /// not yet sent to are counted as waiting, never as sent.
-    /// </summary>
-    private string DeliveryLine
+    /// <summary>Shown under the body, before the delivery line: a question's answers.</summary>
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    /// <summary>"SENT · OWNERS TICKETS" for what we sent; "EMAIL · FROM INGLIS" for what came in.</summary>
+    private string KindLine => Model.Inbound
+        ? $"{(Model.Channel is "SMS" ? "Text" : Model.Channel is "Portal" ? "In the app" : Model.Channel ?? "Message")} · from {Model.Author}"
+        : $"Sent · {Model.Step ?? Model.Title ?? (string.IsNullOrEmpty(Model.Audience) ? "Message" : Model.Audience)}";
+
+    private static bool Seen(DeliveryStatus s) => s is DeliveryStatus.Opened or DeliveryStatus.Replied;
+
+    /// <summary>Sent or delivered but not opened: the people still to reach. Not yet sent, and failures, are counted apart.</summary>
+    private int NotSeen => Model.Recipients.Count(r => r.Status is DeliveryStatus.Sent or DeliveryStatus.Delivered);
+
+    /// <summary>The delivery line in words, each part with its emphasis.</summary>
+    private IEnumerable<(string Text, string? Style)> DeliveryParts
     {
         get
         {
             var r = Model.Recipients;
-            int AtLeast(params DeliveryStatus[] statuses) => r.Count(x => statuses.Contains(x.Status));
-            var waiting = AtLeast(DeliveryStatus.Queued);
-            if (waiting == r.Count) return $"Waiting to send to {r.Count}";
+            var waiting = r.Count(x => x.Status == DeliveryStatus.Queued);
+            if (waiting == r.Count)
+            {
+                yield return ($"Waiting to send to {r.Count}", null);
+                yield break;
+            }
 
-            var delivered = AtLeast(DeliveryStatus.Delivered, DeliveryStatus.Opened, DeliveryStatus.Replied);
-            var opened = AtLeast(DeliveryStatus.Opened, DeliveryStatus.Replied);
-            var replied = AtLeast(DeliveryStatus.Replied);
-            var line = $"Sent to {r.Count - waiting} · {delivered} delivered · {opened} opened · {replied} replied";
-            return waiting > 0 ? $"{line} · {waiting} waiting to send" : line;
+            var sent = r.Count - waiting;
+            var channels = r.Where(x => x.Status != DeliveryStatus.Queued).Select(x => ChannelName(x.Channel)).Distinct().Order().ToList();
+            yield return ($"Sent to {sent} by {string.Join(" and ", channels)}", null);
+            var replied = r.Count(x => x.Status == DeliveryStatus.Replied);
+            if (replied > 0) yield return ($"{replied} replied", "strong");
+            var opened = r.Count(x => x.Status == DeliveryStatus.Opened);
+            if (opened > 0) yield return ($"{opened} opened, no reply", null);
+            if (NotSeen > 0) yield return ($"{NotSeen} not seen", "warn");
+            var problems = r.Count(x => Marks.IsProblem(x.Status));
+            if (problems > 0) yield return ($"{problems} not delivered", "danger");
+            if (waiting > 0) yield return ($"{waiting} waiting to send", null);
         }
+    }
+
+    /// <summary>"Email", "Email (fallback)", "Text message" and "SMS" read as the same few words.</summary>
+    private static string ChannelName(string channel) => channel.ToLowerInvariant() switch
+    {
+        var c when c.Contains("text") || c.Contains("sms") => "text",
+        var c when c.Contains("portal") || c.Contains("app") => "the app",
+        var c when c.Contains("mail") => "email",
+        var c => c,
+    };
+
+    private static string ChannelWords(string channel) => channel.ToLowerInvariant() switch
+    {
+        "" => "",
+        "portal" => " · in the app",
+        "sms" or "text" => " · by text",
+        var c => $" · by {c}",
+    };
+
+    /// <summary>"Answered 2 tickets" with the answer itself in bold, as the mockup has it.</summary>
+    private static RenderFragment AnswerLine(string answer) => __builder =>
+    {
+        const string prefix = "Answered ";
+        if (answer.StartsWith(prefix, StringComparison.Ordinal))
+        {
+            @prefix<strong class="text-text-primary">@answer[prefix.Length..]</strong>
+        }
+        else
+        {
+            @answer
+        }
+    };
+
+    private static string Initials(string name)
+    {
+        var words = name.Split([' ', '@', '.'], StringSplitOptions.RemoveEmptyEntries);
+        return words.Length switch
+        {
+            0 => "?",
+            1 => words[0][..Math.Min(2, words[0].Length)].ToUpperInvariant(),
+            _ => $"{char.ToUpperInvariant(words[0][0])}{char.ToUpperInvariant(words[^1][0])}",
+        };
     }
 }

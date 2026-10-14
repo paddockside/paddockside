@@ -1,8 +1,49 @@
 @*
     A fact from a source system (nomination, acceptance, barrier, result): compact and structured, so it never
     looks like a message (design-system.md §2.1 rule 5). When the source corrects itself, the card says so in
-    words and shows the old value struck through next to the new one, instead of silently changing.
+    words and shows the old value struck through next to the new one, instead of silently changing. On the staff
+    event page it is one line (the staff mockup): what it is, the values, the source; corrections stay in view and
+    the full table opens on request.
 *@
+@if (Compact && Side == Side.Staff)
+{
+    var changed = Model.Fields.Where(f => f.WasValue is not null).ToList();
+    <article class="grid gap-1 rounded-card border border-border-subtle bg-surface-raised px-4 py-3">
+        <div class="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+            <p class="flex min-w-0 flex-wrap items-baseline gap-x-3">
+                <span class="kind-label">@Model.Label</span>
+                <span class="font-strong">@Summary</span>
+            </p>
+            <span class="flex items-center gap-2">
+                <span class="text-small text-text-muted">@Model.Source</span>
+                <ScopeMark Scope="Model.Scope" />
+            </span>
+        </div>
+        <p class="text-small text-text-muted">
+            @Model.ReceivedAt@(Model.Step is null ? null : $" · Step: {Model.Step}")
+            @if (changed.Count > 0)
+            {
+                <span class="font-strong text-status-warning-fg"> · Corrected: @string.Join(", ", changed.Select(f => $"{f.Label.ToLowerInvariant()} {f.WasValue} → {f.Value}"))</span>
+            }
+            · <button type="button" class="underline underline-offset-4" aria-expanded="@_details" @onclick="() => _details = !_details">@(_details ? "Hide details" : "Details")</button>
+        </p>
+        @if (_details)
+        {
+            <dl class="mt-2 grid grid-cols-[auto_1fr] gap-x-6 gap-y-1">
+                @foreach (var field in Model.Fields)
+                {
+                    <dt class="text-text-muted">@field.Label</dt>
+                    <dd class="font-strong tabular-nums">@field.Value</dd>
+                }
+            </dl>
+            @if (Model.Correction is not null)
+            {
+                <p class="text-small text-status-warning-fg">@Model.Correction</p>
+            }
+        }
+    </article>
+    return;
+}
 <article class="grid gap-3 rounded-card border border-border-subtle border-l-4 border-l-kind-fact-fg bg-surface-raised p-4 @(Side == Side.Owner ? "text-body-owner" : "text-body")">
     <header class="flex flex-wrap items-center gap-2">
         <KindMark Kind="Kind.Fact" />
@@ -45,6 +86,14 @@
 </article>
 
 @code {
+    private bool _details;
+
+    /// <summary>One line on the staff event page, details on request.</summary>
+    [Parameter] public bool Compact { get; set; }
+
+    /// <summary>"Randwick R6, 1400 m · Barrier 9 · Field 13 runners": a bare number gets its label.</summary>
+    private string Summary => string.Join(" · ", Model.Fields.Select(f => f.Value.Length > 0 && char.IsDigit(f.Value[0]) ? $"{f.Label} {f.Value}" : f.Value));
+
     [Parameter, EditorRequired] public FactModel Model { get; set; } = null!;
 
     [Parameter] public Side Side { get; set; } = Side.Staff;

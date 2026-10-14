@@ -39,48 +39,8 @@
             var target = item.Id == _target;
             <section id="item-@item.Id" tabindex="-1" aria-label="@(item.Title ?? item.Kind)"
                      class="grid gap-3 rounded-card @(target ? "ring-4 ring-focus ring-offset-4 ring-offset-surface-default" : null)">
-                @if (item.Unread)
-                {
-                    <span class="badge justify-self-start bg-action-primary-bg text-action-primary-fg">New</span>
-                }
-                @if (item.Kind == "Result")
-                {
-                    <FactCard Side="Side.Owner" Model="@(new FactModel(item.Title ?? "Result", item.Source ?? "", item.At, Scope.Owners,
-                        item.Fields.Select(f => new Components.FactField(f.Label, f.Value)).ToList(), Correction: item.Corrected))" />
-                }
-                else if (item.Mine)
-                {
-                    <article class="card grid gap-2 border-l-4 border-l-action-primary-bg">
-                        <p class="text-small text-text-muted">You wrote to @TenantName · @item.At</p>
-                        <p class="whitespace-pre-line">@item.Body</p>
-                    </article>
-                }
-                else
-                {
-                    <MessageThread Side="Side.Owner" Model="@(new MessageModel(item.Author ?? TenantName, item.At, Scope.Owners, "", item.Body,
-                        item.Replies.Select(r => new Reply(r.Author, "", r.At, r.Body, IsViewer: true)).ToList(), [], Title: item.Title))" />
-                }
-
-                @if (item.Prompt is { } prompt)
-                {
-                    <fieldset class="grid gap-3 rounded-card border-2 border-action-primary-bg p-4">
-                        <legend class="px-1 font-strong">@prompt.Question</legend>
-                        <div class="grid gap-3 @(prompt.Kind switch { "Count" => "grid-cols-4", "YesNo" => "grid-cols-2", _ => "grid-cols-1" })">
-                            @foreach (var answer in prompt.Answers)
-                            {
-                                var chosen = prompt.Mine == answer;
-                                <button type="button" aria-pressed="@(chosen ? "true" : "false")" disabled="@(_answering == item.Id)"
-                                        class="@(chosen ? "btn-primary" : "btn-secondary") min-h-[56px] w-full whitespace-normal px-2 text-title"
-                                        @onclick="() => AnswerAsync(item, answer)">@answer</button>
-                            }
-                        </div>
-                        <p class="text-text-muted" role="status">@(prompt.Mine is { } mine ? $"Your answer: {mine}. Tap another to change it." : "Tap your answer. You can change it later.")</p>
-                        @if (_answerError.TryGetValue(item.Id, out var answerProblem))
-                        {
-                            <p class="font-strong text-status-danger-fg" role="alert">@answerProblem</p>
-                        }
-                    </fieldset>
-                }
+                <OwnerItemCard Item="item" TenantName="@TenantName" Busy="@(_answering == item.Id)" AnswerError="@_answerError.GetValueOrDefault(item.Id)"
+                               OnAnswer="answer => AnswerAsync(item, answer)" />
 
                 @if (item.CanReply && item.Prompt is not null)
                 {
