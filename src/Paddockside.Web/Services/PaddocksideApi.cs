@@ -128,6 +128,10 @@ public sealed record OwnerEventPage(EventSummary Event, Guid HorseId, string Hor
 
 public sealed record Contacted(Guid Id);
 
+public sealed record NotificationChoice(string Code, string Label, string Description, bool Important, string Email, string Text);
+
+public sealed record NotificationsPage(List<NotificationChoice> Categories, string? Email, string? Mobile, bool TextsAvailable);
+
 public sealed record SignedIn(string Destination);
 
 /// <summary>A sign-in link redeemed: where to go, or why not (and where it was going).</summary>
@@ -288,6 +292,11 @@ public sealed class PaddocksideApi(HttpClient http)
 
     public Task<ApiResult<Contacted>> ContactAboutEventAsync(Guid eventId, string body) => PostAsync<Contacted>($"api/my/events/{eventId}/contact", new { body });
 
+    public Task<ApiResult<NotificationsPage>> MyNotificationsAsync() => GetAsync<NotificationsPage>("api/my/notifications");
+
+    public Task<ApiResult<object>> SetNotificationAsync(string category, string channel, bool enabled) =>
+        PutAsync<object>("api/my/notifications", new { category, channel, enabled });
+
     private sealed record LinkProblem(string? Title, string? ReturnPath);
 
     private async Task<ApiResult<T>> GetAsync<T>(string path)
@@ -302,11 +311,15 @@ public sealed class PaddocksideApi(HttpClient http)
         }
     }
 
-    private async Task<ApiResult<T>> PostAsync<T>(string path, object body)
+    private Task<ApiResult<T>> PostAsync<T>(string path, object body) => SendAsync<T>(HttpMethod.Post, path, body);
+
+    private Task<ApiResult<T>> PutAsync<T>(string path, object body) => SendAsync<T>(HttpMethod.Put, path, body);
+
+    private async Task<ApiResult<T>> SendAsync<T>(HttpMethod method, string path, object body)
     {
         try
         {
-            using var request = new HttpRequestMessage(HttpMethod.Post, path) { Content = JsonContent.Create(body) };
+            using var request = new HttpRequestMessage(method, path) { Content = JsonContent.Create(body) };
             request.Headers.Add(RequestHeader, "1");
             return await ReadAsync<T>(await http.SendAsync(request));
         }

@@ -134,8 +134,20 @@ public sealed class Delivery
         if (message.Kind != StreamItemKind.Message || message.Direction != StreamItemDirection.Outbound)
             throw new DomainException("Only an outbound message is delivered.");
 
+        return ForOwners(tenant, horse, message, _ => new HashSet<DeliveryChannel> { channel }, at);
+    }
+
+    /// <summary>
+    /// One delivery per owner per channel <paramref name="channelsFor"/> gives them (their notification choices).
+    /// An owner given no channel still sees the message in the portal; they are just not sent it.
+    /// </summary>
+    public static IReadOnlyList<Delivery> ForOwners(Tenant tenant, Horse horse, StreamItem message, Func<Guid, IReadOnlySet<DeliveryChannel>> channelsFor, DateTimeOffset at)
+    {
+        if (message.Kind != StreamItemKind.Message || message.Direction != StreamItemDirection.Outbound)
+            throw new DomainException("Only an outbound message is delivered.");
+
         return AccessRule.CurrentOwnerAudience(tenant, horse, message)
-            .Select(partyId => new Delivery(message, partyId, channel, at))
+            .SelectMany(partyId => channelsFor(partyId).Select(channel => new Delivery(message, partyId, channel, at)))
             .ToList();
     }
 }

@@ -2,7 +2,10 @@
 @layout OwnerLayout
 @inherits OwnerPage
 
-@* The owner's own details and sign out. Contact details are changed by the tenant (identity-access.md §4.1). *@
+@*
+    The owner's own details, what they are sent (an emailed "Choose what you're sent" link lands on #notifications),
+    and sign out. Contact details are changed by the tenant (identity-access.md §4.1).
+*@
 <PageTitle>Me</PageTitle>
 
 <div class="grid grid-cols-[minmax(0,1fr)] gap-6">
@@ -21,6 +24,8 @@
             }
         </dl>
         <p class="text-text-muted">To change these, contact @me.TenantName. You don't need a password: we send you a link or a code each time.</p>
+
+        <NotificationChoices TenantName="@me.TenantName" />
 
         @if (me.Tenants.Count > 1)
         {

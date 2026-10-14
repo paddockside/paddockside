@@ -5,6 +5,7 @@ using Paddockside.Api.Formatting;
 using Paddockside.Api.Horses;
 using Paddockside.Domain;
 using Paddockside.Infrastructure.ClientAccess;
+using Paddockside.Infrastructure.Email;
 using Paddockside.Infrastructure.Identity;
 using Paddockside.Infrastructure.Persistence;
 using DomainEvent = Paddockside.Domain.Event;
@@ -43,6 +44,13 @@ public static class OwnerEndpoints
 
     public sealed record SwitchRequest(Guid TenantId);
 
+    /// <param name="Email">"on", "off" or "unavailable" (no address to send to).</param>
+    public sealed record NotificationChoice(string Code, string Label, string Description, bool Important, string Email, string Text);
+
+    public sealed record NotificationsPage(IReadOnlyList<NotificationChoice> Categories, string? Email, string? Mobile, bool TextsAvailable);
+
+    public sealed record NotificationChange(string Category, string Channel, bool Enabled);
+
     public static void MapOwnerEndpoints(this IEndpointRouteBuilder app)
     {
         var my = app.MapGroup("/api/my").RequireAuthorization(ClientPolicy.Name);
@@ -55,6 +63,8 @@ public static class OwnerEndpoints
         my.MapPost("/events/{id:guid}/seen", Seen);
         my.MapPost("/events/{id:guid}/contact", Contact);
         my.MapPost("/items/{id:guid}/replies", Reply);
+        my.MapGet("/notifications", Notifications);
+        my.MapPut("/notifications", SetNotification);
     }
 
     private static Guid PartyId(ClaimsPrincipal user) => Guid.Parse(user.FindFirstValue(SessionClaims.Party)!);
@@ -269,6 +279,64 @@ public static class OwnerEndpoints
             delivery.Record(DeliveryStatus.Replied, now);
         await db.SaveChangesAsync(cancellationToken);
         return Results.Created($"/api/my/events/{item.EventId}", new OwnerReply("You", Words.Recently(now, now), reply.Body));
+    }
+
+    /// <summary>
+    /// What they are sent, category by category (messaging-channels.md §6): email and text, each on, off, or
+    /// unavailable because there is no address or number. Everything is always in the portal regardless.
+    /// </summary>
+    private static async Task<IResult> Notifications(ClaimsPrincipal user, PaddocksideDbContext db, CancellationToken cancellationToken)
+    {
+        var party = await db.Parties.AsNoTracking().SingleAsync(p => p.Id == PartyId(user), cancellationToken);
+        var choices = await db.NotificationPreferences.AsNoTracking().Where(p => p.PartyId == party.Id).ToListAsync(cancellationToken);
+        var (email, mobile) = (party.PrimaryEmail?.Value, party.PrimaryMobile?.Value);
+
+        return Results.Ok(new NotificationsPage(
+            NotificationCategories.All.Select(c =>
+            {
+                var on = NotificationCategories.Chosen(c, choices);
+                return new NotificationChoice(c.Code, c.Label, c.Description, c.Important,
+                    email is null ? "unavailable" : on.Contains(DeliveryChannel.Email) ? "on" : "off",
+                    mobile is null ? "unavailable" : on.Contains(DeliveryChannel.Sms) ? "on" : "off");
+            }).ToList(),
+            email, mobile, OutboundQueue.SmsAvailable));
+    }
+
+    /// <summary>One switch. An important category keeps at least one way on, so it can never be silenced.</summary>
+    private static async Task<IResult> SetNotification(NotificationChange change, ClaimsPrincipal user, PaddocksideDbContext db, TimeProvider clock, CancellationToken cancellationToken)
+    {
+        if (NotificationCategories.Find(change.Category) is not { } category) return Results.NotFound();
+        DeliveryChannel? parsed = change.Channel switch { "Email" => DeliveryChannel.Email, "Text" => DeliveryChannel.Sms, _ => null };
+        if (parsed is not { } channel) return Results.Problem(statusCode: StatusCodes.Status400BadRequest, title: "Choose email or text.");
+
+        var party = await db.Parties.SingleAsync(p => p.Id == PartyId(user), cancellationToken);
+        var mine = await db.NotificationPreferences.Where(p => p.PartyId == party.Id && p.Category == category.Code).ToListAsync(cancellationToken);
+        var hasAddress = channel == DeliveryChannel.Email ? party.PrimaryEmail is not null : party.PrimaryMobile is not null;
+        if (change.Enabled && !hasAddress)
+            return Results.Problem(statusCode: StatusCodes.Status400BadRequest,
+                title: channel == DeliveryChannel.Email ? "We don't have an email address for you yet." : "We don't have a mobile number for you yet.");
+
+        if (category.Important && !change.Enabled)
+        {
+            // What would still reach them once this is off: something they have and have left on.
+            var remaining = NotificationCategories.Chosen(category, mine).Where(c => c != channel)
+                .Where(c => c == DeliveryChannel.Email ? party.PrimaryEmail is not null : party.PrimaryMobile is not null);
+            if (!remaining.Any())
+                return Results.Problem(statusCode: StatusCodes.Status409Conflict,
+                    title: "We always send these, so keep at least one way on. Turn the other one on first if you'd rather have that.");
+        }
+
+        var now = clock.GetUtcNow();
+        var existing = mine.SingleOrDefault(p => p.Channel == channel);
+        if (change.Enabled == category.Defaults.Contains(channel))
+        {
+            if (existing is not null) db.NotificationPreferences.Remove(existing); // back to the default: nothing to keep
+        }
+        else if (existing is not null) existing.Set(change.Enabled, now);
+        else db.NotificationPreferences.Add(new NotificationPreference(party, category.Code, channel, change.Enabled, now));
+
+        await db.SaveChangesAsync(cancellationToken);
+        return Results.NoContent();
     }
 
     private static bool CanReplyTo(StreamItem item) =>

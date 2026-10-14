@@ -18,7 +18,8 @@ public sealed record RenderedEmail(string Subject, string Html, string Text);
 public sealed class OwnerEmailRenderer
 {
     /// <summary>An update to one owner. <paramref name="openLink"/> signs them in and opens this message.</summary>
-    public RenderedEmail Render(Tenant tenant, Horse horse, Domain.Event? @event, StreamItem message, Party recipient, string? openLink = null)
+    public RenderedEmail Render(Tenant tenant, Horse horse, Domain.Event? @event, StreamItem message, Party recipient, string? openLink = null,
+        string? choicesLink = null)
     {
         var context = @event is null ? horse.Name : $"{horse.Name} · {@event.Title}";
         var subject = message.Title is { Length: > 0 } title ? $"{horse.Name}: {title}" : $"Update on {context}";
@@ -44,8 +45,8 @@ public sealed class OwnerEmailRenderer
         if (openLink is not null) text.AppendLine($"Open in the owners' portal: {openLink}").AppendLine();
 
         return new RenderedEmail(subject,
-            Frame(tenant.Name, tenant.LogoUrl, tenant.FooterDetails, message.Title ?? context, Preview(message.Body), html.ToString(), replyLine, whyLine),
-            TextFrame(text.ToString(), replyLine, tenant.Name, tenant.FooterDetails, whyLine));
+            Frame(tenant.Name, tenant.LogoUrl, tenant.FooterDetails, message.Title ?? context, Preview(message.Body), html.ToString(), replyLine, whyLine, choicesLink),
+            TextFrame(text.ToString(), replyLine, tenant.Name, tenant.FooterDetails, whyLine, choicesLink));
     }
 
     /// <summary>
@@ -181,7 +182,8 @@ public sealed class OwnerEmailRenderer
         $"<p style=\"margin:{T.Space2} 0 {T.Space6};\"><a href=\"{E(href)}\" style=\"display:inline-block;padding:{T.Space3} {T.Space6};min-height:24px;" +
         $"background:{T.ColorActionPrimaryBg};color:{T.ColorActionPrimaryFg};border-radius:{T.RadiusControl};text-decoration:none;font-weight:700;\">{E(label)}</a></p>";
 
-    private static string Frame(string sender, string? logoUrl, string? footerDetails, string title, string preview, string content, string? replyLine, string whyLine)
+    private static string Frame(string sender, string? logoUrl, string? footerDetails, string title, string preview, string content, string? replyLine, string whyLine,
+        string? choicesLink = null)
     {
         var brand = logoUrl is { } logo
             ? $"<img src=\"{E(logo)}\" alt=\"{E(sender)}\" height=\"40\" style=\"display:block;height:40px;max-width:200px;border:0;\">"
@@ -211,7 +213,7 @@ public sealed class OwnerEmailRenderer
               </table>
               <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;">
                 <tr><td style="padding:{T.Space4} {T.Space2};{Font};font-size:{T.TextSizeSmall};line-height:{T.LeadingSmall};color:{T.ColorTextMuted};">
-                  <strong>{E(sender)}</strong>{(footerDetails is { } details ? $"<br>{E(details)}" : "")}<br>{E(whyLine)}
+                  <strong>{E(sender)}</strong>{(footerDetails is { } details ? $"<br>{E(details)}" : "")}<br>{E(whyLine)}{(choicesLink is { } choices ? $"<br><a href=\"{E(choices)}\" style=\"color:{T.ColorTextMuted};\">Choose what you're sent</a>" : "")}
                 </td></tr>
               </table>
             </td></tr>
@@ -221,13 +223,15 @@ public sealed class OwnerEmailRenderer
             """;
     }
 
-    private static string TextFrame(string content, string? replyLine, string sender, string? footerDetails, string whyLine)
+    private static string TextFrame(string content, string? replyLine, string sender, string? footerDetails, string whyLine, string? choicesLink = null)
     {
         var text = new StringBuilder(content);
         if (replyLine is not null) text.AppendLine(replyLine).AppendLine();
         text.AppendLine("--").AppendLine(sender);
         if (footerDetails is { } details) text.AppendLine(details);
-        return text.AppendLine(whyLine).ToString();
+        text.AppendLine(whyLine);
+        if (choicesLink is not null) text.AppendLine($"Choose what you're sent: {choicesLink}");
+        return text.ToString();
     }
 
     private static IEnumerable<string> Paragraphs(string body) =>

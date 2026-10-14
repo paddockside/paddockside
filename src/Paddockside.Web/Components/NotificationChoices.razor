@@ -1,0 +1,132 @@
+@inject PaddocksideApi Api
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+
+@*
+    The notification preference matrix (design-system.md §2.3 "Comms"; messaging-channels.md §6), shaped for a phone:
+    one card per kind of update, with an Email and a Text switch. Important kinds are grouped first and say they are
+    always sent; switching off the last way for one of them is refused with the reason. Every change saves at once
+    and is announced. Everything stays in the portal whatever is switched off.
+*@
+<section id="notifications" tabindex="-1" class="grid gap-4" aria-labelledby="notifications-heading">
+    <h2 id="notifications-heading" class="text-title font-heading">What we send you</h2>
+    <p class="text-text-muted">Everything is always here in the portal. These choose what @TenantName also sends to your email or phone.</p>
+
+    @if (_error is not null)
+    {
+        <Error Message="@_error" />
+    }
+    else if (_page is null)
+    {
+        <p class="text-text-muted" role="status">Loading…</p>
+    }
+    else
+    {
+        @if (!_page.TextsAvailable)
+        {
+            <p class="rounded-control bg-status-info-bg px-4 py-3 text-status-info-fg">Text messages are coming soon. Until then, anything we always send comes by email.</p>
+        }
+
+        <h3 class="font-heading">Always sent</h3>
+        <p class="-mt-2 text-small text-text-muted">These are the important ones, so one way stays on. Choose which.</p>
+        @foreach (var c in _page.Categories.Where(c => c.Important))
+        {
+            @Row(c)
+        }
+
+        <h3 class="mt-2 font-heading">You choose</h3>
+        <p class="-mt-2 text-small text-text-muted">Switch both off and you'll still find these in the portal.</p>
+        @foreach (var c in _page.Categories.Where(c => !c.Important))
+        {
+            @Row(c)
+        }
+
+        <p class="sr-only" role="status" aria-live="polite">@_announce</p>
+    }
+</section>
+
+@code {
+    [Parameter, EditorRequired] public string TenantName { get; set; } = "";
+
+    private NotificationsPage? _page;
+    private string? _error;
+    private string? _announce;
+    private string? _busy;
+
+    /// <summary>Bumped after every change: the boxes are redrawn from what the server holds, so a refused untick ticks itself again.</summary>
+    private int _version;
+    private readonly Dictionary<string, string> _rowError = [];
+
+    private bool _scrolled;
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    /// <summary>The emailed "Choose what you're sent" link opens the page at #notifications: scroll once it has loaded.</summary>
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_page is not null && !_scrolled && new Uri(Navigation.Uri).Fragment == "#notifications")
+            _scrolled = await JS.InvokeAsync<bool>("paddockside.scrollToItem", "notifications");
+    }
+
+    private async Task LoadAsync()
+    {
+        var result = await Api.MyNotificationsAsync();
+        if (result.Succeeded) _page = result.Value;
+        else _error = result.Error;
+    }
+
+    private RenderFragment Row(NotificationChoice c) => __builder =>
+    {
+        <fieldset class="card grid gap-3 !p-4">
+            <legend class="sr-only">@c.Label</legend>
+            <div class="grid gap-1">
+                <p class="font-strong" aria-hidden="true">@c.Label</p>
+                <p class="text-small text-text-muted">@c.Description</p>
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+                @Switch(c, "Email", c.Email, _page!.Email is null ? "No email address on file" : null)
+                @Switch(c, "Text", c.Text, _page.Mobile is null ? "No mobile number on file" : null)
+            </div>
+            @if (_rowError.TryGetValue(c.Code, out var problem))
+            {
+                <p class="text-small font-strong text-status-danger-fg" role="alert">@problem</p>
+            }
+        </fieldset>
+    };
+
+    private RenderFragment Switch(NotificationChoice c, string channel, string state, string? unavailable) => __builder =>
+    {
+        var id = $"n-{c.Code}-{channel}";
+        var on = state == "on";
+        <label for="@id" class="flex min-h-control cursor-pointer items-center gap-3 rounded-control border px-3 @(on ? "border-action-primary-bg bg-action-secondary-bg" : "border-border-subtle") @(unavailable is not null ? "cursor-default opacity-60" : null)">
+            <input @key="@($"{id}-{_version}")" id="@id" type="checkbox" class="size-6 shrink-0 accent-action-primary-bg" checked="@on" disabled="@(unavailable is not null || _busy == id)"
+                   @onchange="e => ChangeAsync(c, channel, e.Value is true)" />
+            <span class="grid">
+                <span class="font-strong">@channel</span>
+                @if (unavailable is not null)
+                {
+                    <span class="text-small text-text-muted">@unavailable</span>
+                }
+            </span>
+        </label>
+    };
+
+    private async Task ChangeAsync(NotificationChoice c, string channel, bool enabled)
+    {
+        var id = $"n-{c.Code}-{channel}";
+        (_busy, _announce) = (id, null);
+        _rowError.Remove(c.Code);
+        try
+        {
+            var result = await Api.SetNotificationAsync(c.Code, channel, enabled);
+            if (!result.Succeeded) _rowError[c.Code] = result.Error!;
+            else _announce = $"{c.Label}: {channel.ToLowerInvariant()} {(enabled ? "on" : "off")}. Saved.";
+            await LoadAsync(); // always show what the server holds, including a refused change put back
+            _version++;
+        }
+        finally
+        {
+            _busy = null;
+        }
+    }
+}

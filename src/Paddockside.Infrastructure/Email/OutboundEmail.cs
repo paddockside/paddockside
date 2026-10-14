@@ -13,10 +13,33 @@ namespace Paddockside.Infrastructure.Email;
 /// </summary>
 public static class OutboundQueue
 {
+    /// <summary>Whether texts can be sent. False until SMS sending is built and a provider is configured.</summary>
+    public const bool SmsAvailable = false;
+
+    /// <param name="channel">
+    /// Staff's override, or null for "Preferred": each owner by their own choices for the message's category
+    /// (messaging-channels.md §6). An override still respects an owner who switched a non-important category off.
+    /// </param>
     public static async Task<IReadOnlyList<Delivery>> QueueAsync(
-        PaddocksideDbContext db, Tenant tenant, Horse horse, StreamItem message, DeliveryChannel channel, DateTimeOffset now, CancellationToken cancellationToken)
+        PaddocksideDbContext db, Tenant tenant, Horse horse, Event? @event, StreamItem message, DeliveryChannel? channel, DateTimeOffset now,
+        CancellationToken cancellationToken)
     {
-        var deliveries = Delivery.ForOwners(tenant, horse, message, channel, now);
+        var category = NotificationCategories.For(message, @event);
+        var audience = AccessRule.CurrentOwnerAudience(tenant, horse, message).ToList();
+        var parties = await db.Parties.Where(p => audience.Contains(p.Id)).ToDictionaryAsync(p => p.Id, cancellationToken);
+        var choices = (await db.NotificationPreferences.Where(p => audience.Contains(p.PartyId) && p.Category == category.Code).ToListAsync(cancellationToken))
+            .ToLookup(p => p.PartyId);
+
+        IReadOnlySet<DeliveryChannel> ChannelsFor(Guid partyId)
+        {
+            if (!parties.TryGetValue(partyId, out var party)) return new HashSet<DeliveryChannel>();
+            var preferred = NotificationCategories.ChannelsFor(category, choices[partyId], party.PrimaryEmail is not null, party.PrimaryMobile is not null, SmsAvailable);
+            if (channel is not { } forced) return preferred;
+            var optedOut = !category.Important && NotificationCategories.Chosen(category, choices[partyId]).Count == 0;
+            return optedOut ? new HashSet<DeliveryChannel>() : new HashSet<DeliveryChannel> { forced };
+        }
+
+        var deliveries = Delivery.ForOwners(tenant, horse, message, ChannelsFor, now);
         var issued = new HashSet<string>();
         foreach (var delivery in deliveries)
         {
@@ -147,7 +170,8 @@ public sealed class EmailDispatcher(
 
             // Each owner's copy carries its own link: it opens this message and signs them in (identity-access.md §4.1).
             var openLink = await links.IssueDeepLinkAsync(tenant.Id, party.Id, contact.Value, message.Id, message.EventId, cancellationToken);
-            var rendered = renderer.Render(tenant, horse, message.EventId is { } eventId ? events.GetValueOrDefault(eventId) : null, message, party, openLink);
+            var choices = options.Value.PortalBaseUrl is { Length: > 0 } portal ? $"{portal.TrimEnd('/')}/my/me#notifications" : null;
+            var rendered = renderer.Render(tenant, horse, message.EventId is { } eventId ? events.GetValueOrDefault(eventId) : null, message, party, openLink, choices);
             var result = await sender.SendAsync(new OutboundEmail(
                 options.Value.FromAddress,
                 Senders.For(tenant.Name),

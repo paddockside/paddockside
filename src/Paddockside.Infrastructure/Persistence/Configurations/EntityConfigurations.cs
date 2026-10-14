@@ -228,6 +228,20 @@ internal sealed class DeliveryConfiguration : IEntityTypeConfiguration<Delivery>
     }
 }
 
+internal sealed class NotificationPreferenceConfiguration : IEntityTypeConfiguration<NotificationPreference>
+{
+    public void Configure(EntityTypeBuilder<NotificationPreference> b)
+    {
+        b.MapTenantOwned();
+        b.Property(x => x.Category).HasMaxLength(32).IsUnicode(false);
+        b.Property(x => x.Channel).AsString();
+        b.Property(x => x.Enabled);
+        b.Property(x => x.UpdatedAt);
+        b.HasOne<Party>().WithMany().HasForeignKey(x => x.PartyId).OnDelete(DeleteBehavior.Restrict);
+        b.HasIndex(x => new { x.PartyId, x.Category, x.Channel }).IsUnique();
+    }
+}
+
 internal sealed class ItemReadConfiguration : IEntityTypeConfiguration<ItemRead>
 {
     public void Configure(EntityTypeBuilder<ItemRead> b)

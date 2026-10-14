@@ -185,7 +185,7 @@ public static class EventEndpoints
                 item = StreamItem.Message(horse, e, null, request.Body.Trim(), scope, now, author, scope == StreamItemScope.NamedParties ? named : null, stepCode);
                 // Recipients are worked out now, at send time, and each gets its own routing token (messaging-channels.md §1).
                 db.StreamItems.Add(item);
-                deliveries = await OutboundQueue.QueueAsync(db, tenant, horse, item, ToChannel(request.Channel), now, cancellationToken);
+                deliveries = await OutboundQueue.QueueAsync(db, tenant, horse, e, item, ToChannel(request.Channel), now, cancellationToken);
                 break;
 
             case "Trainer":
@@ -229,11 +229,13 @@ public static class EventEndpoints
         _ => "Email",
     };
 
-    private static DeliveryChannel ToChannel(string channel) => channel switch
+    /// <summary>Staff's channel override; null is "Preferred", each owner by their notification choices.</summary>
+    private static DeliveryChannel? ToChannel(string channel) => channel switch
     {
+        "Email" => DeliveryChannel.Email,
         "Sms" => DeliveryChannel.Sms,
         "PortalOnly" => DeliveryChannel.Portal,
-        _ => DeliveryChannel.Email, // "Preferred" uses email until notification preferences exist
+        _ => null,
     };
 
     private static IResult Problem(string title) => Results.Problem(statusCode: StatusCodes.Status400BadRequest, title: title);

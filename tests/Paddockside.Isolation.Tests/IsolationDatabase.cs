@@ -96,6 +96,7 @@ public sealed class IsolationDatabase : IAsyncLifetime
         context.AddRange(tenant, ann, dee, eve, syndicate, external, horse, raceStart, update, personal, note, inbound, audit, support);
         context.AddRange(routing);
         context.Add(new ItemRead(update, ann.Id, bought.AddMonths(6)));
+        context.Add(new NotificationPreference(ann, NotificationCategories.Media, DeliveryChannel.Email, true, bought));
         context.AddRange(deliveries);
         await context.SaveChangesAsync();
 

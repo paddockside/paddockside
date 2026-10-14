@@ -178,6 +178,13 @@ public static class BrowserRequests
         request.Headers.Add("X-Paddockside-Request", "1");
         return client.SendAsync(request);
     }
+
+    public static Task<HttpResponseMessage> PutApiAsync(this HttpClient client, string path, object body)
+    {
+        var request = new HttpRequestMessage(HttpMethod.Put, path) { Content = JsonContent.Create(body) };
+        request.Headers.Add("X-Paddockside-Request", "1");
+        return client.SendAsync(request);
+    }
 }
 
 /// <summary>RFC 6238 codes, as an authenticator app would show them.</summary>
