@@ -57,9 +57,9 @@ public static class DependencyInjection
 
         // Owner sign-in: links and codes by email and text (identity-access.md §4.1).
         services.Configure<TwilioOptions>(configuration.GetSection(TwilioOptions.Section));
-        services.AddHttpClient<ISmsSender, TwilioSmsSender>(http =>
+        services.AddHttpClient<ISmsSender, TwilioSmsSender>((provider, http) =>
         {
-            http.BaseAddress = new Uri("https://api.twilio.com/");
+            http.BaseAddress = provider.GetRequiredService<Microsoft.Extensions.Options.IOptions<TwilioOptions>>().Value.ApiBaseAddress;
             http.Timeout = TimeSpan.FromSeconds(15);
         });
         services.AddScoped<ClientAccess.ClientSignIn>();

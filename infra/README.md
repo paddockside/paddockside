@@ -153,7 +153,8 @@ Owners sign in at `/my` with no password: an emailed link, or a code by text (`d
 - **Links in emails** use `Email:PortalBaseUrl`. It is set in `appsettings.json` to the web app's address; change
   it when the portal gets its own domain.
 - **Texts** go through Twilio, using the Key Vault secrets `Twilio--AccountSid`, `Twilio--AuthToken` and
-  `Twilio--FromNumber`. A Twilio *trial* account only texts numbers verified in Twilio. Without the secrets, SMS
+  `Twilio--FromNumber` (the Australian number, written +614…), plus `Twilio--Region` set to `au1` when the account
+  lives in Twilio's Australian region (its credentials only work there). A Twilio *trial* account only texts numbers verified in Twilio. Without the secrets, SMS
   sign-in answers normally but nothing is sent; locally the code goes to the log instead.
 - **Update texts and replies** use the same number. Owners who choose texts get a short text with a link
   (`docs/product/messaging-channels.md` §4). Optional ones wait out 9 pm to 7 am Sydney time. For replies to
