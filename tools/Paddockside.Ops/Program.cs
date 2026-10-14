@@ -9,6 +9,10 @@ using Paddockside.Infrastructure.Identity;
 //   dotnet run --project tools/Paddockside.Ops -- grant-operator you@example.com
 //   dotnet run --project tools/Paddockside.Ops -- revoke-operator you@example.com
 //
+// Until staff can manage owners in the app (build plan Sprint 4), two setup commands for test owners:
+//   dotnet run --project tools/Paddockside.Ops -- list-horses laureloak
+//   dotnet run --project tools/Paddockside.Ops -- add-owner laureloak "Faultless Miss" someone@example.com "Their Name" 5
+//
 // It connects to the dev database as you (az login), with the connection string from Key Vault; set
 // ConnectionStrings__Paddockside to point it elsewhere. Granting needs an existing Paddockside sign-in; after the
 // first operator exists, invite others from the operator console instead.
@@ -59,7 +63,13 @@ switch (args)
         Console.WriteLine($"{address} is {(grant ? "now" : "no longer")} an operator.");
         return 0;
 
+    case ["list-horses", var slug]:
+        return await Owners.ListHorsesAsync(connection, slug);
+
+    case ["add-owner", var slug, var horseName, var ownerAddress, var name, var percent]:
+        return await Owners.AddOwnerAsync(connection, slug, horseName, ownerAddress, name, percent);
+
     default:
-        Console.Error.WriteLine("Usage: list-operators | grant-operator <email> | revoke-operator <email>");
+        Console.Error.WriteLine("Usage: list-operators | grant-operator <email> | revoke-operator <email> | list-horses <business> | add-owner <business> <horse> <email> <name> <percent>");
         return 2;
 }
