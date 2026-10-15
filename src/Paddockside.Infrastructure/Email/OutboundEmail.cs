@@ -111,16 +111,69 @@ public sealed class EmailDispatcher(
         if (InvitationsEnabled)
             foreach (var tenantId in await tenants.TenantsWithQueuedInvitationsAsync(20, cancellationToken))
                 accepted += await DispatchInvitationsAsync(tenantId, cancellationToken);
+        if (MailoutsEnabled)
+            foreach (var tenantId in await tenants.TenantsWithQueuedMailoutsAsync(20, cancellationToken))
+                accepted += await DispatchMailoutsAsync(tenantId, cancellationToken);
         return accepted;
     }
 
     /// <summary>Whether any email is still waiting to be sent (and has attempts left).</summary>
     public async Task<bool> HasQueuedAsync(CancellationToken cancellationToken) =>
         (await tenants.TenantsWithQueuedEmailAsync(1, cancellationToken)).Count > 0
-        || (InvitationsEnabled && (await tenants.TenantsWithQueuedInvitationsAsync(1, cancellationToken)).Count > 0);
+        || (InvitationsEnabled && (await tenants.TenantsWithQueuedInvitationsAsync(1, cancellationToken)).Count > 0)
+        || (MailoutsEnabled && (await tenants.TenantsWithQueuedMailoutsAsync(1, cancellationToken)).Count > 0);
 
     /// <summary>Invitations carry a portal link, so they wait until the portal address is configured.</summary>
     private bool InvitationsEnabled => options.Value.PortalBaseUrl is { Length: > 0 };
+
+    /// <summary>Mailouts carry an unsubscribe link on the app's address, and go on the broadcast stream.</summary>
+    private bool MailoutsEnabled => options.Value.PortalBaseUrl is { Length: > 0 } && sender.CanBroadcast;
+
+    /// <summary>
+    /// Sends queued mailouts, one email per recipient: their own reply address (m-{token}), so a reply comes back to
+    /// the mailout, and their own unsubscribe link, in the footer and in the one-click header mail apps show
+    /// (messaging-channels.md §2.1, §7). Someone who unsubscribed or whose address failed since it was queued is skipped.
+    /// </summary>
+    private async Task<int> DispatchMailoutsAsync(Guid tenantId, CancellationToken cancellationToken)
+    {
+        await using var db = tenants.For(tenantId);
+        var queued = await db.MailoutRecipients.Where(r => r.Status == MailoutRecipientStatus.Queued).OrderBy(r => r.StatusAt).Take(BatchSize).ToListAsync(cancellationToken);
+        if (queued.Count == 0) return 0;
+
+        var tenant = await db.Tenants.SingleAsync(cancellationToken);
+        var mailoutIds = queued.Select(r => r.MailoutId).Distinct().ToList();
+        var mailouts = await db.Mailouts.Where(m => mailoutIds.Contains(m.Id)).ToDictionaryAsync(m => m.Id, cancellationToken);
+        var partyIds = queued.Select(r => r.PartyId).ToList();
+        var parties = await db.Parties.Where(p => partyIds.Contains(p.Id)).ToDictionaryAsync(p => p.Id, cancellationToken);
+
+        var accepted = 0;
+        foreach (var recipient in queued)
+        {
+            var now = clock.GetUtcNow();
+            var party = parties[recipient.PartyId];
+            if (party.UnsubscribedAt is not null) { recipient.Skip("Unsubscribed before it was sent", now); continue; }
+            if (party.PrimaryEmail is not { IsDeliverable: true } contact) { recipient.Skip("No working email address", now); continue; }
+
+            var unsubscribe = Unsubscribe.Link(options.Value.PortalBaseUrl!, tenant.Slug, recipient.Token);
+            var replyTo = $"m-{recipient.Token}@{tenant.Slug}.{options.Value.InboundDomain}";
+            var rendered = renderer.RenderMailout(tenant, mailouts[recipient.MailoutId], party, unsubscribe);
+            var result = await sender.SendAsync(new OutboundEmail(options.Value.FromAddress, Senders.For(tenant.Name), contact.Value, party.DisplayName, replyTo,
+                rendered.Subject, rendered.Html, rendered.Text,
+                new Dictionary<string, string> { ["tenantId"] = tenant.Id.ToString(), ["mailoutRecipientId"] = recipient.Id.ToString() },
+                TrackOpens: true, Broadcast: true,
+                Headers: new Dictionary<string, string>
+                {
+                    ["List-Unsubscribe"] = $"<{unsubscribe}>",
+                    ["List-Unsubscribe-Post"] = "List-Unsubscribe=One-Click",
+                }), cancellationToken);
+
+            if (result.Accepted) { recipient.MarkSent(contact.Value, result.ProviderMessageId!, now); accepted++; }
+            else if (result.PermanentFailure) { recipient.Skip($"Not sent: {result.Error}", now); party.MarkUndeliverable(contact.Value, now); }
+        }
+
+        await db.SaveChangesAsync(cancellationToken);
+        return accepted;
+    }
 
     private async Task<int> DispatchTenantAsync(Guid tenantId, CancellationToken cancellationToken)
     {

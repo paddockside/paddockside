@@ -110,7 +110,22 @@ public sealed record ClientHorse(Guid HorseId, string Name, string Share, string
 public sealed record ListRef(Guid Id, string Name);
 
 public sealed record ClientDetail(Guid Id, string Name, string? Email, string? Mobile, string? HowWeKnowThem, string Status, string? Added, bool SignedIn,
-    bool EmailBounced, string? Invitation, bool CanResend, List<ClientHorse> CurrentHorses, List<ClientHorse> PastHorses, List<ListRef> Lists);
+    bool EmailBounced, string? Invitation, bool CanResend, List<ClientHorse> CurrentHorses, List<ClientHorse> PastHorses, List<ListRef> Lists, string? Unsubscribed = null);
+
+public sealed record MailoutReason(string Why, int Count);
+
+public sealed record MailoutPreview(int Chosen, int Sending, List<MailoutReason> LeftOut);
+
+public sealed record MailoutSummary(Guid Id, string Subject, string Audience, string Sent, string SentBy, int Recipients, int Delivered, int Opened, int Replies, string? Horse);
+
+public sealed record MailoutRecipientLine(Guid PartyId, string Name, string? Address, string Status, string? Note, string At);
+
+public sealed record MailoutReplyLine(Guid PartyId, string Name, string From, string At, string Body);
+
+public sealed record MailoutDetail(Guid Id, string Subject, string Body, string Audience, string Sent, string SentBy, Guid? HorseId, string? Horse, string Summary,
+    List<MailoutRecipientLine> Recipients, List<MailoutReplyLine> Replies);
+
+public sealed record MailoutCreated(Guid Id, int Sending);
 
 public sealed record ClientListView(Guid Id, string Name, int Count);
 
@@ -351,6 +366,18 @@ public sealed class PaddocksideApi(HttpClient http)
     public Task<ApiResult<ListChange>> AddToClientListAsync(Guid id, IEnumerable<Guid> clientIds) => PostAsync<ListChange>($"api/client-lists/{id}/add", new { clientIds });
 
     public Task<ApiResult<ListChange>> RemoveFromClientListAsync(Guid id, IEnumerable<Guid> clientIds) => PostAsync<ListChange>($"api/client-lists/{id}/remove", new { clientIds });
+
+    public Task<ApiResult<object>> ResubscribeAsync(Guid id) => PostAsync<object>($"api/clients/{id}/resubscribe", new { });
+
+    public Task<ApiResult<List<MailoutSummary>>> MailoutsAsync() => GetAsync<List<MailoutSummary>>("api/mailouts");
+
+    public Task<ApiResult<MailoutDetail>> MailoutAsync(Guid id) => GetAsync<MailoutDetail>($"api/mailouts/{id}");
+
+    public Task<ApiResult<MailoutPreview>> PreviewMailoutAsync(IEnumerable<Guid> listIds, IEnumerable<string> statuses, IEnumerable<Guid> clientIds) =>
+        PostAsync<MailoutPreview>("api/mailouts/preview", new { listIds, statuses, clientIds });
+
+    public Task<ApiResult<MailoutCreated>> SendMailoutAsync(string subject, string body, IEnumerable<Guid> listIds, IEnumerable<string> statuses, IEnumerable<Guid> clientIds, Guid? horseId) =>
+        PostAsync<MailoutCreated>("api/mailouts", new { subject, body, listIds, statuses, clientIds, horseId });
 
     public Task<ApiResult<object>> SetRaceDayAsync(Guid eventId, RaceDayView details) =>
         PutAsync<object>($"api/events/{eventId}/race-day", new { gate = details.Gate, dining = details.Dining, note = details.Note });

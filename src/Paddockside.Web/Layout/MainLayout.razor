@@ -27,6 +27,7 @@
                 @NavItem("today", "Today", Icons.Clock)
                 @NavItem("horses", "Horses", Icons.House)
                 @NavItem("clients", "Clients", Icons.Book)
+                @NavItem("mailouts", "Mailouts", Icons.Send)
                 @NavItem("inbound", "Pending", Icons.Mail, _pending)
             </nav>
 
@@ -105,6 +106,7 @@
                             <a href="today" class="btn-link">Today</a>
                             <a href="horses" class="btn-link">Horses</a>
                             <a href="clients" class="btn-link">Clients</a>
+                            <a href="mailouts" class="btn-link">Mailouts</a>
                             <a href="inbound" class="btn-link">Pending@(_pending > 0 ? $" ({_pending})" : null)</a>
                             @if (Session.Current.Role == "TenantAdmin")
                             {
@@ -277,6 +279,7 @@
         public const string Mail = "<path d=\"M4 6h16v12H4z\"></path><path d=\"M4 8l8 5 8-5\"></path>";
         public const string People = "<circle cx=\"9\" cy=\"8\" r=\"3\"></circle><path d=\"M3 20a6 6 0 0 1 12 0\"></path><path d=\"M16 4a3 3 0 0 1 0 6\"></path><path d=\"M18 14a5 5 0 0 1 3 6\"></path>";
         public const string Book = "<path d=\"M5 4h12a2 2 0 0 1 2 2v14H7a2 2 0 0 1-2-2z\"></path><path d=\"M5 18a2 2 0 0 1 2-2h12\"></path><circle cx=\"12\" cy=\"9\" r=\"2\"></circle>";
+        public const string Send = "<path d=\"M21 3L3 10l7 3 3 7z\"></path><path d=\"M10 13l4-4\"></path>";
         public const string List = "<path d=\"M8 6h12\"></path><path d=\"M8 12h12\"></path><path d=\"M8 18h12\"></path><path d=\"M4 6h.01\"></path><path d=\"M4 12h.01\"></path><path d=\"M4 18h.01\"></path>";
         public const string Gear = "<circle cx=\"12\" cy=\"12\" r=\"3\"></circle><path d=\"M19 12a7 7 0 0 0-.1-1.2l2-1.5-2-3.4-2.4.9a7 7 0 0 0-2-1.2L14 3h-4l-.5 2.6a7 7 0 0 0-2 1.2l-2.4-.9-2 3.4 2 1.5A7 7 0 0 0 5 12a7 7 0 0 0 .1 1.2l-2 1.5 2 3.4 2.4-.9a7 7 0 0 0 2 1.2L10 21h4l.5-2.6a7 7 0 0 0 2-1.2l2.4.9 2-3.4-2-1.5A7 7 0 0 0 19 12z\"></path>";
     }

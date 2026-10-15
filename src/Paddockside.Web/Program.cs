@@ -11,6 +11,7 @@ builder.Services.AddScoped(_ => new HttpClient { BaseAddress = new Uri(builder.H
 builder.Services.AddScoped<PaddocksideApi>();
 builder.Services.AddScoped<SessionState>();
 builder.Services.AddScoped<StaffRail>();
+builder.Services.AddScoped<MailoutSelection>();
 builder.Services.AddScoped<OwnerSessionState>();
 
 await builder.Build().RunAsync();

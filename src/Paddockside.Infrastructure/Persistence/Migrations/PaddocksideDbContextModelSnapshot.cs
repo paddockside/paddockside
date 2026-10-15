@@ -336,6 +336,9 @@ namespace Paddockside.Infrastructure.Persistence.Migrations
                     b.Property<string>("HtmlBody")
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<Guid?>("MailoutId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<int?>("MatchTier")
                         .HasColumnType("int");
 
@@ -403,6 +406,8 @@ namespace Paddockside.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("HorseId");
 
+                    b.HasIndex("MailoutId");
+
                     b.HasIndex("PartyId");
 
                     b.HasIndex("RoutingAddressId");
@@ -446,6 +451,156 @@ namespace Paddockside.Infrastructure.Persistence.Migrations
                         .IsUnique();
 
                     b.ToTable("ItemReads");
+                });
+
+            modelBuilder.Entity("Paddockside.Domain.Mailout", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Audience")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<string>("Body")
+                        .IsRequired()
+                        .HasMaxLength(20000)
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<Guid?>("HorseId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("SentBy")
+                        .IsRequired()
+                        .HasMaxLength(320)
+                        .HasColumnType("nvarchar(320)");
+
+                    b.Property<string>("Subject")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("HorseId");
+
+                    b.HasIndex("TenantId");
+
+                    b.ToTable("Mailouts");
+                });
+
+            modelBuilder.Entity("Paddockside.Domain.MailoutRecipient", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Address")
+                        .HasMaxLength(320)
+                        .HasColumnType("nvarchar(320)");
+
+                    b.Property<Guid>("MailoutId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<Guid>("PartyId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("ProviderMessageId")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<DateTimeOffset>("StatusAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Token")
+                        .IsRequired()
+                        .HasMaxLength(12)
+                        .HasColumnType("nvarchar(12)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PartyId");
+
+                    b.HasIndex("TenantId");
+
+                    b.HasIndex("Token")
+                        .IsUnique();
+
+                    b.HasIndex("MailoutId", "PartyId")
+                        .IsUnique();
+
+                    b.HasIndex("TenantId", "Status");
+
+                    b.ToTable("MailoutRecipients");
+                });
+
+            modelBuilder.Entity("Paddockside.Domain.MailoutReply", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Body")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("FromAddress")
+                        .IsRequired()
+                        .HasMaxLength(320)
+                        .HasColumnType("nvarchar(320)");
+
+                    b.Property<Guid>("InboundMessageId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("MailoutId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("PartyId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset>("ReceivedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<Guid>("RecipientId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Subject")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("InboundMessageId");
+
+                    b.HasIndex("MailoutId");
+
+                    b.HasIndex("PartyId");
+
+                    b.HasIndex("RecipientId");
+
+                    b.HasIndex("TenantId");
+
+                    b.ToTable("MailoutReplies");
                 });
 
             modelBuilder.Entity("Paddockside.Domain.ManagedInterest", b =>
@@ -761,6 +916,9 @@ namespace Paddockside.Infrastructure.Persistence.Migrations
 
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset?>("UnsubscribedAt")
+                        .HasColumnType("datetimeoffset");
 
                     b.HasKey("Id");
 
@@ -1295,6 +1453,11 @@ namespace Paddockside.Infrastructure.Persistence.Migrations
                         .HasForeignKey("HorseId")
                         .OnDelete(DeleteBehavior.Restrict);
 
+                    b.HasOne("Paddockside.Domain.Mailout", null)
+                        .WithMany()
+                        .HasForeignKey("MailoutId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("Paddockside.Domain.Party", null)
                         .WithMany()
                         .HasForeignKey("PartyId")
@@ -1376,6 +1539,74 @@ namespace Paddockside.Infrastructure.Persistence.Migrations
                     b.HasOne("Paddockside.Domain.StreamItem", null)
                         .WithMany()
                         .HasForeignKey("StreamItemId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Paddockside.Domain.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Paddockside.Domain.Mailout", b =>
+                {
+                    b.HasOne("Paddockside.Domain.Horse", null)
+                        .WithMany()
+                        .HasForeignKey("HorseId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Paddockside.Domain.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Paddockside.Domain.MailoutRecipient", b =>
+                {
+                    b.HasOne("Paddockside.Domain.Mailout", null)
+                        .WithMany()
+                        .HasForeignKey("MailoutId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Paddockside.Domain.Party", null)
+                        .WithMany()
+                        .HasForeignKey("PartyId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Paddockside.Domain.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Paddockside.Domain.MailoutReply", b =>
+                {
+                    b.HasOne("Paddockside.Domain.InboundMessage", null)
+                        .WithMany()
+                        .HasForeignKey("InboundMessageId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Paddockside.Domain.Mailout", null)
+                        .WithMany()
+                        .HasForeignKey("MailoutId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Paddockside.Domain.Party", null)
+                        .WithMany()
+                        .HasForeignKey("PartyId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Paddockside.Domain.MailoutRecipient", null)
+                        .WithMany()
+                        .HasForeignKey("RecipientId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 

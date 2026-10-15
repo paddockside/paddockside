@@ -39,7 +39,8 @@ public sealed partial class InboundProcessor(TenantScopedDb tenants, IOptions<Em
             message.Hold(spam, now);
         else if (AutomaticMail.Reason(headers, message.Subject, message.FromAddress) is { } automatic)
             message.Ignore(automatic, now);
-        else if (!await TryReplyTokenAsync(db, message, display, now, cancellationToken)
+        else if (!await TryMailoutReplyAsync(db, message, display, now, cancellationToken)
+                 && !await TryReplyTokenAsync(db, message, display, now, cancellationToken)
                  && !await TryHorseAddressAsync(db, message, display, now, cancellationToken))
         {
             await MatchAsync(db, message, display, now, cancellationToken);
@@ -50,6 +51,22 @@ public sealed partial class InboundProcessor(TenantScopedDb tenants, IOptions<Em
             await InboundMedia.AttachAsync(db, inbound, media, message, item, now, cancellationToken);
 
         await db.SaveChangesAsync(cancellationToken);
+    }
+
+    /// <summary>A reply to a mailout (m-{token}): kept under the mailout for staff, from exactly who it went to.</summary>
+    private async Task<bool> TryMailoutReplyAsync(PaddocksideDbContext db, InboundMessage message, string display, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        foreach (var token in (await OurAddressesAsync(db, message, cancellationToken)).Select(a => a.MailoutToken).OfType<string>())
+        {
+            var recipient = await db.MailoutRecipients.SingleOrDefaultAsync(r => r.Token == token, cancellationToken);
+            if (recipient is null) continue;
+            var mailout = await db.Mailouts.SingleAsync(m => m.Id == recipient.MailoutId, cancellationToken);
+            db.MailoutReplies.Add(new MailoutReply(recipient, message, display));
+            message.AnswerMailout(recipient, display, $"Reply to the mailout \"{mailout.Subject}\".", now);
+            return true;
+        }
+
+        return false;
     }
 
     private async Task<bool> TryReplyTokenAsync(PaddocksideDbContext db, InboundMessage message, string display, DateTimeOffset now, CancellationToken cancellationToken)

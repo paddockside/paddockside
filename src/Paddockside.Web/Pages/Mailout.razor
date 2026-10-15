@@ -1,0 +1,109 @@
+@page "/mailouts/{Id:guid}"
+@inject PaddocksideApi Api
+@inject SessionState Session
+@inject NavigationManager Navigation
+
+<PageTitle>@(_mailout?.Subject ?? "Mailout") · Paddockside</PageTitle>
+
+@*
+    One mailout: what it said, who it was for, how it did ("Sent to 212 · 198 delivered · 120 opened · 9 replied ·
+    5 left out"), every reply, and everyone it went to with what happened, the people left out first with why.
+*@
+<div class="grid max-w-4xl gap-6">
+    <a href="mailouts" class="btn-link justify-self-start">← Mailouts</a>
+
+    @if (_error is not null)
+    {
+        <Error Message="@_error" />
+    }
+    else if (_mailout is not { } m)
+    {
+        <p class="text-text-muted" role="status">Loading…</p>
+    }
+    else
+    {
+        <header class="grid gap-1">
+            <h1>@m.Subject</h1>
+            <p class="text-text-muted">To @m.Audience · sent @m.Sent by @m.SentBy</p>
+            @if (m.HorseId is { } horseId)
+            {
+                <p class="text-small">About <a href="horses/@horseId" class="underline underline-offset-4">@m.Horse</a></p>
+            }
+            <p class="font-strong">@m.Summary</p>
+        </header>
+
+        <section class="card grid gap-3" aria-labelledby="replies-heading">
+            <h2 id="replies-heading" class="text-title">Replies (@m.Replies.Count)</h2>
+            @if (m.Replies.Count == 0)
+            {
+                <p class="text-text-muted">No replies yet. They'll appear here as they come in.</p>
+            }
+            <ol class="grid">
+                @foreach (var reply in m.Replies)
+                {
+                    <li class="flex gap-3 border-t border-border-subtle py-3 first:border-t-0">
+                        <span aria-hidden="true" class="grid size-[36px] shrink-0 place-items-center rounded-pill bg-scope-owners-bg text-small font-heading text-scope-owners-fg">@Monograms.Of(reply.Name)</span>
+                        <div class="grid min-w-0 flex-1 gap-1">
+                            <p class="flex flex-wrap items-baseline gap-x-2">
+                                <a href="clients/@reply.PartyId" class="font-strong underline-offset-4 hover:underline">@reply.Name</a>
+                                <span class="text-small text-text-muted">@reply.At · @reply.From</span>
+                            </p>
+                            <p class="whitespace-pre-line break-words">@reply.Body</p>
+                        </div>
+                    </li>
+                }
+            </ol>
+        </section>
+
+        <details class="card">
+            <summary class="cursor-pointer font-strong">What it said</summary>
+            <div class="mt-3 whitespace-pre-line break-words">@m.Body</div>
+        </details>
+
+        <section class="card grid gap-3" aria-labelledby="who-heading">
+            <h2 id="who-heading" class="text-title">Who it went to (@m.Recipients.Count)</h2>
+            <table class="w-full border-collapse text-small">
+                <caption class="sr-only">Everyone this mailout was for, and what happened</caption>
+                <thead>
+                    <tr class="text-left text-text-muted">
+                        <th scope="col" class="py-2 pr-4 font-strong">Name</th>
+                        <th scope="col" class="py-2 pr-4 font-strong">What happened</th>
+                        <th scope="col" class="hidden py-2 font-strong sm:table-cell">When</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var r in m.Recipients)
+                    {
+                        <tr class="border-t border-border-subtle">
+                            <td class="py-2 pr-4"><a href="clients/@r.PartyId" class="underline-offset-4 hover:underline">@r.Name</a></td>
+                            <td class="py-2 pr-4 @(r.Status is "Bounced" ? "font-strong text-status-danger-fg" : r.Status is "Left out" ? "text-status-warning-fg" : null)">
+                                @r.Status@(r.Note is null ? null : $": {r.Note}")
+                            </td>
+                            <td class="hidden py-2 text-text-muted sm:table-cell">@r.At</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </section>
+    }
+</div>
+
+@code {
+    [Parameter] public Guid Id { get; set; }
+
+    private MailoutDetail? _mailout;
+    private string? _error;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (Session.Current is null && await Session.RefreshAsync() is null)
+        {
+            Navigation.NavigateTo("sign-in");
+            return;
+        }
+
+        var result = await Api.MailoutAsync(Id);
+        if (result.Succeeded) _mailout = result.Value;
+        else _error = result.Error;
+    }
+}

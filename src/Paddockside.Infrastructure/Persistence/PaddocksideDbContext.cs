@@ -45,6 +45,12 @@ public sealed class PaddocksideDbContext(DbContextOptions<PaddocksideDbContext> 
 
     public DbSet<ClientList> ClientLists => Set<ClientList>();
 
+    public DbSet<Mailout> Mailouts => Set<Mailout>();
+
+    public DbSet<MailoutRecipient> MailoutRecipients => Set<MailoutRecipient>();
+
+    public DbSet<MailoutReply> MailoutReplies => Set<MailoutReply>();
+
     public DbSet<RoutingAddress> RoutingAddresses => Set<RoutingAddress>();
 
     public DbSet<InboundMessage> InboundMessages => Set<InboundMessage>();

@@ -142,6 +142,8 @@ public sealed class FakeEmailSender : IEmailSender
 
     public bool IsConfigured => true;
 
+    public bool CanBroadcast { get; set; } = true;
+
     public IReadOnlyList<(OutboundEmail Email, string MessageId)> Sent => _sent.ToList();
 
     /// <summary>Addresses to reject permanently, as Postmark does for an inactive recipient.</summary>

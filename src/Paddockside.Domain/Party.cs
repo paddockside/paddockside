@@ -42,6 +42,17 @@ public sealed class Party
 
     public const int HowWeKnowThemLength = 300;
 
+    /// <summary>
+    /// They asked for no more mailouts (an unsubscribe link, or the one-click button in their mail app). Owner updates
+    /// about their own horses still come: those are the service, not promotion (messaging-channels.md §7).
+    /// </summary>
+    public DateTimeOffset? UnsubscribedAt { get; private set; }
+
+    public void Unsubscribe(DateTimeOffset at) => UnsubscribedAt ??= at;
+
+    /// <summary>They asked staff to be put back on (in words; staff record it).</summary>
+    public void Resubscribe() => UnsubscribedAt = null;
+
     /// <summary>A client added by staff: a prospect until they own part of a horse.</summary>
     public static Party Client(Guid tenantId, string name, string? howWeKnowThem, DateTimeOffset at)
     {

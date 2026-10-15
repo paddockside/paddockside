@@ -42,6 +42,7 @@ internal sealed class PartyConfiguration : IEntityTypeConfiguration<Party>
         b.HasIndex(x => x.PersonId);
         b.Property(x => x.HowWeKnowThem).HasMaxLength(Party.HowWeKnowThemLength);
         b.Property(x => x.AddedAt);
+        b.Property(x => x.UnsubscribedAt);
 
         // Contacts belong to their party (and its tenant filter); they are never queried on their own.
         b.OwnsMany(x => x.Contacts, c =>
@@ -58,6 +59,56 @@ internal sealed class PartyConfiguration : IEntityTypeConfiguration<Party>
             c.HasIndex(x => x.Value);
         });
         b.Navigation(x => x.Contacts).UsePropertyAccessMode(PropertyAccessMode.Field);
+    }
+}
+
+internal sealed class MailoutConfiguration : IEntityTypeConfiguration<Mailout>
+{
+    public void Configure(EntityTypeBuilder<Mailout> b)
+    {
+        b.MapTenantOwned();
+        b.Property(x => x.Subject).HasMaxLength(Mailout.SubjectLength);
+        b.Property(x => x.Body).HasMaxLength(Mailout.BodyLength);
+        b.Property(x => x.Audience).HasMaxLength(500);
+        b.Property(x => x.SentBy).HasMaxLength(320);
+        b.Property(x => x.CreatedAt);
+        b.HasOne<Horse>().WithMany().HasForeignKey(x => x.HorseId).OnDelete(DeleteBehavior.Restrict);
+    }
+}
+
+internal sealed class MailoutRecipientConfiguration : IEntityTypeConfiguration<MailoutRecipient>
+{
+    public void Configure(EntityTypeBuilder<MailoutRecipient> b)
+    {
+        b.MapTenantOwned();
+        b.Property(x => x.Token).HasMaxLength(12);
+        b.HasIndex(x => x.Token).IsUnique(); // a reply or an unsubscribe finds its recipient by this alone
+        b.Property(x => x.Status).AsString();
+        b.Property(x => x.StatusAt);
+        b.Property(x => x.Address).HasMaxLength(320);
+        b.Property(x => x.ProviderMessageId).HasMaxLength(100);
+        b.Property(x => x.Note).HasMaxLength(500);
+        b.HasIndex("TenantId", nameof(MailoutRecipient.Status));
+        b.HasIndex(x => new { x.MailoutId, x.PartyId }).IsUnique();
+        b.HasOne<Mailout>().WithMany().HasForeignKey(x => x.MailoutId).OnDelete(DeleteBehavior.Restrict);
+        b.HasOne<Party>().WithMany().HasForeignKey(x => x.PartyId).OnDelete(DeleteBehavior.Restrict);
+    }
+}
+
+internal sealed class MailoutReplyConfiguration : IEntityTypeConfiguration<MailoutReply>
+{
+    public void Configure(EntityTypeBuilder<MailoutReply> b)
+    {
+        b.MapTenantOwned();
+        b.Property(x => x.FromAddress).HasMaxLength(320);
+        b.Property(x => x.Subject).HasMaxLength(1000);
+        b.Property(x => x.Body);
+        b.Property(x => x.ReceivedAt);
+        b.HasIndex(x => x.MailoutId);
+        b.HasOne<Mailout>().WithMany().HasForeignKey(x => x.MailoutId).OnDelete(DeleteBehavior.Restrict);
+        b.HasOne<MailoutRecipient>().WithMany().HasForeignKey(x => x.RecipientId).OnDelete(DeleteBehavior.Restrict);
+        b.HasOne<Party>().WithMany().HasForeignKey(x => x.PartyId).OnDelete(DeleteBehavior.Restrict);
+        b.HasOne<InboundMessage>().WithMany().HasForeignKey(x => x.InboundMessageId).OnDelete(DeleteBehavior.Restrict);
     }
 }
 
@@ -422,6 +473,7 @@ internal sealed class InboundMessageConfiguration : IEntityTypeConfiguration<Inb
         // A webhook delivered twice is stored once.
         b.HasIndex("TenantId", nameof(InboundMessage.Provider), nameof(InboundMessage.ProviderMessageId)).IsUnique();
         b.HasIndex("TenantId", nameof(InboundMessage.State), nameof(InboundMessage.ReceivedAt));
+        b.HasOne<Mailout>().WithMany().HasForeignKey(x => x.MailoutId).OnDelete(DeleteBehavior.Restrict);
 
         b.HasOne<RoutingAddress>().WithMany().HasForeignKey(x => x.RoutingAddressId).OnDelete(DeleteBehavior.Restrict);
         b.HasOne<Party>().WithMany().HasForeignKey(x => x.PartyId).OnDelete(DeleteBehavior.Restrict);

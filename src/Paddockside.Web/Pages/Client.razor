@@ -126,6 +126,18 @@
             </section>
         }
 
+        @if (client.Unsubscribed is { } unsubscribed)
+        {
+            <section class="card grid gap-2" aria-labelledby="mailouts-heading">
+                <h2 id="mailouts-heading" class="text-title">Mailouts</h2>
+                <p>@unsubscribed. Updates about horses they own still reach them.</p>
+                @if (CanEdit)
+                {
+                    <button type="button" class="btn-secondary justify-self-start" disabled="@_busy" @onclick="ResubscribeAsync">Put them back on (they asked)</button>
+                }
+            </section>
+        }
+
         <section class="card grid gap-3" aria-labelledby="lists-heading">
             <h2 id="lists-heading" class="text-title">Lists</h2>
             @if (client.Lists.Count == 0)
@@ -221,6 +233,22 @@
             var result = await Api.ResendInvitationAsync(Id);
             if (!result.Succeeded) { _error = result.Error; return; }
             _message = $"Their invitation is on its way to {_client!.Email}.";
+            await LoadAsync();
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task ResubscribeAsync()
+    {
+        (_busy, _error, _message) = (true, null, null);
+        try
+        {
+            var result = await Api.ResubscribeAsync(Id);
+            if (!result.Succeeded) { _error = result.Error; return; }
+            _message = "They'll get mailouts again.";
             await LoadAsync();
         }
         finally

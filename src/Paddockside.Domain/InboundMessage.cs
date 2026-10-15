@@ -132,6 +132,9 @@ public sealed class InboundMessage
 
     public Guid? StreamItemId { get; private set; }
 
+    /// <summary>The mailout this answers, when it came to a mailout's reply address.</summary>
+    public Guid? MailoutId { get; private set; }
+
     /// <summary>The body as shown: quoted history and signatures removed.</summary>
     public string? DisplayBody { get; private set; }
 
@@ -156,6 +159,18 @@ public sealed class InboundMessage
         EventId = item.EventId;
         RoutingAddressId = routingAddressId;
         PartyId = partyId;
+        DisplayBody = displayBody;
+        Move(InboundState.Placed, reason, at);
+    }
+
+    /// <summary>A reply to a mailout (its <c>m-</c> address): it is shown under the mailout, not on a horse.</summary>
+    public void AnswerMailout(MailoutRecipient recipient, string displayBody, string reason, DateTimeOffset at)
+    {
+        if (State != InboundState.Received) throw new DomainException($"A {State} message cannot be placed.");
+        if (recipient.TenantId != TenantId) throw new DomainException("An inbound message is placed in its own tenant.");
+        MatchTier = 1;
+        MailoutId = recipient.MailoutId;
+        PartyId = recipient.PartyId;
         DisplayBody = displayBody;
         Move(InboundState.Placed, reason, at);
     }

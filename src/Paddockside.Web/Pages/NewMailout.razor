@@ -1,0 +1,190 @@
+@page "/mailouts/new"
+@inject PaddocksideApi Api
+@inject SessionState Session
+@inject MailoutSelection Selection
+@inject NavigationManager Navigation
+
+<PageTitle>New mailout · Paddockside</PageTitle>
+
+@*
+    Writing a mailout: who it goes to (lists, kinds of client, people ticked on the Clients page — any mix, each person
+    once), what it says, and the horse it's about if any. The count of who will get it, and who is left out and why
+    (unsubscribed, no email, bouncing), updates as you choose; sending asks once more with the number.
+*@
+<div class="grid max-w-3xl gap-6">
+    <a href="mailouts" class="btn-link justify-self-start">← Mailouts</a>
+    <h1>New mailout</h1>
+
+    <section class="card grid gap-4" aria-labelledby="who-heading">
+        <h2 id="who-heading" class="text-title">Who it goes to</h2>
+        @if (_lists is { Count: > 0 })
+        {
+            <fieldset class="grid gap-2">
+                <legend class="field-label mb-1">Lists</legend>
+                <div class="flex flex-wrap gap-x-5 gap-y-2">
+                    @foreach (var list in _lists)
+                    {
+                        <label class="inline-flex items-center gap-2">
+                            <input type="checkbox" class="size-[18px] accent-action-primary-bg" checked="@_listIds.Contains(list.Id)" @onchange="() => ToggleAsync(_listIds, list.Id)" />
+                            @list.Name <span class="text-small text-text-muted">(@list.Count)</span>
+                        </label>
+                    }
+                </div>
+            </fieldset>
+        }
+        <fieldset class="grid gap-2">
+            <legend class="field-label mb-1">Everyone who is a</legend>
+            <div class="flex flex-wrap gap-x-5 gap-y-2">
+                @foreach (var (status, label) in Kinds)
+                {
+                    <label class="inline-flex items-center gap-2">
+                        <input type="checkbox" class="size-[18px] accent-action-primary-bg" checked="@_statuses.Contains(status)" @onchange="() => ToggleAsync(_statuses, status)" />
+                        @label
+                    </label>
+                }
+            </div>
+        </fieldset>
+        @if (_people.Count > 0)
+        {
+            <fieldset class="grid gap-2">
+                <legend class="field-label mb-1">People you picked</legend>
+                <ul class="flex flex-wrap gap-2">
+                    @foreach (var person in _people)
+                    {
+                        <li class="inline-flex min-h-[36px] items-center gap-2 rounded-pill border border-border-strong bg-surface-sunken pl-3 pr-1 text-small">
+                            @person.Name
+                            <button type="button" class="grid size-[28px] place-items-center rounded-pill hover:bg-surface-raised" aria-label="Leave @person.Name out" @onclick="() => RemovePersonAsync(person.Id)">✕</button>
+                        </li>
+                    }
+                </ul>
+            </fieldset>
+        }
+        else
+        {
+            <p class="text-small text-text-muted">To pick people one by one, tick them on the <a href="clients" class="underline underline-offset-4">Clients</a> page and choose "Email these".</p>
+        }
+
+        @if (_preview is { } preview)
+        {
+            <div class="rounded-control bg-surface-sunken px-4 py-3" role="status">
+                <p class="font-strong">@(preview.Sending == 1 ? "1 person" : $"{preview.Sending} people") will get it</p>
+                @if (preview.LeftOut.Count > 0)
+                {
+                    <p class="text-small text-text-muted">Left out: @string.Join(", ", preview.LeftOut.Select(r => $"{r.Count} {r.Why.ToLowerInvariant()}"))</p>
+                }
+            </div>
+        }
+    </section>
+
+    <form class="card grid gap-4" @onsubmit="SendAsync" @onsubmit:preventDefault aria-labelledby="what-heading">
+        <h2 id="what-heading" class="text-title">What it says</h2>
+        <div class="field">
+            <label class="field-label" for="mailout-subject">Subject</label>
+            <input id="mailout-subject" class="input" maxlength="150" @bind="_subject" placeholder="We've bought a colt at Easter" />
+        </div>
+        <div class="field">
+            <label class="field-label" for="mailout-body">Message</label>
+            <textarea id="mailout-body" class="input min-h-[14rem] py-3" @bind="_body" placeholder="Leave a blank line between paragraphs."></textarea>
+            <span class="field-hint">It starts "Hi {first name}," and ends with your business details and an unsubscribe link. Replies come back to this mailout's page.</span>
+        </div>
+        <div class="field max-w-md">
+            <label class="field-label" for="mailout-horse">About a horse (optional)</label>
+            <select id="mailout-horse" class="input" @bind="_horse">
+                <option value="">Not about one horse</option>
+                @foreach (var horse in _horses)
+                {
+                    <option value="@horse.Id">@horse.Name</option>
+                }
+            </select>
+        </div>
+
+        @if (_error is not null)
+        {
+            <p class="alert-danger" role="alert">@_error</p>
+        }
+
+        @if (_confirming && _preview is { } p)
+        {
+            <div class="grid gap-3 rounded-control border border-action-primary-bg bg-scope-owners-bg px-4 py-3 text-scope-owners-fg">
+                <p class="font-strong">Send "@_subject" to @(p.Sending == 1 ? "1 person" : $"{p.Sending} people") now?</p>
+                <div class="flex flex-wrap gap-3">
+                    <button type="submit" class="btn-primary" disabled="@_busy">Yes, send it</button>
+                    <button type="button" class="btn-secondary" @onclick="() => _confirming = false">Not yet</button>
+                </div>
+            </div>
+        }
+        else
+        {
+            <button type="button" class="btn-primary justify-self-start" disabled="@(_preview is not { Sending: > 0 })" @onclick="Confirm">Send…</button>
+        }
+    </form>
+</div>
+
+@code {
+    private static readonly (string Status, string Label)[] Kinds = [("Current owner", "Current owner"), ("Past owner", "Past owner"), ("Prospect", "Prospect")];
+
+    private List<ClientListView>? _lists;
+    private List<HorseSummary> _horses = [];
+    private readonly HashSet<Guid> _listIds = [];
+    private readonly HashSet<string> _statuses = [];
+    private List<(Guid Id, string Name)> _people = [];
+    private MailoutPreview? _preview;
+    private string? _subject, _body, _horse, _error;
+    private bool _confirming, _busy;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (Session.Current is null && await Session.RefreshAsync() is null)
+        {
+            Navigation.NavigateTo("sign-in");
+            return;
+        }
+
+        _people = Selection.Take();
+        _lists = (await Api.ClientListsAsync()).Value ?? [];
+        _horses = (await Api.HorsesAsync()).Value ?? [];
+        await PreviewAsync();
+    }
+
+    private async Task ToggleAsync<T>(HashSet<T> set, T value)
+    {
+        if (!set.Remove(value)) set.Add(value);
+        _confirming = false;
+        await PreviewAsync();
+    }
+
+    private async Task RemovePersonAsync(Guid id)
+    {
+        _people = _people.Where(p => p.Id != id).ToList();
+        _confirming = false;
+        await PreviewAsync();
+    }
+
+    private async Task PreviewAsync()
+    {
+        if (_listIds.Count == 0 && _statuses.Count == 0 && _people.Count == 0) { _preview = null; return; }
+        var result = await Api.PreviewMailoutAsync(_listIds, _statuses, _people.Select(p => p.Id));
+        _preview = result.Value;
+    }
+
+    private void Confirm()
+    {
+        _error = string.IsNullOrWhiteSpace(_subject) ? "Give it a subject." : string.IsNullOrWhiteSpace(_body) ? "Write the message first." : null;
+        _confirming = _error is null;
+    }
+
+    private async Task SendAsync()
+    {
+        (_busy, _error) = (true, null);
+        try
+        {
+            var result = await Api.SendMailoutAsync(_subject ?? "", _body ?? "", _listIds, _statuses, _people.Select(p => p.Id), Guid.TryParse(_horse, out var h) ? h : null);
+            if (!result.Succeeded) { (_error, _confirming) = (result.Error, false); return; }
+            Navigation.NavigateTo($"mailouts/{result.Value!.Id}");
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}

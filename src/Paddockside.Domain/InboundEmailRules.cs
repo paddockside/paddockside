@@ -4,7 +4,7 @@ namespace Paddockside.Domain;
 
 /// <summary>
 /// An address on the inbound subdomain, read back (messaging-channels.md §3.1):
-/// <c>r-{token}@{tenant}.in.…</c> is a recipient's reply (tier 1), <c>{horse-slug}@{tenant}.in.…</c> a horse's inbox
+/// <c>r-{token}@{tenant}.in.…</c> is a recipient's reply (tier 1), <c>m-{token}@…</c> a reply to a mailout, <c>{horse-slug}@{tenant}.in.…</c> a horse's inbox
 /// (tier 2), and <c>{tenant}@in.…</c> the tenant's catch-all.
 /// </summary>
 public sealed record InboundAddress(string Address, string TenantSlug, string? LocalPart)
@@ -28,8 +28,12 @@ public sealed record InboundAddress(string Address, string TenantSlug, string? L
     public string? RecipientToken =>
         LocalPart is { } local && local.StartsWith("r-", StringComparison.Ordinal) && RoutingToken.IsWellFormed(local[2..]) ? local[2..] : null;
 
+    /// <summary>A mailout reply's token, when the local part is a well-formed <c>m-{token}</c>.</summary>
+    public string? MailoutToken =>
+        LocalPart is { } local && local.StartsWith("m-", StringComparison.Ordinal) && RoutingToken.IsWellFormed(local[2..]) ? local[2..] : null;
+
     /// <summary>The horse slug, when the local part could be one and is not a reply token.</summary>
-    public string? HorseSlugPart => RecipientToken is null && HorseSlug.IsWellFormed(LocalPart) ? LocalPart : null;
+    public string? HorseSlugPart => RecipientToken is null && MailoutToken is null && HorseSlug.IsWellFormed(LocalPart) ? LocalPart : null;
 }
 
 /// <summary>

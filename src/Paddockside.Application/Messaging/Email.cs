@@ -12,7 +12,9 @@ public sealed record OutboundEmail(
     string HtmlBody,
     string TextBody,
     IReadOnlyDictionary<string, string> Metadata,
-    bool TrackOpens = true);
+    bool TrackOpens = true,
+    bool Broadcast = false,
+    IReadOnlyDictionary<string, string>? Headers = null);
 
 /// <summary>
 /// Who an email says it is from. The tenant sends through Paddockside's domain, so the name says both:
@@ -40,6 +42,12 @@ public interface IEmailSender
 {
     /// <summary>False when no provider credentials are configured: nothing can be sent.</summary>
     bool IsConfigured { get; }
+
+    /// <summary>
+    /// Whether promotional email (a mailout) can be sent: it needs the provider's broadcast stream, kept apart from
+    /// owner updates so a complaint about a newsletter never puts the updates at risk.
+    /// </summary>
+    bool CanBroadcast { get; }
 
     Task<EmailSendResult> SendAsync(OutboundEmail email, CancellationToken cancellationToken);
 }
@@ -112,4 +120,13 @@ public static class EmailAddresses
         var topLevel = domain[(domain.LastIndexOf('.') + 1)..];
         return !ReservedTopLevel.Contains(topLevel) && !ReservedDomains.Any(d => domain == d || domain.EndsWith("." + d, StringComparison.Ordinal));
     }
+}
+
+/// <summary>
+/// A mailout recipient's unsubscribe link: <c>{app}/u/{tenant slug}/{token}</c>. It opens a page on the app, not the
+/// portal: most people on a mailing list have no portal account. The one-click header points at the same address.
+/// </summary>
+public static class Unsubscribe
+{
+    public static string Link(string baseUrl, string tenantSlug, string token) => $"{baseUrl.TrimEnd('/')}/u/{tenantSlug}/{token}";
 }

@@ -2,6 +2,7 @@
 @inject PaddocksideApi Api
 @inject SessionState Session
 @inject NavigationManager Navigation
+@inject MailoutSelection Selection
 
 <PageTitle>Clients · Paddockside</PageTitle>
 
@@ -174,6 +175,7 @@
                 {
                     <button type="button" class="btn-secondary min-h-[36px] px-4" disabled="@_busy" @onclick="RemoveFromListAsync">Take off "@shown.Name"</button>
                 }
+                <button type="button" class="btn-secondary min-h-[36px] px-4" @onclick="EmailThese">Email these</button>
                 <button type="button" class="ml-auto text-small underline underline-offset-4" @onclick="() => _selected.Clear()">Clear</button>
             </div>
         }
@@ -336,6 +338,13 @@
         {
             _busy = false;
         }
+    }
+
+    /// <summary>A mailout to the people ticked: on to the new mailout page with them.</summary>
+    private void EmailThese()
+    {
+        Selection.Set(_clients!.Where(c => _selected.Contains(c.Id)).Select(c => (c.Id, c.Name)));
+        Navigation.NavigateTo("mailouts/new");
     }
 
     private async Task RemoveFromListAsync()

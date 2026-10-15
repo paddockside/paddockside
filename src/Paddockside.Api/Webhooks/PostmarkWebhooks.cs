@@ -103,6 +103,14 @@ public static class PostmarkWebhooks
             var recordType = Text(root, "RecordType");
             var messageId = Text(root, "MessageID");
             var metadata = root.TryGetProperty("Metadata", out var m) && m.ValueKind == JsonValueKind.Object ? m : default;
+            if (recordType is not null && messageId is not null
+                && Guid.TryParse(Text(metadata, "tenantId"), out var mailoutTenantId)
+                && Guid.TryParse(Text(metadata, "mailoutRecipientId"), out var recipientId))
+            {
+                await RecordMailoutAsync(root, recordType, messageId, mailoutTenantId, recipientId, tenants, clock, logger, cancellationToken);
+                return Results.Ok();
+            }
+
             if (recordType is null || messageId is null
                 || !Guid.TryParse(Text(metadata, "tenantId"), out var tenantId)
                 || !Guid.TryParse(Text(metadata, "deliveryId"), out var deliveryId))
@@ -148,6 +156,51 @@ public static class PostmarkWebhooks
             await db.SaveChangesAsync(cancellationToken);
             return Results.Ok();
         }
+    }
+
+    /// <summary>
+    /// What happened to one mailout email. A hard bounce stops email to the address, as for owner updates; marking a
+    /// mailout as spam also unsubscribes them from mailouts, which is what they meant.
+    /// </summary>
+    private static async Task RecordMailoutAsync(JsonElement root, string recordType, string messageId, Guid tenantId, Guid recipientId, TenantScopedDb tenants,
+        TimeProvider clock, ILogger logger, CancellationToken cancellationToken)
+    {
+        await using var db = tenants.For(tenantId);
+        var recipient = await db.MailoutRecipients.SingleOrDefaultAsync(r => r.Id == recipientId && r.ProviderMessageId == messageId, cancellationToken);
+        if (recipient is null)
+        {
+            logger.LogWarning("Postmark {RecordType} for message {MessageId} matched no mailout recipient; ignored.", recordType, messageId);
+            return;
+        }
+
+        var at = Time(root, "DeliveredAt") ?? Time(root, "ReceivedAt") ?? Time(root, "BouncedAt") ?? clock.GetUtcNow();
+        var party = await db.Parties.SingleAsync(p => p.Id == recipient.PartyId, cancellationToken);
+        switch (recordType)
+        {
+            case "Delivery":
+                recipient.Record(MailoutRecipientStatus.Delivered, at);
+                break;
+            case "Open":
+                recipient.Record(MailoutRecipientStatus.Opened, at);
+                break;
+            case "Bounce":
+                var hard = Text(root, "Type") == "HardBounce"
+                           || (root.TryGetProperty("TypeCode", out var code) && code.TryGetInt32(out var c) && c == 1)
+                           || (root.TryGetProperty("Inactive", out var inactive) && inactive.ValueKind == JsonValueKind.True);
+                if (!hard) break;
+                recipient.Record(MailoutRecipientStatus.Bounced, at, $"Bounced: {Text(root, "Description") ?? "the address does not accept mail"}");
+                if (recipient.Address is { } address) party.MarkUndeliverable(address, at);
+                break;
+            case "SpamComplaint":
+                recipient.Record(MailoutRecipientStatus.Bounced, at, "Marked as spam; unsubscribed from mailouts.");
+                party.Unsubscribe(at);
+                break;
+            case "SubscriptionChange":
+                if (root.TryGetProperty("SuppressSending", out var suppress) && suppress.ValueKind == JsonValueKind.True) party.Unsubscribe(at);
+                break;
+        }
+
+        await db.SaveChangesAsync(cancellationToken);
     }
 
     private static async Task MarkUndeliverable(PaddocksideDbContext db, Delivery delivery, DateTimeOffset at, CancellationToken cancellationToken)

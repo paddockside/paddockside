@@ -224,8 +224,29 @@ public sealed class OwnerEmailRenderer
         $"<p style=\"margin:{T.Space2} 0 {T.Space6};\"><a href=\"{E(href)}\" style=\"display:inline-block;padding:{T.Space3} {T.Space6};min-height:24px;" +
         $"background:{T.ColorActionPrimaryBg};color:{T.ColorActionPrimaryFg};border-radius:{T.RadiusControl};text-decoration:none;font-weight:700;\">{E(label)}</a></p>";
 
+    /// <summary>
+    /// A mailout to one client: the business's own email, with a reply that comes back to the mailout and an
+    /// unsubscribe link in the footer (messaging-channels.md §7). No portal link: most people on a list have none.
+    /// </summary>
+    public RenderedEmail RenderMailout(Tenant tenant, Mailout mailout, Party recipient, string unsubscribeLink)
+    {
+        var replyLine = $"Reply to this email and it goes to {tenant.Name}.";
+        var whyLine = $"You are receiving this because you are on {tenant.Name}'s mailing list.";
+        var html = new StringBuilder();
+        html.Append(Heading(mailout.Subject));
+        html.Append(Paragraph($"Hi {recipient.FirstName},"));
+        foreach (var paragraph in Paragraphs(mailout.Body)) html.Append(Paragraph(paragraph));
+
+        var text = new StringBuilder().AppendLine(mailout.Subject).AppendLine().AppendLine($"Hi {recipient.FirstName},").AppendLine();
+        foreach (var paragraph in Paragraphs(mailout.Body)) text.AppendLine(paragraph).AppendLine();
+
+        return new RenderedEmail(mailout.Subject,
+            Frame(tenant.Name, tenant.LogoUrl, tenant.FooterDetails, mailout.Subject, Preview(mailout.Body), html.ToString(), replyLine, whyLine, unsubscribeLink: unsubscribeLink),
+            TextFrame(text.ToString(), replyLine, tenant.Name, tenant.FooterDetails, whyLine, unsubscribeLink: unsubscribeLink));
+    }
+
     private static string Frame(string sender, string? logoUrl, string? footerDetails, string title, string preview, string content, string? replyLine, string whyLine,
-        string? choicesLink = null)
+        string? choicesLink = null, string? unsubscribeLink = null)
     {
         var brand = logoUrl is { } logo
             ? $"<img src=\"{E(logo)}\" alt=\"{E(sender)}\" height=\"40\" style=\"display:block;height:40px;max-width:200px;border:0;\">"
@@ -255,7 +276,7 @@ public sealed class OwnerEmailRenderer
               </table>
               <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;">
                 <tr><td style="padding:{T.Space4} {T.Space2};{Font};font-size:{T.TextSizeSmall};line-height:{T.LeadingSmall};color:{T.ColorTextMuted};">
-                  <strong>{E(sender)}</strong>{(footerDetails is { } details ? $"<br>{E(details)}" : "")}<br>{E(whyLine)}{(choicesLink is { } choices ? $"<br><a href=\"{E(choices)}\" style=\"color:{T.ColorTextMuted};\">Choose what you're sent</a>" : "")}
+                  <strong>{E(sender)}</strong>{(footerDetails is { } details ? $"<br>{E(details)}" : "")}<br>{E(whyLine)}{(choicesLink is { } choices ? $"<br><a href=\"{E(choices)}\" style=\"color:{T.ColorTextMuted};\">Choose what you're sent</a>" : "")}{(unsubscribeLink is { } unsubscribe ? $"<br><a href=\"{E(unsubscribe)}\" style=\"color:{T.ColorTextMuted};\">Unsubscribe from these emails</a>" : "")}
                 </td></tr>
               </table>
             </td></tr>
@@ -265,7 +286,8 @@ public sealed class OwnerEmailRenderer
             """;
     }
 
-    private static string TextFrame(string content, string? replyLine, string sender, string? footerDetails, string whyLine, string? choicesLink = null)
+    private static string TextFrame(string content, string? replyLine, string sender, string? footerDetails, string whyLine, string? choicesLink = null,
+        string? unsubscribeLink = null)
     {
         var text = new StringBuilder(content);
         if (replyLine is not null) text.AppendLine(replyLine).AppendLine();
@@ -273,6 +295,7 @@ public sealed class OwnerEmailRenderer
         if (footerDetails is { } details) text.AppendLine(details);
         text.AppendLine(whyLine);
         if (choicesLink is not null) text.AppendLine($"Choose what you're sent: {choicesLink}");
+        if (unsubscribeLink is not null) text.AppendLine($"Unsubscribe from these emails: {unsubscribeLink}");
         return text.ToString();
     }
 

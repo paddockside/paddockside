@@ -32,7 +32,7 @@ public static class ClientEndpoints
     /// <param name="Invitation">Where their portal invitation is up to, in words; null for someone with nothing to be invited to.</param>
     public sealed record ClientDetail(Guid Id, string Name, string? Email, string? Mobile, string? HowWeKnowThem, string Status, string? Added, bool SignedIn,
         bool EmailBounced, string? Invitation, bool CanResend, IReadOnlyList<ClientHorse> CurrentHorses, IReadOnlyList<ClientHorse> PastHorses,
-        IReadOnlyList<ListRef> Lists);
+        IReadOnlyList<ListRef> Lists, string? Unsubscribed = null);
 
     public sealed record ClientRequest(string Name, string? Email, string? Mobile, string? HowWeKnowThem, IReadOnlyList<Guid>? ListIds = null);
 
@@ -54,6 +54,7 @@ public static class ClientEndpoints
         clients.MapGet("/{id:guid}", Get);
         clients.MapPut("/{id:guid}", Update);
         clients.MapPost("/{id:guid}/invitation", Resend);
+        clients.MapPost("/{id:guid}/resubscribe", Resubscribe);
 
         var lists = app.MapGroup("/api/client-lists").RequireAuthorization(StaffPolicy.Name);
         lists.MapGet("/", Lists);
@@ -107,7 +108,8 @@ public static class ClientEndpoints
             invitationWords, party.PersonId is null && standing.Status == CurrentOwner && party.PrimaryEmail is not null,
             standing.Current.Select(h => new ClientHorse(h.HorseId, h.Name, h.Share, $"since {Words.Day(h.At, now)}")).ToList(),
             standing.Past.Select(h => new ClientHorse(h.HorseId, h.Name, h.Share, $"until {Words.Day(h.At, now)}")).ToList(),
-            world.Lists.Where(l => l.Members.Any(m => m.PartyId == id)).OrderBy(l => l.Name).Select(l => new ListRef(l.Id, l.Name)).ToList()));
+            world.Lists.Where(l => l.Members.Any(m => m.PartyId == id)).OrderBy(l => l.Name).Select(l => new ListRef(l.Id, l.Name)).ToList(),
+            party.UnsubscribedAt is { } gone ? $"Unsubscribed from mailouts {Words.Recently(gone, now).ToLowerInvariant()}" : null));
     }
 
     /// <summary>A prospect, or anyone not yet here: someone already known by their email is not added twice.</summary>
@@ -198,6 +200,19 @@ public static class ClientEndpoints
         await db.SaveChangesAsync(cancellationToken);
         await audit.RecordAsync(party.TenantId, "client.invited", $"Sent {party.DisplayName}'s portal invitation again, to {party.PrimaryEmail.Value}",
             "Party", id, cancellationToken: cancellationToken);
+        return Results.NoContent();
+    }
+
+    /// <summary>They asked to be put back on mailouts (staff record it; nobody else can).</summary>
+    private static async Task<IResult> Resubscribe(Guid id, ClaimsPrincipal user, PaddocksideDbContext db, AuditLog audit, CancellationToken cancellationToken)
+    {
+        if (!CanEdit.Contains(user.FindFirstValue(SessionClaims.Role)))
+            return Results.Problem(statusCode: StatusCodes.Status403Forbidden, title: "Your role can see clients but not change them.");
+        var party = await db.Parties.SingleOrDefaultAsync(p => p.Id == id, cancellationToken);
+        if (party is null) return Results.NotFound();
+        party.Resubscribe();
+        await db.SaveChangesAsync(cancellationToken);
+        await audit.RecordAsync(party.TenantId, "client.resubscribed", $"{party.DisplayName} put back on mailouts, at their request", "Party", id, cancellationToken: cancellationToken);
         return Results.NoContent();
     }
 
@@ -332,6 +347,21 @@ public static class ClientEndpoints
         var horses = await db.Horses.AsNoTracking().Include(h => h.ManagementPeriods).Include(h => h.Interests).AsSplitQuery().ToListAsync(cancellationToken);
         var lists = await db.ClientLists.AsNoTracking().ToListAsync(cancellationToken);
         return new World(parties, horses, lists);
+    }
+
+    /// <summary>
+    /// Who a set of lists, kinds of client and people picked by hand comes to, once each: the people for a mailout.
+    /// The house share is never one of them.
+    /// </summary>
+    internal static async Task<List<Party>> ChooseAsync(PaddocksideDbContext db, IReadOnlyCollection<Guid> listIds, IReadOnlyCollection<string> statuses,
+        IReadOnlyCollection<Guid> clientIds, CancellationToken cancellationToken)
+    {
+        var world = await WorldAsync(db, cancellationToken);
+        var onLists = world.Lists.Where(l => listIds.Contains(l.Id)).SelectMany(l => l.Members).Select(m => m.PartyId).ToHashSet();
+        return world.Clients
+            .Where(p => onLists.Contains(p.Id) || clientIds.Contains(p.Id) || (statuses.Count > 0 && statuses.Contains(world.Standing(p.Id).Status)))
+            .OrderBy(p => p.DisplayName, StringComparer.OrdinalIgnoreCase)
+            .ToList();
     }
 
     private static async Task<Party?> ByEmailAsync(PaddocksideDbContext db, string email, Guid? except, CancellationToken cancellationToken) =>

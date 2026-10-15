@@ -107,6 +107,9 @@ public sealed class IsolationDatabase : IAsyncLifetime
         var prospects = new ClientList(tenant.Id, $"{name} prospects", bought);
         prospects.Add([ann, eve], bought);
         context.Add(prospects);
+        var mailout = new Mailout(tenant.Id, $"{name} news", "Season news.", $"{name} prospects", "Staff", bought);
+        var mailed = new MailoutRecipient(mailout, ann, RoutingToken.New(), bought);
+        context.AddRange(mailout, mailed, new MailoutReply(mailed, inbound, "Thanks!"));
         context.AddRange(deliveries);
         await context.SaveChangesAsync();
 

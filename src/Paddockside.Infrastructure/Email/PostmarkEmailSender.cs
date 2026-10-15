@@ -26,6 +26,12 @@ public sealed class PostmarkOptions
 
     /// <summary>The transactional stream.</summary>
     public string MessageStream { get; set; } = "outbound";
+
+    /// <summary>
+    /// The broadcast stream for mailouts (Postmark: Servers → your server → Message Streams → Broadcasts). Unset, no
+    /// mailout can be sent: Postmark doesn't allow promotional email on the transactional stream.
+    /// </summary>
+    public string? BroadcastStream { get; set; }
 }
 
 /// <summary>Sends through Postmark's single-email API. Reports provider errors rather than throwing.</summary>
@@ -40,9 +46,12 @@ public sealed class PostmarkEmailSender(HttpClient http, IOptions<PostmarkOption
 
     public bool IsConfigured => !string.IsNullOrWhiteSpace(options.Value.ServerToken);
 
+    public bool CanBroadcast => IsConfigured && !string.IsNullOrWhiteSpace(options.Value.BroadcastStream);
+
     public async Task<EmailSendResult> SendAsync(OutboundEmail email, CancellationToken cancellationToken)
     {
         if (!IsConfigured) return EmailSendResult.Failed("Email is not configured (no Postmark server token).", permanent: false);
+        if (email.Broadcast && !CanBroadcast) return EmailSendResult.Failed("Mailouts need Postmark's broadcast stream, which isn't set up.", permanent: false);
 
         using var request = new HttpRequestMessage(HttpMethod.Post, "email")
         {
@@ -54,9 +63,10 @@ public sealed class PostmarkEmailSender(HttpClient http, IOptions<PostmarkOption
                 email.Subject,
                 email.HtmlBody,
                 email.TextBody,
-                options.Value.MessageStream,
+                email.Broadcast ? options.Value.BroadcastStream! : options.Value.MessageStream,
                 email.TrackOpens,
-                email.Metadata)),
+                email.Metadata,
+                email.Headers?.Select(h => new PostmarkHeader(h.Key, h.Value)).ToList())),
         };
         request.Headers.Add("X-Postmark-Server-Token", options.Value.ServerToken);
         request.Headers.Accept.ParseAdd("application/json");
@@ -94,7 +104,10 @@ public sealed class PostmarkEmailSender(HttpClient http, IOptions<PostmarkOption
         string TextBody,
         string MessageStream,
         bool TrackOpens,
-        IReadOnlyDictionary<string, string> Metadata);
+        IReadOnlyDictionary<string, string> Metadata,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<PostmarkHeader>? Headers);
+
+    private sealed record PostmarkHeader(string Name, string Value);
 
     private sealed record PostmarkResponse(
         [property: JsonPropertyName("ErrorCode")] int ErrorCode,

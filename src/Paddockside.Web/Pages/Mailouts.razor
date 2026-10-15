@@ -1,0 +1,72 @@
+@page "/mailouts"
+@inject PaddocksideApi Api
+@inject SessionState Session
+@inject NavigationManager Navigation
+
+<PageTitle>Mailouts · Paddockside</PageTitle>
+
+@*
+    Mailouts: emails to lists and kinds of client (newsletters, share offers), newest first, with how each did.
+    Each opens its own page of who it went to and every reply.
+*@
+<div class="grid gap-6">
+    <div class="flex flex-wrap items-center justify-between gap-3">
+        <h1>Mailouts</h1>
+        @if (Session.Current?.Role is "Coordinator" or "Manager" or "TenantAdmin")
+        {
+            <a href="mailouts/new" class="btn-primary">New mailout</a>
+        }
+    </div>
+
+    @if (_error is not null)
+    {
+        <Error Message="@_error" />
+    }
+    else if (_mailouts is null)
+    {
+        <p class="text-text-muted" role="status">Loading…</p>
+    }
+    else if (_mailouts.Count == 0)
+    {
+        <div class="card grid gap-2">
+            <p>No mailouts yet.</p>
+            <p class="text-small text-text-muted">A mailout is an email to a list or a kind of client: season news, or shares in a new purchase. Everyone gets an unsubscribe link, and replies come back here.</p>
+        </div>
+    }
+    else
+    {
+        <ul class="card grid !p-0">
+            @foreach (var m in _mailouts)
+            {
+                <li class="border-b border-border-subtle last:border-b-0">
+                    <a href="mailouts/@m.Id" class="grid gap-1 px-4 py-3 hover:bg-surface-sunken">
+                        <span class="flex flex-wrap items-baseline justify-between gap-x-4">
+                            <span class="font-strong">@m.Subject</span>
+                            <span class="text-small text-text-muted">@m.Sent</span>
+                        </span>
+                        <span class="text-small text-text-muted">To @m.Audience@(m.Horse is null ? null : $" · about {m.Horse}") · by @m.SentBy</span>
+                        <span class="text-small">@m.Recipients sent · @m.Delivered delivered · @m.Opened opened · <span class="@(m.Replies > 0 ? "font-strong" : null)">@m.Replies @(m.Replies == 1 ? "reply" : "replies")</span></span>
+                    </a>
+                </li>
+            }
+        </ul>
+    }
+</div>
+
+@code {
+    private List<MailoutSummary>? _mailouts;
+    private string? _error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (Session.Current is null && await Session.RefreshAsync() is null)
+        {
+            Navigation.NavigateTo("sign-in");
+            return;
+        }
+
+        var result = await Api.MailoutsAsync();
+        if (result.Succeeded) _mailouts = result.Value;
+        else _error = result.Error;
+    }
+}
