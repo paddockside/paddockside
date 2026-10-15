@@ -41,7 +41,10 @@ else
                         <h1 class="text-heading font-heading leading-tight">@ev.Title</h1>
                         <p class="text-text-muted">@HeaderDetail</p>
                     </div>
-                    <span class="badge @StatusClasses(ev.Status) py-1">@ev.Status</span>
+                    <div class="flex flex-wrap items-center gap-3">
+                        <span class="badge @StatusClasses(ev.Status) py-1">@ev.Status</span>
+                        <a href="events/@Id/as-owner" class="btn-secondary min-h-[36px] px-4">View as an owner</a>
+                    </div>
                 </div>
 
                 @if (ev.Steps.Count > 0)
@@ -246,7 +249,6 @@ else
                     </ul>
                 </section>
             }
-            <a href="events/@Id/as-owner" class="btn-secondary w-full">View as an owner</a>
         </aside>
     </div>
 }
