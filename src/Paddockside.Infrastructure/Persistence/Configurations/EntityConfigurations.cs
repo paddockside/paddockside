@@ -238,6 +238,25 @@ internal sealed class DeliveryConfiguration : IEntityTypeConfiguration<Delivery>
     }
 }
 
+internal sealed class MediaAssetConfiguration : IEntityTypeConfiguration<MediaAsset>
+{
+    public void Configure(EntityTypeBuilder<MediaAsset> b)
+    {
+        b.MapTenantOwned();
+        b.Property(x => x.Kind).AsString();
+        b.Property(x => x.FileName).HasMaxLength(200);
+        b.Property(x => x.ContentType).HasMaxLength(100);
+        b.Property(x => x.BlobName).HasMaxLength(300);
+        b.Property(x => x.Length);
+        b.Property(x => x.CreatedAt);
+        b.HasIndex(x => new { x.TenantId, x.StreamItemId });
+        b.HasIndex(x => new { x.TenantId, x.HorseId, x.CreatedAt });
+
+        b.HasOne<StreamItem>().WithMany().HasForeignKey(x => x.StreamItemId).OnDelete(DeleteBehavior.Restrict);
+        b.HasOne<Horse>().WithMany().HasForeignKey(x => x.HorseId).OnDelete(DeleteBehavior.Restrict);
+    }
+}
+
 internal sealed class TicketAllocationConfiguration : IEntityTypeConfiguration<TicketAllocation>
 {
     public void Configure(EntityTypeBuilder<TicketAllocation> b)

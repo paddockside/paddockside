@@ -86,10 +86,11 @@ public static class NotificationCategories
 
     /// <summary>
     /// The category of a message, from the step it belongs to (event-library.md steps). A message on no step is a
-    /// stable update; on a care event it is care news.
+    /// stable update; on a care event it is care news. Photos, video and voice notes are "new photos and videos".
     /// </summary>
     public static NotificationCategory For(StreamItem message, Event? @event) => Find(message.StepCode switch
     {
+        _ when message.Kind == StreamItemKind.Media => Media,
         "NOM_FACT" or "TRIAL_ENTRY" => Entries,
         "ACC_FACT" or "BARRIER" => Acceptances,
         "TICKETS" or "TICKETS_CONFIRM" or "STAFF_PRE" => RaceDayArrangements,

@@ -36,7 +36,7 @@ public static class OwnerEndpoints
     /// <param name="Mine">Something they wrote themselves ("Contact {tenant}"), shown as theirs.</param>
     public sealed record OwnerItem(Guid Id, string Kind, string At, string? Title, string Body, string? Author, string? Source,
         IReadOnlyList<OwnerField> Fields, string? Corrected, IReadOnlyList<OwnerReply> Replies, bool CanReply, bool Unread, bool Mine,
-        OwnerPrompt? Prompt = null);
+        OwnerPrompt? Prompt = null, IReadOnlyList<Events.EventEndpoints.MediaView>? Media = null);
 
     /// <summary>The message's question, the buttons to answer it, and their own answer so far.</summary>
     public sealed record OwnerPrompt(string Kind, string Question, IReadOnlyList<string> Answers, string? Mine);
@@ -221,6 +221,9 @@ public static class OwnerEndpoints
             .ToDictionaryAsync(a => a.StreamItemId, a => a.Value, cancellationToken);
         var read = await ReadAsync(db, party.Id, cancellationToken);
         var byId = items.ToDictionary(i => i.Id);
+        var visibleIds = visible.Select(i => i.Id).ToList();
+        var media = (await db.MediaAssets.AsNoTracking().Where(a => visibleIds.Contains(a.StreamItemId)).OrderBy(a => a.CreatedAt).ToListAsync(cancellationToken))
+            .ToLookup(a => a.StreamItemId);
         var glance = visible.Where(i => i.Kind == StreamItemKind.Fact).SelectMany(i => i.Fields).DistinctBy(f => f.Label).Take(6)
             .Select(f => new OwnerField(f.Label, f.Value)).ToList();
 
@@ -246,7 +249,8 @@ public static class OwnerEndpoints
                     CanReplyTo(i),
                     IsUnread(i, party.Id, read),
                     mine,
-                    i.Prompt is { } p && CanReplyTo(i) ? new OwnerPrompt(p.Kind.ToString(), p.Question, p.Answers, myAnswers.GetValueOrDefault(i.Id)) : null);
+                    i.Prompt is { } p && CanReplyTo(i) ? new OwnerPrompt(p.Kind.ToString(), p.Question, p.Answers, myAnswers.GetValueOrDefault(i.Id)) : null,
+                    media[i.Id].Select(Events.EventEndpoints.ToView).ToList());
             })
             .ToList());
 
@@ -577,6 +581,7 @@ public static class OwnerEndpoints
             ? string.Join(" · ", item.Fields.Take(3).Select(f => $"{f.Label}: {f.Value}"))
             : string.Join(' ', item.Body.Split((char[])['\n', '\r'], StringSplitOptions.RemoveEmptyEntries));
         if (text.Length == 0 && item.Prompt is { } prompt) text = prompt.Question; // a message that is only a question
+        if (text.Length == 0 && item.Kind == StreamItemKind.Media) text = item.Title ?? "New photos"; // photos with no caption
         return text.Length <= 140 ? text : text[..140] + "…";
     }
 }

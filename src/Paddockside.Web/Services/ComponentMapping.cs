@@ -38,7 +38,7 @@ public static class ComponentMapping
             Enum.TryParse<DeliveryStatus>(r.Status, out var s) ? s : DeliveryStatus.Queued, r.Note)).ToList(),
         i.Step,
         i.Title,
-        Inbound: i.Audience is null,
+        Inbound: i.Audience is null && i.Kind == "Message",
         Channel: i.Channel);
 
     public static Scope ToScope(string scope) => Enum.TryParse<Scope>(scope, out var s) ? s : Scope.Internal;

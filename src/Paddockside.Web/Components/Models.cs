@@ -142,7 +142,9 @@ public sealed record ComposeDraft(
     IReadOnlyList<string> NamedParties,
     string Body,
     /// <summary>A question for owners to answer with buttons, or null.</summary>
-    Services.PromptRequest? Prompt = null);
+    Services.PromptRequest? Prompt = null,
+    /// <summary>Photos, video or voice notes to add, with the body as their caption.</summary>
+    IReadOnlyList<Microsoft.AspNetCore.Components.Forms.IBrowserFile>? Files = null);
 
 /// <summary>Labels and colour classes, written out in full so Tailwind finds every class it must build.</summary>
 public static class Marks

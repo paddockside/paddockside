@@ -49,7 +49,15 @@ else
             </div>
         </header>
 
-        <div class="whitespace-pre-line break-words">@Item.Body</div>
+        @if (Item.Media is { Count: > 0 } media)
+        {
+            <MediaGallery Media="media" Describe="@(string.IsNullOrWhiteSpace(Item.Body) ? Item.Title ?? "Photo" : Item.Body)" />
+        }
+
+        @if (!string.IsNullOrWhiteSpace(Item.Body))
+        {
+            <div class="whitespace-pre-line break-words">@Item.Body</div>
+        }
 
         @if (Item.Prompt is { } prompt)
         {

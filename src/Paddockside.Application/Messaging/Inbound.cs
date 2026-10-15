@@ -40,6 +40,12 @@ public sealed class StorageOptions
 
     public string InboundQueue { get; set; } = "inbound";
 
+    /// <summary>Photos, videos and voice notes (Storage__MediaContainer in Azure).</summary>
+    public string MediaContainer { get; set; } = "media";
+
+    /// <summary>Local stand-in for the media container.</summary>
+    public string LocalMediaPath { get; set; } = "App_Data/media";
+
     /// <summary>Local stand-in for blob storage.</summary>
     public string LocalPath { get; set; } = "App_Data/inbound";
 }

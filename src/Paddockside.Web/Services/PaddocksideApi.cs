@@ -43,7 +43,13 @@ public sealed record ItemView(
     List<RecipientView> Recipients,
     PromptView? Prompt = null,
     bool CanReplyToSender = false,
-    string? Channel = null);
+    string? Channel = null,
+    List<MediaView>? Media = null);
+
+/// <summary>A photo, video or voice note; its file is at api/media/{Id}.</summary>
+public sealed record MediaView(Guid Id, string Kind, string ContentType, string FileName, long Length);
+
+public sealed record MediaUploaded(Guid Id, int Files, int Recipients);
 
 public sealed record PromptView(string Kind, string Question, List<string> Answers, string Summary, List<TallyCount> Counts, List<PromptOwnerView> Owners);
 
@@ -179,7 +185,8 @@ public sealed record OwnerField(string Label, string Value, string? Was = null);
 public sealed record OwnerReply(string Author, string At, string Body);
 
 public sealed record OwnerItem(Guid Id, string Kind, string At, string? Title, string Body, string? Author, string? Source,
-    List<OwnerField> Fields, string? Corrected, List<OwnerReply> Replies, bool CanReply, bool Unread, bool Mine, OwnerPrompt? Prompt = null);
+    List<OwnerField> Fields, string? Corrected, List<OwnerReply> Replies, bool CanReply, bool Unread, bool Mine, OwnerPrompt? Prompt = null,
+    List<MediaView>? Media = null);
 
 public sealed record OwnerPrompt(string Kind, string Question, List<string> Answers, string? Mine);
 
@@ -247,6 +254,21 @@ public sealed class PaddocksideApi(HttpClient http)
 
     public Task<ApiResult<CreatedEvent>> CreateEventAsync(Guid horseId, string type, string title, string? keyDate, bool open) =>
         PostAsync<CreatedEvent>($"api/horses/{horseId}/events", new { type, title, keyDate, open });
+
+    /// <summary>Photos, video or voice notes onto an event: "Owners" to share them, "Internal" for staff only.</summary>
+    public async Task<ApiResult<MediaUploaded>> UploadMediaAsync(Guid eventId, string scope, string caption,
+        IEnumerable<Microsoft.AspNetCore.Components.Forms.IBrowserFile> files, long maxBytes)
+    {
+        using var form = new MultipartFormDataContent { { new StringContent(scope), "scope" }, { new StringContent(caption), "caption" } };
+        foreach (var file in files)
+        {
+            var content = new StreamContent(file.OpenReadStream(maxBytes));
+            content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(string.IsNullOrEmpty(file.ContentType) ? "application/octet-stream" : file.ContentType);
+            form.Add(content, "files", file.Name);
+        }
+
+        return await SendContentAsync<MediaUploaded>(HttpMethod.Post, $"api/events/{eventId}/media", form);
+    }
 
     public Task<ApiResult<object>> SetRaceDayAsync(Guid eventId, RaceDayView details) =>
         PutAsync<object>($"api/events/{eventId}/race-day", new { gate = details.Gate, dining = details.Dining, note = details.Note });
@@ -429,6 +451,21 @@ public sealed class PaddocksideApi(HttpClient http)
         try
         {
             using var request = new HttpRequestMessage(method, path) { Content = JsonContent.Create(body) };
+            request.Headers.Add(RequestHeader, "1");
+            return await ReadAsync<T>(await http.SendAsync(request));
+        }
+        catch (HttpRequestException)
+        {
+            return Unreachable<T>();
+        }
+    }
+
+    /// <summary>As SendAsync, with a body that isn't JSON: an upload form.</summary>
+    private async Task<ApiResult<T>> SendContentAsync<T>(HttpMethod method, string path, HttpContent content)
+    {
+        try
+        {
+            using var request = new HttpRequestMessage(method, path) { Content = content };
             request.Headers.Add(RequestHeader, "1");
             return await ReadAsync<T>(await http.SendAsync(request));
         }

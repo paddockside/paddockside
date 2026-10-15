@@ -81,11 +81,13 @@ public static class DependencyInjection
             services.AddSingleton<Azure.Core.TokenCredential>(new Azure.Identity.DefaultAzureCredential());
             services.AddSingleton<IInboundStore, BlobInboundStore>();
             services.AddSingleton<IInboundQueue, StorageInboundQueue>();
+            services.AddSingleton<IMediaStore, Media.BlobMediaStore>();
         }
         else
         {
             services.AddSingleton<IInboundStore>(new FileInboundStore(Path.Combine(contentRoot, storage.LocalPath)));
             services.AddSingleton<IInboundQueue, MemoryInboundQueue>();
+            services.AddSingleton<IMediaStore>(new Media.FileMediaStore(Path.Combine(contentRoot, storage.LocalMediaPath)));
         }
 
         services.AddScoped<InboundReceiver>();

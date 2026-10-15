@@ -41,6 +41,8 @@ public sealed class PaddocksideDbContext(DbContextOptions<PaddocksideDbContext> 
 
     public DbSet<TicketAllocation> TicketAllocations => Set<TicketAllocation>();
 
+    public DbSet<MediaAsset> MediaAssets => Set<MediaAsset>();
+
     public DbSet<RoutingAddress> RoutingAddresses => Set<RoutingAddress>();
 
     public DbSet<InboundMessage> InboundMessages => Set<InboundMessage>();

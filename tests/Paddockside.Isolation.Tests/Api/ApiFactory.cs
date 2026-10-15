@@ -44,6 +44,7 @@ public sealed class ApiFactory(IsolationDatabase db) : WebApplicationFactory<Pro
         builder.UseSetting("Twilio:AuthToken", TwilioAuthToken); // signs the test's Twilio webhook calls
         // Recheck every session on every request, so each test also proves sessions survive the check unchanged.
         builder.UseSetting("Sessions:CheckSeconds", "0");
+        builder.UseSetting("Storage:LocalMediaPath", Path.Combine(Path.GetTempPath(), "paddockside-test-media")); // uploads stay out of the repo
         builder.ConfigureTestServices(services =>
         {
             services.AddSingleton<IBreachedPasswordList>(new FakeBreachedList());
@@ -176,6 +177,14 @@ public sealed class FakeSmsSender : ISmsSender
 /// <summary>Sends requests the way the Web app does: JSON, with the API request header on writes.</summary>
 public static class BrowserRequests
 {
+    /// <summary>A multipart upload, as the browser sends photos and video.</summary>
+    public static Task<HttpResponseMessage> PostFormApiAsync(this HttpClient client, string path, MultipartFormDataContent form)
+    {
+        var request = new HttpRequestMessage(HttpMethod.Post, path) { Content = form };
+        request.Headers.Add("X-Paddockside-Request", "1");
+        return client.SendAsync(request);
+    }
+
     public static Task<HttpResponseMessage> PostApiAsync(this HttpClient client, string path, object body)
     {
         var request = new HttpRequestMessage(HttpMethod.Post, path) { Content = JsonContent.Create(body) };

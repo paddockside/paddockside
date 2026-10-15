@@ -42,7 +42,13 @@ public static class EventEndpoints
         IReadOnlyList<RecipientView> Recipients,
         PromptView? Prompt = null,
         bool CanReplyToSender = false,
-        string? Channel = null);
+        string? Channel = null,
+        IReadOnlyList<MediaView>? Media = null);
+
+    /// <summary>One photo, video or voice note; its file is at /api/media/{Id}.</summary>
+    public sealed record MediaView(Guid Id, string Kind, string ContentType, string FileName, long Length);
+
+    internal static MediaView ToView(MediaAsset a) => new(a.Id, a.Kind.ToString(), a.ContentType, a.FileName, a.Length);
 
     /// <summary>A message's question, with the tally: totals, then each owner's answer and how it was given.</summary>
     public sealed record PromptView(string Kind, string Question, IReadOnlyList<string> Answers, string Summary,
@@ -116,6 +122,8 @@ public static class EventEndpoints
         var deliveries = await db.Deliveries.AsNoTracking().Where(d => itemIds.Contains(d.StreamItemId)).ToListAsync(cancellationToken);
         var partyIds = deliveries.Select(d => d.PartyId).Concat(horse.Interests.Select(i => i.PartyId)).Distinct().ToList();
         var answers = (await db.PromptAnswers.AsNoTracking().Where(a => itemIds.Contains(a.StreamItemId)).ToListAsync(cancellationToken)).ToLookup(a => a.StreamItemId);
+        var media = (await db.MediaAssets.AsNoTracking().Where(a => itemIds.Contains(a.StreamItemId)).OrderBy(a => a.CreatedAt).ToListAsync(cancellationToken))
+            .ToLookup(a => a.StreamItemId);
         partyIds = partyIds.Concat(answers.SelectMany(g => g).Select(a => a.PartyId)).Distinct().ToList();
         var parties = await db.Parties.AsNoTracking().Where(p => partyIds.Contains(p.Id)).ToDictionaryAsync(p => p.Id, p => p.DisplayName, cancellationToken);
         var tenant = await db.Tenants.AsNoTracking().SingleAsync(cancellationToken);
@@ -161,7 +169,8 @@ public static class EventEndpoints
                         .ToList(),
                     i.Prompt is null ? null : Tally(i, tenant, horse, answers[i.Id].ToList(), parties, now),
                     i is { Kind: StreamItemKind.Message, Direction: StreamItemDirection.Inbound },
-                    i.Direction == StreamItemDirection.Inbound ? i.Channel : null);
+                    i.Direction == StreamItemDirection.Inbound ? i.Channel : null,
+                    media[i.Id].Select(ToView).ToList());
             })
             .ToList();
 

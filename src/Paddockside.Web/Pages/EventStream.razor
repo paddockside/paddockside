@@ -133,6 +133,10 @@ else
                                         break;
                                     default:
                                         <MessageThread Model="item.ToMessage()">
+                                            @if (item.Media is { Count: > 0 } media)
+                                            {
+                                                <MediaGallery Media="media" Describe="@(string.IsNullOrWhiteSpace(item.Body) ? _page.HorseName : item.Body)" />
+                                            }
                                             @if (item.Prompt is { } prompt)
                                             {
                                                 <PromptTally Model="prompt" ItemId="item.Id" Busy="_busy" TicketsHref="@(_page.Tickets is not null && prompt.Kind == "Count" ? $"events/{Id}/tickets" : null)"
@@ -510,6 +514,7 @@ else
     {
         "Fact" => "border-kind-fact-fg bg-kind-fact-fg",
         "Note" => "border-kind-note-fg bg-kind-note-bg",
+        "Media" => "border-action-primary-bg bg-action-primary-bg",
         _ => "border-action-primary-bg bg-surface-raised",
     };
 
@@ -553,6 +558,19 @@ else
         _saved = null;
         try
         {
+            if (draft.Files is { Count: > 0 } files)
+            {
+                // Photos, video or a voice note, with the message as their caption (MediaEndpoints).
+                var shared = draft.Audience == Audience.Owners;
+                var upload = await Api.UploadMediaAsync(Id, shared ? "Owners" : "Internal", draft.Body, files, ComposeBox.MaxFileBytes);
+                if (!upload.Succeeded) { _error = upload.Error; return; }
+                _saved = shared
+                    ? $"Added {files.Count} {(files.Count == 1 ? "file" : "files")}. Owners see them on their page; those who asked to hear about new photos and videos are told."
+                    : $"Added {files.Count} {(files.Count == 1 ? "file" : "files")} for staff only.";
+                await Load();
+                return;
+            }
+
             var request = new ComposeRequest(
                 draft.Audience.ToString(),
                 draft.Scope.ToString(),

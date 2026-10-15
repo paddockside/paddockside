@@ -563,6 +563,61 @@ namespace Paddockside.Infrastructure.Persistence.Migrations
                     b.ToTable("MatchCandidates");
                 });
 
+            modelBuilder.Entity("Paddockside.Domain.MediaAsset", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("BlobName")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("nvarchar(300)");
+
+                    b.Property<string>("ContentType")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("FileName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<Guid>("HorseId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<long>("Length")
+                        .HasColumnType("bigint");
+
+                    b.Property<Guid>("StreamItemId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("HorseId");
+
+                    b.HasIndex("StreamItemId");
+
+                    b.HasIndex("TenantId");
+
+                    b.HasIndex("TenantId", "StreamItemId");
+
+                    b.HasIndex("TenantId", "HorseId", "CreatedAt");
+
+                    b.ToTable("MediaAssets");
+                });
+
             modelBuilder.Entity("Paddockside.Domain.NotificationPreference", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1325,6 +1380,27 @@ namespace Paddockside.Infrastructure.Persistence.Migrations
                         .WithMany()
                         .HasForeignKey("InboundMessageId")
                         .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Paddockside.Domain.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Paddockside.Domain.MediaAsset", b =>
+                {
+                    b.HasOne("Paddockside.Domain.Horse", null)
+                        .WithMany()
+                        .HasForeignKey("HorseId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Paddockside.Domain.StreamItem", null)
+                        .WithMany()
+                        .HasForeignKey("StreamItemId")
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
                     b.HasOne("Paddockside.Domain.Tenant", null)

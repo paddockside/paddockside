@@ -1,0 +1,75 @@
+@*
+    The photos, video and voice notes on one item (data-model.md MEDIA_ASSET), for staff and owners alike: photos in
+    a grid that opens each full size, video and voice notes in the browser's own player, so they work with a keyboard
+    and a screen reader. Files come only from the app (api/media/…), after its access check. Formats a browser can't
+    show (an iPhone's HEIC photo, some phone videos) offer the original to download instead.
+*@
+@if (Media.Count > 0)
+{
+    var photos = Media.Where(m => m.Kind == "Photo").ToList();
+    <div class="grid gap-3">
+        @if (photos.Count > 0)
+        {
+            <ul class="grid gap-2 @(photos.Count == 1 ? "grid-cols-1" : photos.Count == 2 ? "grid-cols-2" : "grid-cols-2 sm:grid-cols-3")" aria-label="Photos">
+                @foreach (var (photo, n) in photos.Select((p, i) => (p, i + 1)))
+                {
+                    <li>
+                        @if (Shows(photo))
+                        {
+                            <a href="@Url(photo)" target="_blank" rel="noopener" class="block overflow-hidden rounded-control bg-surface-sunken">
+                                <img src="@Url(photo)" loading="lazy" alt="@(photos.Count == 1 ? Describe : $"{Describe}, photo {n} of {photos.Count}")"
+                                     class="@(photos.Count == 1 ? "max-h-[480px] w-full object-contain" : "aspect-square w-full object-cover")" />
+                            </a>
+                        }
+                        else
+                        {
+                            <a href="@Url(photo, download: true)" class="grid aspect-square place-items-center rounded-control bg-surface-sunken p-3 text-center text-small underline underline-offset-4">
+                                Download @photo.FileName
+                            </a>
+                        }
+                    </li>
+                }
+            </ul>
+        }
+
+        @foreach (var video in Media.Where(m => m.Kind == "Video"))
+        {
+            <figure class="grid gap-1">
+                <video controls preload="metadata" playsinline class="max-h-[480px] w-full rounded-control bg-surface-sunken">
+                    <source src="@Url(video)" type="@(video.ContentType == "video/quicktime" ? "video/mp4" : video.ContentType)" />
+                </video>
+                <figcaption class="text-small text-text-muted">
+                    @Size(video) · <a href="@Url(video, download: true)" class="underline underline-offset-4">Download the video</a>
+                    @if (video.ContentType == "video/quicktime")
+                    {
+                        <span> if it doesn't play here</span>
+                    }
+                </figcaption>
+            </figure>
+        }
+
+        @foreach (var audio in Media.Where(m => m.Kind == "Audio"))
+        {
+            <figure class="grid gap-1">
+                <audio controls preload="metadata" class="w-full" src="@Url(audio)" aria-label="Voice note: @Describe"></audio>
+                <figcaption class="text-small text-text-muted">
+                    Voice note · @Size(audio) · <a href="@Url(audio, download: true)" class="underline underline-offset-4">Download</a>
+                </figcaption>
+            </figure>
+        }
+    </div>
+}
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<Services.MediaView> Media { get; set; } = [];
+
+    /// <summary>What the photos show, for screen readers: the caption, or the horse.</summary>
+    [Parameter] public string Describe { get; set; } = "Photo";
+
+    private static string Url(Services.MediaView m, bool download = false) => $"api/media/{m.Id}{(download ? "?download=true" : "")}";
+
+    /// <summary>HEIC is an iPhone format most browsers can't draw; it's offered as a download.</summary>
+    private static bool Shows(Services.MediaView m) => m.ContentType != "image/heic";
+
+    private static string Size(Services.MediaView m) => m.Length >= 1024 * 1024 ? $"{m.Length / 1024d / 1024:0.#} MB" : $"{Math.Max(1, m.Length / 1024)} KB";
+}

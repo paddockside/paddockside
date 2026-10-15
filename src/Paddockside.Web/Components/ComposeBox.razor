@@ -110,10 +110,32 @@
         </fieldset>
     }
 
+    @if (_files.Count > 0)
+    {
+        <ul class="flex flex-wrap gap-2" aria-label="Photos, video and voice notes to add">
+            @foreach (var file in _files)
+            {
+                <li class="inline-flex min-h-[36px] items-center gap-2 rounded-pill border border-border-strong bg-surface-sunken pl-3 pr-1 text-small">
+                    @file.Name <span class="text-text-muted">@Size(file.Size)</span>
+                    <button type="button" class="grid size-[28px] place-items-center rounded-pill hover:bg-surface-raised" aria-label="Remove @file.Name" @onclick="() => _files.Remove(file)">✕</button>
+                </li>
+            }
+        </ul>
+    }
+
     <div class="flex flex-wrap items-end gap-3">
-        <label class="sr-only" for="@_id-body">@(_audience == Audience.InternalNote ? "Note" : "Message")</label>
+        <label class="sr-only" for="@_id-body">@(_files.Count > 0 ? "Caption" : _audience == Audience.InternalNote ? "Note" : "Message")</label>
         <textarea id="@_id-body" class="input min-h-[64px] min-w-0 flex-1 basis-[16rem] rounded-card py-3" rows="2" @bind="_body" @bind:event="oninput"
                   placeholder="@Placeholder" aria-describedby="@(_error is null ? null : $"{_id}-error")"></textarea>
+        @if (_audience != Audience.Trainer)
+        {
+            @* The mockup's image button: photos, video or a voice note, with the message as the caption. *@
+            <InputFile id="@($"{_id}-files")" class="sr-only" multiple accept="image/*,video/*,audio/*,.heic,.m4a,.mov" OnChange="FilesChosen" />
+            <label for="@_id-files" class="btn-secondary cursor-pointer px-4" title="Add photos, video or a voice note">
+                <svg aria-hidden="true" viewBox="0 0 24 24" class="size-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15l-5-5L5 21"></path><rect x="3" y="3" width="18" height="18" rx="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle></svg>
+                <span class="sr-only sm:not-sr-only">Photos or video</span>
+            </label>
+        }
         <button type="submit" class="btn-primary" disabled="@Busy">@SendLabel</button>
     </div>
 
@@ -126,6 +148,7 @@
 @code {
     private readonly string _id = $"compose-{Guid.NewGuid():N}";
     private readonly HashSet<string> _named = [];
+    private readonly List<IBrowserFile> _files = [];
     private Audience _audience = Audience.Owners;
     private Scope _scope = Scope.Owners;
     private Channel _channel = Channel.Preferred;
@@ -172,6 +195,7 @@
 
     private string Placeholder => (_audience, HorseName) switch
     {
+        _ when _files.Count > 0 => "Add a caption (optional)…",
         (Audience.InternalNote, _) => "Write a note for the team…",
         (Audience.Trainer, { } horse) => $"Write to {horse}'s trainer…",
         (Audience.Owners, { } horse) when _asking => "Add a message with the question (optional)…",
@@ -188,6 +212,7 @@
 
     private string SendLabel => _audience switch
     {
+        Audience.InternalNote when _files.Count > 0 => "Add for staff",
         Audience.Owners => "Send to owners",
         Audience.Trainer => "Send to trainer",
         _ => "Add note",
@@ -219,6 +244,24 @@
         : new(_promptKind, _question.Trim(), _promptKind == "Choice" ? _options.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList() : null,
             _promptKind == "Count" ? _max : null);
 
+    /// <summary>The most one upload takes (MediaAsset.MaxFiles on the server).</summary>
+    private const int MaxFiles = 10;
+
+    private void FilesChosen(InputFileChangeEventArgs e)
+    {
+        _error = null;
+        foreach (var file in e.GetMultipleFiles(MaxFiles))
+        {
+            if (file.Size > MaxFileBytes) { _error = $"{file.Name} is too big: the most is {MaxFileBytes / 1024 / 1024} MB."; continue; }
+            if (_files.Count < MaxFiles && !_files.Any(f => f.Name == file.Name && f.Size == file.Size)) _files.Add(file);
+        }
+    }
+
+    /// <summary>The largest single file (MediaAsset.MaxBytes on the server).</summary>
+    public const long MaxFileBytes = 250L * 1024 * 1024;
+
+    private static string Size(long bytes) => bytes >= 1024 * 1024 ? $"{bytes / 1024d / 1024:0.#} MB" : $"{Math.Max(1, bytes / 1024)} KB";
+
     private void Toggle(string id)
     {
         if (!_named.Remove(id)) _named.Add(id);
@@ -226,14 +269,19 @@
 
     private async Task Submit()
     {
-        _error = string.IsNullOrWhiteSpace(_body) && Prompt is null ? "Write something first, or ask a question."
+        _error = _files.Count > 0 && _audience == Audience.Trainer ? "Photos and video go to the owners or the team, not the trainer."
+            : _files.Count > 0 && Prompt is not null ? "Send the question on its own, then the photos."
+            : _files.Count > 0 && _audience == Audience.Owners && _scope != Scope.Owners ? "Photos and video go to all the current owners. Choose \"Owners\", or keep them for staff."
+            : _files.Count > 0 ? null
+            : string.IsNullOrWhiteSpace(_body) && Prompt is null ? "Write something first, or ask a question."
             : _scope == Scope.NamedParties && _named.Count == 0 ? "Choose at least one owner."
             : Prompt is { } p && p.Question.Length == 0 ? "Write the question, or switch off \"Ask a question\"."
             : Prompt is { Kind: "Choice" } c && c.Options!.Count < 2 ? "Give at least two choices, one per line."
             : null;
         if (_error is not null) return;
 
-        await OnSend.InvokeAsync(new ComposeDraft(_audience, _scope, _step == "" ? null : _step, _channel, _named.ToList(), _body.Trim(), Prompt));
+        await OnSend.InvokeAsync(new ComposeDraft(_audience, _scope, _step == "" ? null : _step, _channel, _named.ToList(), _body.Trim(), Prompt, _files.ToList()));
+        _files.Clear();
         _body = "";
         _named.Clear();
         (_asking, _question, _options) = (false, "", "");

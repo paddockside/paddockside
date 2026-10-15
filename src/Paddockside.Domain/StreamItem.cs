@@ -255,6 +255,22 @@ public sealed class StreamItem
     }
 
     /// <summary>A staff-only note.</summary>
+    /// <summary>
+    /// Photos, a video or a voice note staff add (data-model.md MEDIA_ASSET), with an optional caption. Shared with
+    /// owners or kept for staff; its assets are added alongside it and seen by exactly who may see it.
+    /// </summary>
+    public static StreamItem Media(Horse horse, Event? @event, string? title, string? caption, StreamItemScope scope, DateTimeOffset at, string authorName,
+        IEnumerable<Guid>? namedPartyIds = null, string? stepCode = null)
+    {
+        if (scope == StreamItemScope.Trainer) throw new DomainException("Media is for owners or the team, not the trainer.");
+        var direction = scope == StreamItemScope.Internal ? StreamItemDirection.Internal : StreamItemDirection.Outbound;
+        return new StreamItem(horse, @event, StreamItemKind.Media, scope, direction, at, caption?.Trim() ?? "", namedPartyIds: namedPartyIds, stepCode: stepCode)
+        {
+            Title = title,
+            AuthorName = authorName,
+        };
+    }
+
     public static StreamItem Note(Horse horse, Event? @event, string body, DateTimeOffset at, string authorName, string? stepCode = null)
     {
         if (string.IsNullOrWhiteSpace(body)) throw new DomainException("A note needs a body.");

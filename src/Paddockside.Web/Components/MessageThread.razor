@@ -146,7 +146,8 @@
     [Parameter] public RenderFragment? ChildContent { get; set; }
 
     /// <summary>"SENT · OWNERS TICKETS" for what we sent; "EMAIL · FROM INGLIS" for what came in.</summary>
-    private string KindLine => Model.Inbound
+    private string KindLine => Model.Scope == Scope.Internal && !Model.Inbound ? $"Staff only · {Model.Title ?? "Note"}"
+        : Model.Inbound
         ? $"{(Model.Channel is "SMS" ? "Text" : Model.Channel is "Portal" ? "In the app" : Model.Channel ?? "Message")} · from {Model.Author}"
         : $"Sent · {Model.Step ?? Model.Title ?? (string.IsNullOrEmpty(Model.Audience) ? "Message" : Model.Audience)}";
 

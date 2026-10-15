@@ -134,8 +134,8 @@ public sealed class Delivery
     /// <summary>A staff reply to someone who wrote in (messaging-channels.md §3.5): one email, to them alone.</summary>
     public static Delivery ToSender(StreamItem message, Party recipient, DateTimeOffset at)
     {
-        if (message.Kind != StreamItemKind.Message || message.Direction != StreamItemDirection.Outbound)
-            throw new DomainException("Only an outbound message is delivered.");
+        if (message.Kind is not (StreamItemKind.Message or StreamItemKind.Media) || message.Direction != StreamItemDirection.Outbound)
+            throw new DomainException("Only an outbound message, or media shared with owners, is delivered.");
         if (recipient.TenantId != message.TenantId) throw new DomainException("The recipient belongs to another business.");
         return new Delivery(message, recipient.Id, DeliveryChannel.Email, at) { Direct = true };
     }
@@ -146,8 +146,8 @@ public sealed class Delivery
     /// </summary>
     public static IReadOnlyList<Delivery> ForOwners(Tenant tenant, Horse horse, StreamItem message, DeliveryChannel channel, DateTimeOffset at)
     {
-        if (message.Kind != StreamItemKind.Message || message.Direction != StreamItemDirection.Outbound)
-            throw new DomainException("Only an outbound message is delivered.");
+        if (message.Kind is not (StreamItemKind.Message or StreamItemKind.Media) || message.Direction != StreamItemDirection.Outbound)
+            throw new DomainException("Only an outbound message, or media shared with owners, is delivered.");
 
         return ForOwners(tenant, horse, message, _ => new HashSet<DeliveryChannel> { channel }, at);
     }
@@ -158,8 +158,8 @@ public sealed class Delivery
     /// </summary>
     public static IReadOnlyList<Delivery> ForOwners(Tenant tenant, Horse horse, StreamItem message, Func<Guid, IReadOnlySet<DeliveryChannel>> channelsFor, DateTimeOffset at)
     {
-        if (message.Kind != StreamItemKind.Message || message.Direction != StreamItemDirection.Outbound)
-            throw new DomainException("Only an outbound message is delivered.");
+        if (message.Kind is not (StreamItemKind.Message or StreamItemKind.Media) || message.Direction != StreamItemDirection.Outbound)
+            throw new DomainException("Only an outbound message, or media shared with owners, is delivered.");
 
         return AccessRule.CurrentOwnerAudience(tenant, horse, message)
             .SelectMany(partyId => channelsFor(partyId).Select(channel => new Delivery(message, partyId, channel, at)))

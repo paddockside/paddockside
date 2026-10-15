@@ -148,7 +148,7 @@
                         </p>
                         <div class="relative flex justify-center" aria-hidden="true">
                             <span class="absolute inset-y-0 w-[3px] bg-border-subtle"></span>
-                            <span class="relative mt-[22px] size-[20px] rounded-pill border-4 @(item.Kind == "Result" ? "border-kind-fact-fg bg-kind-fact-fg" : "border-action-primary-bg bg-surface-raised")"></span>
+                            <span class="relative mt-[22px] size-[20px] rounded-pill border-4 @(item.Kind switch { "Result" => "border-kind-fact-fg bg-kind-fact-fg", "Photos" => "border-action-primary-bg bg-action-primary-bg", _ => "border-action-primary-bg bg-surface-raised" })"></span>
                         </div>
                         <div class="grid min-w-0 gap-2 pb-6 pt-3">
                             <p class="text-small text-text-muted sm:hidden">@item.At</p>
