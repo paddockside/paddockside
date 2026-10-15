@@ -103,6 +103,21 @@ public sealed record CreatedHorse(Guid Id);
 
 public sealed record AddedOwner(Guid Id, bool IsNew);
 
+public sealed record ClientRow(Guid Id, string Name, string? Email, string? Mobile, string Status, string? Horses, bool SignedIn, bool EmailBounced, List<string> Lists);
+
+public sealed record ClientHorse(Guid HorseId, string Name, string Share, string When);
+
+public sealed record ListRef(Guid Id, string Name);
+
+public sealed record ClientDetail(Guid Id, string Name, string? Email, string? Mobile, string? HowWeKnowThem, string Status, string? Added, bool SignedIn,
+    bool EmailBounced, string? Invitation, bool CanResend, List<ClientHorse> CurrentHorses, List<ClientHorse> PastHorses, List<ListRef> Lists);
+
+public sealed record ClientListView(Guid Id, string Name, int Count);
+
+public sealed record ClientCreated(Guid Id);
+
+public sealed record ListChange(int Count);
+
 public sealed record TodayRunner(Guid EventId, Guid HorseId, string Horse, string Type, string Title, string? Time, string? Stage, List<StepView> Steps, List<string> Attention);
 
 public sealed record TodayUndelivered(Guid ItemId, Guid? EventId, Guid HorseId, string Horse, string? Event, string Title, string Sent, string Detail);
@@ -305,6 +320,37 @@ public sealed class PaddocksideApi(HttpClient http)
 
     public Task<ApiResult<AddedOwner>> AddOwnerAsync(Guid horseId, string name, string? email, string? mobile, decimal percent, string? since) =>
         PostAsync<AddedOwner>($"api/horses/{horseId}/owners", new { name, email, mobile, percent, since });
+
+    public Task<ApiResult<List<ClientRow>>> ClientsAsync(string? status, Guid? list, string? q)
+    {
+        var query = new List<string>();
+        if (!string.IsNullOrEmpty(status)) query.Add($"status={Uri.EscapeDataString(status)}");
+        if (list is { } id) query.Add($"list={id}");
+        if (!string.IsNullOrWhiteSpace(q)) query.Add($"q={Uri.EscapeDataString(q.Trim())}");
+        return GetAsync<List<ClientRow>>(query.Count == 0 ? "api/clients" : $"api/clients?{string.Join('&', query)}");
+    }
+
+    public Task<ApiResult<ClientDetail>> ClientAsync(Guid id) => GetAsync<ClientDetail>($"api/clients/{id}");
+
+    public Task<ApiResult<ClientCreated>> AddClientAsync(string name, string? email, string? mobile, string? howWeKnowThem, IEnumerable<Guid> listIds) =>
+        PostAsync<ClientCreated>("api/clients", new { name, email, mobile, howWeKnowThem, listIds });
+
+    public Task<ApiResult<object>> UpdateClientAsync(Guid id, string name, string? email, string? mobile, string? howWeKnowThem) =>
+        PutAsync<object>($"api/clients/{id}", new { name, email, mobile, howWeKnowThem });
+
+    public Task<ApiResult<object>> ResendInvitationAsync(Guid id) => PostAsync<object>($"api/clients/{id}/invitation", new { });
+
+    public Task<ApiResult<List<ClientListView>>> ClientListsAsync() => GetAsync<List<ClientListView>>("api/client-lists");
+
+    public Task<ApiResult<ClientListView>> CreateClientListAsync(string name) => PostAsync<ClientListView>("api/client-lists", new { name });
+
+    public Task<ApiResult<object>> RenameClientListAsync(Guid id, string name) => PutAsync<object>($"api/client-lists/{id}", new { name });
+
+    public Task<ApiResult<object>> DeleteClientListAsync(Guid id) => PostAsync<object>($"api/client-lists/{id}/delete", new { });
+
+    public Task<ApiResult<ListChange>> AddToClientListAsync(Guid id, IEnumerable<Guid> clientIds) => PostAsync<ListChange>($"api/client-lists/{id}/add", new { clientIds });
+
+    public Task<ApiResult<ListChange>> RemoveFromClientListAsync(Guid id, IEnumerable<Guid> clientIds) => PostAsync<ListChange>($"api/client-lists/{id}/remove", new { clientIds });
 
     public Task<ApiResult<object>> SetRaceDayAsync(Guid eventId, RaceDayView details) =>
         PutAsync<object>($"api/events/{eventId}/race-day", new { gate = details.Gate, dining = details.Dining, note = details.Note });

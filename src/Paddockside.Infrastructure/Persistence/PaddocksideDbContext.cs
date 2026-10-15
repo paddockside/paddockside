@@ -43,6 +43,8 @@ public sealed class PaddocksideDbContext(DbContextOptions<PaddocksideDbContext> 
 
     public DbSet<MediaAsset> MediaAssets => Set<MediaAsset>();
 
+    public DbSet<ClientList> ClientLists => Set<ClientList>();
+
     public DbSet<RoutingAddress> RoutingAddresses => Set<RoutingAddress>();
 
     public DbSet<InboundMessage> InboundMessages => Set<InboundMessage>();

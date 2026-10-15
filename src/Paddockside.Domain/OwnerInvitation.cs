@@ -55,6 +55,13 @@ public sealed class OwnerInvitation
         (Status, Address, SentAt) = (OwnerInvitationStatus.Sent, address, at);
     }
 
+    /// <summary>Staff send it again (it went to an old address, or was lost): queued as new, to their current address.</summary>
+    public void Resend(DateTimeOffset at)
+    {
+        if (Status == OwnerInvitationStatus.Queued) return;
+        (Status, Address, SentAt, Note) = (OwnerInvitationStatus.Queued, null, null, $"Resent by staff {at:yyyy-MM-dd}");
+    }
+
     public void Skip(string reason, DateTimeOffset at)
     {
         if (Status != OwnerInvitationStatus.Queued) throw new DomainException("Only a queued invitation is skipped.");

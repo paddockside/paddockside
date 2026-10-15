@@ -29,7 +29,88 @@ public sealed class Party
 
     public Guid TenantId { get; }
 
-    public string DisplayName { get; }
+    public string DisplayName { get; private set; }
+
+    /// <summary>
+    /// How the business knows them and why it may write to them: "Owned Autumn Ridge 2019–22", "Asked about shares at
+    /// the Easter sale". The record the Spam Act asks for when they own nothing now (messaging-channels.md §7).
+    /// </summary>
+    public string? HowWeKnowThem { get; private set; }
+
+    /// <summary>When staff added them as a client; null for parties that came another way (an owner added before this existed).</summary>
+    public DateTimeOffset? AddedAt { get; private set; }
+
+    public const int HowWeKnowThemLength = 300;
+
+    /// <summary>A client added by staff: a prospect until they own part of a horse.</summary>
+    public static Party Client(Guid tenantId, string name, string? howWeKnowThem, DateTimeOffset at)
+    {
+        var party = new Party(tenantId, name.Trim()) { AddedAt = at };
+        party.SetHowWeKnowThem(howWeKnowThem);
+        return party;
+    }
+
+    public void Rename(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name)) throw new DomainException("A party needs a display name.");
+        if (name.Trim().Length > 200) throw new DomainException("That name is too long.");
+        DisplayName = name.Trim();
+    }
+
+    public void SetHowWeKnowThem(string? text)
+    {
+        var trimmed = string.IsNullOrWhiteSpace(text) ? null : text.Trim();
+        if (trimmed?.Length > HowWeKnowThemLength) throw new DomainException($"Keep how you know them under {HowWeKnowThemLength} characters.");
+        HowWeKnowThem = trimmed;
+    }
+
+    /// <summary>
+    /// Their email is now this: a mistyped address is replaced, not kept beside the right one. An address they had
+    /// before becomes the primary again. Null removes their email.
+    /// </summary>
+    public void ChangeEmail(string? address)
+    {
+        var current = PrimaryEmail;
+        if (address is null || string.IsNullOrWhiteSpace(address))
+        {
+            if (current is not null) _contacts.Remove(current);
+            return;
+        }
+
+        if (current?.Matches(address) == true) return;
+        if (_contacts.FirstOrDefault(c => c.Kind == ContactKind.Email && c.Matches(address)) is { } known)
+        {
+            foreach (var other in _contacts.Where(c => c.Kind == ContactKind.Email)) other.IsPrimary = false;
+            known.IsPrimary = true;
+            return;
+        }
+
+        AddEmail(address); // validates, and becomes the primary
+        if (current is not null) _contacts.Remove(current);
+    }
+
+    /// <summary>Their mobile is now this, replacing the one they had; null removes it.</summary>
+    public void ChangeMobile(string? number)
+    {
+        var current = PrimaryMobile;
+        if (number is null || string.IsNullOrWhiteSpace(number))
+        {
+            if (current is not null) _contacts.Remove(current);
+            return;
+        }
+
+        var normalised = PhoneNumbers.Normalise(number) ?? throw new DomainException($"'{number}' is not a mobile number.");
+        if (current?.Value == normalised) return;
+        if (_contacts.FirstOrDefault(c => c.Kind == ContactKind.Mobile && c.Value == normalised) is { } known)
+        {
+            foreach (var other in _contacts.Where(c => c.Kind == ContactKind.Mobile)) other.IsPrimary = false;
+            known.IsPrimary = true;
+            return;
+        }
+
+        AddMobile(normalised);
+        if (current is not null) _contacts.Remove(current);
+    }
 
     public PartyKind Kind { get; }
 

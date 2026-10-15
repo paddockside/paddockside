@@ -104,6 +104,9 @@ public sealed class IsolationDatabase : IAsyncLifetime
         context.Add(new MatchCandidate(inbound, new MatchSuggestion(horse.Id, raceStart.Id, 60, ["Seeded"])));
         var photos = StreamItem.Media(horse, raceStart, "New photos", $"{name} photos", StreamItemScope.Owners, bought.AddMonths(6), "Staff");
         context.AddRange(photos, new MediaAsset(photos, "mare.jpg", "image/jpeg", 1234, bought.AddMonths(6)));
+        var prospects = new ClientList(tenant.Id, $"{name} prospects", bought);
+        prospects.Add([ann, eve], bought);
+        context.Add(prospects);
         context.AddRange(deliveries);
         await context.SaveChangesAsync();
 

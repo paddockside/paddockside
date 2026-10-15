@@ -1,0 +1,384 @@
+@page "/clients"
+@inject PaddocksideApi Api
+@inject SessionState Session
+@inject NavigationManager Navigation
+
+<PageTitle>Clients · Paddockside</PageTitle>
+
+@*
+    Clients (David, 15 Oct 2026): everyone the business has a relationship with — current owners, past owners and
+    prospects, each shown as which they are — and named lists of any mix of them, such as "2026 prospective". Filter by
+    what they are or by list, search, tick people and put them on a list. Adding a prospect asks how you know them,
+    the record the Spam Act wants before you write to someone who owns nothing now (messaging-channels.md §7).
+*@
+<div class="grid gap-6">
+    <div class="flex flex-wrap items-center justify-between gap-3">
+        <h1>Clients</h1>
+        @if (CanEdit && !_adding)
+        {
+            <button type="button" class="btn-primary" @onclick="() => (_adding, _addError) = (true, null)">Add a client</button>
+        }
+    </div>
+
+    @if (_adding)
+    {
+        <form class="card grid gap-4" @onsubmit="AddAsync" @onsubmit:preventDefault aria-label="Add a client">
+            <h2 class="text-title">Add a client</h2>
+            <div class="grid gap-4 sm:grid-cols-2">
+                <div class="field sm:col-span-2">
+                    <label class="field-label" for="client-name">Name</label>
+                    <input id="client-name" class="input" maxlength="200" @bind="_name" />
+                </div>
+                <div class="field">
+                    <label class="field-label" for="client-email">Email</label>
+                    <input id="client-email" class="input" type="email" @bind="_email" />
+                </div>
+                <div class="field">
+                    <label class="field-label" for="client-mobile">Mobile</label>
+                    <input id="client-mobile" class="input" type="tel" @bind="_mobile" placeholder="04xx xxx xxx" />
+                </div>
+                <div class="field sm:col-span-2">
+                    <label class="field-label" for="client-how">How you know them</label>
+                    <input id="client-how" class="input" maxlength="300" @bind="_how" placeholder="Asked about shares at the Easter sale" />
+                    <span class="field-hint">Why @(Session.Current?.TenantName ?? "you") may write to them. Keep it to a line.</span>
+                </div>
+            </div>
+            @if (_lists is { Count: > 0 })
+            {
+                <fieldset class="grid gap-2">
+                    <legend class="field-label mb-1">Put them on</legend>
+                    <div class="flex flex-wrap gap-x-4 gap-y-2">
+                        @foreach (var list in _lists)
+                        {
+                            <label class="inline-flex items-center gap-2">
+                                <input type="checkbox" class="size-[18px] accent-action-primary-bg" checked="@_newLists.Contains(list.Id)"
+                                       @onchange="() => { if (!_newLists.Remove(list.Id)) _newLists.Add(list.Id); }" />
+                                @list.Name
+                            </label>
+                        }
+                    </div>
+                </fieldset>
+            }
+            <p class="field-hint">They show as a prospect until they own part of a horse. To give someone a share, add them on the horse's page.</p>
+            @if (_addError is not null)
+            {
+                <p class="alert-danger" role="alert">@_addError</p>
+            }
+            @if (_existing is { } existing)
+            {
+                <a href="clients/@existing" class="btn-link justify-self-start">Open the existing client</a>
+            }
+            <div class="flex flex-wrap gap-3">
+                <button type="submit" class="btn-primary" disabled="@_busy">Add client</button>
+                <button type="button" class="btn-secondary" @onclick="() => _adding = false">Cancel</button>
+            </div>
+        </form>
+    }
+
+    <section class="grid gap-3" aria-label="Find clients">
+        <div class="flex flex-wrap items-center gap-2" role="group" aria-label="Show">
+            @foreach (var (value, label) in Statuses)
+            {
+                var chosen = _status == value;
+                <button type="button" aria-pressed="@(chosen ? "true" : "false")" @onclick="() => FilterAsync(value, _list)"
+                        class="inline-flex min-h-[36px] items-center rounded-pill border px-3 text-small font-medium @(chosen ? "border-action-primary-bg bg-scope-owners-bg text-scope-owners-fg" : "border-border-strong bg-surface-raised hover:bg-surface-sunken")">
+                    @label
+                </button>
+            }
+            <label class="sr-only" for="client-list-filter">List</label>
+            <select id="client-list-filter" class="min-h-[36px] cursor-pointer rounded-pill border border-border-strong bg-surface-raised px-3 text-small font-medium"
+                    value="@(_list?.ToString() ?? "")" @onchange="e => FilterAsync(_status, Guid.TryParse(e.Value?.ToString(), out var id) ? id : null)">
+                <option value="">Every list</option>
+                @foreach (var list in _lists ?? [])
+                {
+                    <option value="@list.Id">@list.Name (@list.Count)</option>
+                }
+            </select>
+            <form class="ml-auto flex gap-2" role="search" @onsubmit="() => FilterAsync(_status, _list)" @onsubmit:preventDefault>
+                <label class="sr-only" for="client-search">Search clients</label>
+                <input id="client-search" class="input min-h-[36px] w-[14rem] max-w-full" type="search" placeholder="Name, email or mobile" @bind="_q" />
+                <button type="submit" class="btn-secondary min-h-[36px] px-4">Search</button>
+            </form>
+        </div>
+
+        @if (CurrentList is { } current && CanEdit)
+        {
+            <div class="flex flex-wrap items-center gap-3 text-small">
+                <span class="text-text-muted">The list "@current.Name":</span>
+                @if (_renaming)
+                {
+                    <form class="flex gap-2" @onsubmit="RenameAsync" @onsubmit:preventDefault>
+                        <label class="sr-only" for="list-rename">New name</label>
+                        <input id="list-rename" class="input min-h-[36px]" maxlength="100" @bind="_rename" />
+                        <button type="submit" class="btn-secondary min-h-[36px] px-3">Rename</button>
+                    </form>
+                }
+                else
+                {
+                    <button type="button" class="underline underline-offset-4" @onclick="() => (_renaming, _rename) = (true, current.Name)">Rename</button>
+                    @if (_confirmDelete)
+                    {
+                        <span class="font-strong">Delete "@current.Name"? The clients stay.</span>
+                        <button type="button" class="btn-secondary min-h-[36px] px-3" @onclick="DeleteListAsync">Yes, delete it</button>
+                        <button type="button" class="underline underline-offset-4" @onclick="() => _confirmDelete = false">No</button>
+                    }
+                    else
+                    {
+                        <button type="button" class="underline underline-offset-4" @onclick="() => _confirmDelete = true">Delete the list</button>
+                    }
+                }
+            </div>
+        }
+    </section>
+
+    @if (_message is not null)
+    {
+        <p class="rounded-control bg-status-success-bg px-4 py-3 text-status-success-fg" role="status">@_message</p>
+    }
+    @if (_error is not null)
+    {
+        <Error Message="@_error" />
+    }
+
+    @if (_clients is null)
+    {
+        <p class="text-text-muted" role="status">Loading clients…</p>
+    }
+    else if (_clients.Count == 0)
+    {
+        <p class="card text-text-muted">No clients match.</p>
+    }
+    else
+    {
+        @if (CanEdit && _selected.Count > 0)
+        {
+            @* Ticked: put them on a list (a new one if you like), or take them off the list being shown. *@
+            <div class="sticky top-0 z-10 flex flex-wrap items-center gap-3 rounded-card border border-action-primary-bg bg-scope-owners-bg px-4 py-3 text-scope-owners-fg">
+                <span class="font-strong">@_selected.Count chosen</span>
+                <label class="sr-only" for="add-to-list">Put them on</label>
+                <select id="add-to-list" class="input min-h-[36px] w-auto bg-surface-raised text-text-primary" @bind="_target">
+                    <option value="">Put them on a list…</option>
+                    @foreach (var list in _lists ?? [])
+                    {
+                        <option value="@list.Id">@list.Name</option>
+                    }
+                    <option value="new">A new list…</option>
+                </select>
+                @if (_target == "new")
+                {
+                    <label class="sr-only" for="new-list">New list's name</label>
+                    <input id="new-list" class="input min-h-[36px] w-[14rem] bg-surface-raised text-text-primary" maxlength="100" placeholder="2026 prospective" @bind="_newList" />
+                }
+                <button type="button" class="btn-primary min-h-[36px] px-4" disabled="@(_busy || string.IsNullOrEmpty(_target))" @onclick="AddToListAsync">Add</button>
+                @if (CurrentList is { } shown)
+                {
+                    <button type="button" class="btn-secondary min-h-[36px] px-4" disabled="@_busy" @onclick="RemoveFromListAsync">Take off "@shown.Name"</button>
+                }
+                <button type="button" class="ml-auto text-small underline underline-offset-4" @onclick="() => _selected.Clear()">Clear</button>
+            </div>
+        }
+
+        <p class="text-small text-text-muted">@_clients.Count @(_clients.Count == 1 ? "client" : "clients")</p>
+        <ul class="card grid !p-0">
+            @foreach (var client in _clients)
+            {
+                var ticked = _selected.Contains(client.Id);
+                <li class="flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-border-subtle px-4 py-3 last:border-b-0 @(ticked ? "bg-surface-sunken" : null)">
+                    @if (CanEdit)
+                    {
+                        <input type="checkbox" class="size-[18px] accent-action-primary-bg" aria-label="Choose @client.Name" checked="@ticked"
+                               @onchange="() => { if (!_selected.Remove(client.Id)) _selected.Add(client.Id); }" />
+                    }
+                    <span class="grid min-w-0 flex-1">
+                        <a href="clients/@client.Id" class="font-strong underline-offset-4 hover:underline">@client.Name</a>
+                        <span class="truncate text-small text-text-muted">
+                            @string.Join(" · ", new[] { client.Email, client.Mobile }.Where(c => c is not null))
+                            @if (client.EmailBounced)
+                            {
+                                <span class="font-strong text-status-danger-fg"> · email bouncing</span>
+                            }
+                        </span>
+                    </span>
+                    <span class="grid min-w-0 gap-1 text-small sm:w-[18rem]">
+                        <span><span class="badge @StatusClasses(client.Status)">@client.Status</span></span>
+                        @if (client.Horses is not null)
+                        {
+                            <span class="truncate text-text-muted">@client.Horses</span>
+                        }
+                    </span>
+                    @if (client.Lists.Count > 0)
+                    {
+                        <span class="flex flex-wrap gap-1">
+                            @foreach (var list in client.Lists)
+                            {
+                                <span class="badge bg-surface-sunken text-text-muted">@list</span>
+                            }
+                        </span>
+                    }
+                </li>
+            }
+        </ul>
+    }
+</div>
+
+@code {
+    private static readonly (string? Value, string Label)[] Statuses = [(null, "Everyone"), ("Current owner", "Current owners"), ("Past owner", "Past owners"), ("Prospect", "Prospects")];
+
+    private List<ClientRow>? _clients;
+    private List<ClientListView>? _lists;
+    private string? _status;
+    private Guid? _list;
+    private string? _q;
+    private readonly HashSet<Guid> _selected = [];
+    private string _target = "";
+    private string? _newList;
+    private bool _renaming;
+    private bool _confirmDelete;
+
+    /// <summary>Opened from a client's list ("clients?list=…"): that list, filtered.</summary>
+    [SupplyParameterFromQuery(Name = "list")] public Guid? ListFromQuery { get; set; }
+    private string? _rename;
+    private bool _adding;
+    private string? _name, _email, _mobile, _how, _addError;
+    private Guid? _existing;
+    private readonly HashSet<Guid> _newLists = [];
+    private bool _busy;
+    private string? _error, _message;
+
+    /// <summary>Viewers look; coordinators and above change.</summary>
+    private bool CanEdit => Session.Current?.Role is "Coordinator" or "Manager" or "TenantAdmin";
+
+    private ClientListView? CurrentList => _list is { } id ? _lists?.SingleOrDefault(l => l.Id == id) : null;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (Session.Current is null && await Session.RefreshAsync() is null)
+        {
+            Navigation.NavigateTo("sign-in");
+            return;
+        }
+
+        _list = ListFromQuery;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        var clients = await Api.ClientsAsync(_status, _list, _q);
+        if (!clients.Succeeded) { _error = clients.Error; return; }
+        _clients = clients.Value;
+        _lists = (await Api.ClientListsAsync()).Value ?? [];
+        _selected.IntersectWith(_clients!.Select(c => c.Id));
+    }
+
+    private async Task FilterAsync(string? status, Guid? list)
+    {
+        (_status, _list, _renaming, _confirmDelete, _message, _error) = (status, list, false, false, null, null);
+        await LoadAsync();
+    }
+
+    private async Task AddAsync()
+    {
+        (_addError, _existing, _busy) = (null, null, true);
+        try
+        {
+            var result = await Api.AddClientAsync(_name ?? "", _email, _mobile, _how, _newLists);
+            if (!result.Succeeded)
+            {
+                _addError = result.Error;
+                // Someone already known by that email: offer theirs rather than a second record.
+                var match = _clients?.FirstOrDefault(c => string.Equals(c.Email, _email?.Trim(), StringComparison.OrdinalIgnoreCase));
+                _existing = match?.Id;
+                return;
+            }
+
+            _message = $"{_name} added.";
+            (_adding, _name, _email, _mobile, _how) = (false, null, null, null, null);
+            _newLists.Clear();
+            await LoadAsync();
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task AddToListAsync()
+    {
+        (_busy, _error, _message) = (true, null, null);
+        try
+        {
+            Guid listId;
+            string listName;
+            if (_target == "new")
+            {
+                var created = await Api.CreateClientListAsync(_newList ?? "");
+                if (!created.Succeeded) { _error = created.Error; return; }
+                (listId, listName) = (created.Value!.Id, created.Value.Name);
+            }
+            else if (Guid.TryParse(_target, out var chosen))
+            {
+                (listId, listName) = (chosen, _lists?.SingleOrDefault(l => l.Id == chosen)?.Name ?? "the list");
+            }
+            else
+            {
+                return;
+            }
+
+            var result = await Api.AddToClientListAsync(listId, _selected);
+            if (!result.Succeeded) { _error = result.Error; return; }
+            _message = $"Added {result.Value!.Count} to \"{listName}\"{(result.Value.Count < _selected.Count ? $" ({_selected.Count - result.Value.Count} already on it)" : "")}.";
+            (_target, _newList) = ("", null);
+            _selected.Clear();
+            await LoadAsync();
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task RemoveFromListAsync()
+    {
+        if (CurrentList is not { } list) return;
+        (_busy, _error, _message) = (true, null, null);
+        try
+        {
+            var result = await Api.RemoveFromClientListAsync(list.Id, _selected);
+            if (!result.Succeeded) { _error = result.Error; return; }
+            _message = $"Took {result.Value!.Count} off \"{list.Name}\".";
+            _selected.Clear();
+            await LoadAsync();
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task RenameAsync()
+    {
+        if (CurrentList is not { } list) return;
+        var result = await Api.RenameClientListAsync(list.Id, _rename ?? "");
+        if (!result.Succeeded) { _error = result.Error; return; }
+        _renaming = false;
+        await LoadAsync();
+    }
+
+    private async Task DeleteListAsync()
+    {
+        if (CurrentList is not { } list) return;
+        var result = await Api.DeleteClientListAsync(list.Id);
+        if (!result.Succeeded) { _error = result.Error; return; }
+        _message = $"Deleted the list \"{list.Name}\". The clients on it are still here.";
+        (_list, _confirmDelete) = (null, false);
+        await LoadAsync();
+    }
+
+    private static string StatusClasses(string status) => status switch
+    {
+        "Current owner" => "bg-scope-owners-bg text-scope-owners-fg",
+        "Past owner" => "bg-surface-sunken text-text-muted",
+        _ => "bg-scope-trainer-bg text-scope-trainer-fg",
+    };
+}

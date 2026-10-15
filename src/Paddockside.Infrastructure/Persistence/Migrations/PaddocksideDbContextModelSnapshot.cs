@@ -90,6 +90,32 @@ namespace Paddockside.Infrastructure.Persistence.Migrations
                     b.ToTable("AuditEntries");
                 });
 
+            modelBuilder.Entity("Paddockside.Domain.ClientList", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId");
+
+                    b.HasIndex("TenantId", "Name")
+                        .IsUnique();
+
+                    b.ToTable("ClientLists");
+                });
+
             modelBuilder.Entity("Paddockside.Domain.Delivery", b =>
                 {
                     b.Property<Guid>("Id")
@@ -713,10 +739,17 @@ namespace Paddockside.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("Id")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<DateTimeOffset?>("AddedAt")
+                        .HasColumnType("datetimeoffset");
+
                     b.Property<string>("DisplayName")
                         .IsRequired()
                         .HasMaxLength(200)
                         .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("HowWeKnowThem")
+                        .HasMaxLength(300)
+                        .HasColumnType("nvarchar(300)");
 
                     b.Property<string>("Kind")
                         .IsRequired()
@@ -1101,6 +1134,44 @@ namespace Paddockside.Infrastructure.Persistence.Migrations
                         .HasForeignKey("TenantId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("Paddockside.Domain.ClientList", b =>
+                {
+                    b.HasOne("Paddockside.Domain.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.OwnsMany("Paddockside.Domain.ClientListMember", "Members", b1 =>
+                        {
+                            b1.Property<Guid>("ClientListId")
+                                .HasColumnType("uniqueidentifier");
+
+                            b1.Property<Guid>("PartyId")
+                                .HasColumnType("uniqueidentifier");
+
+                            b1.Property<DateTimeOffset>("AddedAt")
+                                .HasColumnType("datetimeoffset");
+
+                            b1.HasKey("ClientListId", "PartyId");
+
+                            b1.HasIndex("PartyId");
+
+                            b1.ToTable("ClientListMembers", (string)null);
+
+                            b1.WithOwner()
+                                .HasForeignKey("ClientListId");
+
+                            b1.HasOne("Paddockside.Domain.Party", null)
+                                .WithMany()
+                                .HasForeignKey("PartyId")
+                                .OnDelete(DeleteBehavior.Restrict)
+                                .IsRequired();
+                        });
+
+                    b.Navigation("Members");
                 });
 
             modelBuilder.Entity("Paddockside.Domain.Delivery", b =>

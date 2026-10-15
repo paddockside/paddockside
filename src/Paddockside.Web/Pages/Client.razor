@@ -1,0 +1,247 @@
+@page "/clients/{Id:guid}"
+@inject PaddocksideApi Api
+@inject SessionState Session
+@inject NavigationManager Navigation
+
+<PageTitle>@(_client?.Name ?? "Client") · Paddockside</PageTitle>
+
+@*
+    One client: their contact details (coordinators and above correct them; a mistyped email is replaced, not kept),
+    how the business knows them, the horses they own now and owned before, where their portal invitation is up to
+    (with "Send it again"), and the lists they're on. Staff only.
+*@
+<div class="grid max-w-3xl gap-6">
+    <a href="clients" class="btn-link justify-self-start">← All clients</a>
+
+    @if (_error is not null && _client is null)
+    {
+        <Error Message="@_error" />
+    }
+    else if (_client is not { } client)
+    {
+        <p class="text-text-muted" role="status">Loading…</p>
+    }
+    else
+    {
+        <header class="flex flex-wrap items-center gap-4">
+            <span aria-hidden="true" class="grid size-[56px] place-items-center rounded-pill bg-scope-owners-bg text-title font-heading text-scope-owners-fg">@Monograms.Of(client.Name)</span>
+            <div class="grid gap-1">
+                <h1>@client.Name</h1>
+                <p class="text-text-muted">@client.Status@(client.Added is null ? null : $" · added {client.Added}")</p>
+            </div>
+        </header>
+
+        @if (_message is not null)
+        {
+            <p class="rounded-control bg-status-success-bg px-4 py-3 text-status-success-fg" role="status">@_message</p>
+        }
+        @if (_error is not null)
+        {
+            <Error Message="@_error" />
+        }
+
+        <section class="card grid gap-4" aria-labelledby="contact-heading">
+            <div class="flex items-center justify-between gap-2">
+                <h2 id="contact-heading" class="text-title">Contact details</h2>
+                @if (CanEdit && !_editing)
+                {
+                    <button type="button" class="btn-secondary min-h-[36px] px-4" @onclick="StartEditing">Edit</button>
+                }
+            </div>
+            @if (_editing)
+            {
+                <form class="grid gap-4" @onsubmit="SaveAsync" @onsubmit:preventDefault>
+                    <div class="grid gap-4 sm:grid-cols-2">
+                        <div class="field sm:col-span-2">
+                            <label class="field-label" for="edit-name">Name</label>
+                            <input id="edit-name" class="input" maxlength="200" @bind="_name" />
+                        </div>
+                        <div class="field">
+                            <label class="field-label" for="edit-email">Email</label>
+                            <input id="edit-email" class="input" type="email" @bind="_email" />
+                        </div>
+                        <div class="field">
+                            <label class="field-label" for="edit-mobile">Mobile</label>
+                            <input id="edit-mobile" class="input" type="tel" @bind="_mobile" />
+                        </div>
+                        <div class="field sm:col-span-2">
+                            <label class="field-label" for="edit-how">How you know them</label>
+                            <input id="edit-how" class="input" maxlength="300" @bind="_how" />
+                        </div>
+                    </div>
+                    <p class="field-hint">A corrected email replaces the old one. If they sign in to the owners' portal, their own sign-in address isn't changed here.</p>
+                    <div class="flex flex-wrap gap-3">
+                        <button type="submit" class="btn-primary" disabled="@_busy">Save</button>
+                        <button type="button" class="btn-secondary" @onclick="() => _editing = false">Cancel</button>
+                    </div>
+                </form>
+            }
+            else
+            {
+                <dl class="grid grid-cols-[minmax(0,8rem)_minmax(0,1fr)] gap-x-4 gap-y-2">
+                    <dt class="text-text-muted">Email</dt>
+                    <dd class="break-all">
+                        @(client.Email ?? "None")
+                        @if (client.EmailBounced)
+                        {
+                            <span class="block text-small font-strong text-status-danger-fg">Bouncing: nothing is being sent to it. Correct it to start again.</span>
+                        }
+                    </dd>
+                    <dt class="text-text-muted">Mobile</dt>
+                    <dd>@(client.Mobile ?? "None")</dd>
+                    <dt class="text-text-muted">How you know them</dt>
+                    <dd>@(client.HowWeKnowThem ?? "Not recorded")</dd>
+                </dl>
+            }
+        </section>
+
+        <section class="card grid gap-3" aria-labelledby="horses-heading">
+            <h2 id="horses-heading" class="text-title">Horses</h2>
+            @if (client.CurrentHorses.Count == 0 && client.PastHorses.Count == 0)
+            {
+                <p class="text-text-muted">None yet. To give them a share, add them on the horse's page.</p>
+            }
+            <ul class="grid gap-2">
+                @foreach (var horse in client.CurrentHorses)
+                {
+                    <li class="flex flex-wrap items-baseline gap-x-3"><a href="horses/@horse.HorseId" class="font-strong underline underline-offset-4">@horse.Name</a> <span>@horse.Share</span> <span class="text-small text-text-muted">@horse.When</span></li>
+                }
+                @foreach (var horse in client.PastHorses)
+                {
+                    <li class="flex flex-wrap items-baseline gap-x-3 text-text-muted"><a href="horses/@horse.HorseId" class="underline underline-offset-4">@horse.Name</a> <span class="text-small">owned @horse.When</span></li>
+                }
+            </ul>
+        </section>
+
+        @if (client.Invitation is { } invitation)
+        {
+            <section class="card grid gap-3" aria-labelledby="portal-heading">
+                <h2 id="portal-heading" class="text-title">Owners' portal</h2>
+                <p>@invitation</p>
+                @if (CanEdit && client.CanResend)
+                {
+                    <button type="button" class="btn-secondary justify-self-start" disabled="@_busy" @onclick="ResendAsync">Send the invitation again</button>
+                    <p class="field-hint">To @client.Email. Check the address above first.</p>
+                }
+            </section>
+        }
+
+        <section class="card grid gap-3" aria-labelledby="lists-heading">
+            <h2 id="lists-heading" class="text-title">Lists</h2>
+            @if (client.Lists.Count == 0)
+            {
+                <p class="text-text-muted">Not on any list.</p>
+            }
+            <ul class="flex flex-wrap gap-2">
+                @foreach (var list in client.Lists)
+                {
+                    <li class="inline-flex min-h-[36px] items-center gap-2 rounded-pill border border-border-strong bg-surface-sunken pl-3 pr-1 text-small">
+                        <a href="clients?list=@list.Id" class="underline-offset-4 hover:underline">@list.Name</a>
+                        @if (CanEdit)
+                        {
+                            <button type="button" class="grid size-[28px] place-items-center rounded-pill hover:bg-surface-raised" aria-label="Take @client.Name off @list.Name"
+                                    @onclick="() => TakeOffAsync(list)">✕</button>
+                        }
+                    </li>
+                }
+            </ul>
+            @if (CanEdit && OtherLists.Count > 0)
+            {
+                <div class="flex flex-wrap items-center gap-2">
+                    <label class="sr-only" for="put-on">Put them on a list</label>
+                    <select id="put-on" class="input min-h-[36px] w-auto" @bind="_putOn">
+                        <option value="">Put them on a list…</option>
+                        @foreach (var list in OtherLists)
+                        {
+                            <option value="@list.Id">@list.Name</option>
+                        }
+                    </select>
+                    <button type="button" class="btn-secondary min-h-[36px] px-4" disabled="@string.IsNullOrEmpty(_putOn)" @onclick="PutOnAsync">Add</button>
+                </div>
+            }
+        </section>
+    }
+</div>
+
+@code {
+    [Parameter] public Guid Id { get; set; }
+
+    private ClientDetail? _client;
+    private List<ClientListView> _lists = [];
+    private bool _editing, _busy;
+    private string? _name, _email, _mobile, _how, _putOn, _error, _message;
+
+    private bool CanEdit => Session.Current?.Role is "Coordinator" or "Manager" or "TenantAdmin";
+
+    private List<ClientListView> OtherLists => _lists.Where(l => _client?.Lists.All(m => m.Id != l.Id) ?? false).ToList();
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (Session.Current is null && await Session.RefreshAsync() is null)
+        {
+            Navigation.NavigateTo("sign-in");
+            return;
+        }
+
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        var result = await Api.ClientAsync(Id);
+        if (!result.Succeeded) { _error = result.Error; return; }
+        _client = result.Value;
+        _lists = (await Api.ClientListsAsync()).Value ?? [];
+    }
+
+    private void StartEditing() =>
+        (_editing, _name, _email, _mobile, _how, _message, _error) = (true, _client!.Name, _client.Email, _client.Mobile, _client.HowWeKnowThem, null, null);
+
+    private async Task SaveAsync()
+    {
+        (_busy, _error, _message) = (true, null, null);
+        try
+        {
+            var result = await Api.UpdateClientAsync(Id, _name ?? "", _email, _mobile, _how);
+            if (!result.Succeeded) { _error = result.Error; return; }
+            (_editing, _message) = (false, "Saved.");
+            await LoadAsync();
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task ResendAsync()
+    {
+        (_busy, _error, _message) = (true, null, null);
+        try
+        {
+            var result = await Api.ResendInvitationAsync(Id);
+            if (!result.Succeeded) { _error = result.Error; return; }
+            _message = $"Their invitation is on its way to {_client!.Email}.";
+            await LoadAsync();
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task PutOnAsync()
+    {
+        if (!Guid.TryParse(_putOn, out var listId)) return;
+        var result = await Api.AddToClientListAsync(listId, [Id]);
+        if (!result.Succeeded) { _error = result.Error; return; }
+        _putOn = null;
+        await LoadAsync();
+    }
+
+    private async Task TakeOffAsync(ListRef list)
+    {
+        var result = await Api.RemoveFromClientListAsync(list.Id, [Id]);
+        if (!result.Succeeded) { _error = result.Error; return; }
+        await LoadAsync();
+    }
+}

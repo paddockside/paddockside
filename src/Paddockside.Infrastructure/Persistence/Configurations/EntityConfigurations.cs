@@ -40,6 +40,8 @@ internal sealed class PartyConfiguration : IEntityTypeConfiguration<Party>
         b.Ignore(x => x.PrimaryMobile);
         b.Property(x => x.PersonId);
         b.HasIndex(x => x.PersonId);
+        b.Property(x => x.HowWeKnowThem).HasMaxLength(Party.HowWeKnowThemLength);
+        b.Property(x => x.AddedAt);
 
         // Contacts belong to their party (and its tenant filter); they are never queried on their own.
         b.OwnsMany(x => x.Contacts, c =>
@@ -56,6 +58,30 @@ internal sealed class PartyConfiguration : IEntityTypeConfiguration<Party>
             c.HasIndex(x => x.Value);
         });
         b.Navigation(x => x.Contacts).UsePropertyAccessMode(PropertyAccessMode.Field);
+    }
+}
+
+internal sealed class ClientListConfiguration : IEntityTypeConfiguration<ClientList>
+{
+    public void Configure(EntityTypeBuilder<ClientList> b)
+    {
+        b.MapTenantOwned();
+        b.Property(x => x.Name).HasMaxLength(ClientList.NameLength);
+        b.Property(x => x.CreatedAt);
+        b.HasIndex("TenantId", nameof(ClientList.Name)).IsUnique();
+
+        // Members belong to their list (and its tenant filter); a client is found on lists by querying the lists.
+        b.OwnsMany(x => x.Members, m =>
+        {
+            m.ToTable("ClientListMembers");
+            m.WithOwner().HasForeignKey("ClientListId");
+            m.Property(x => x.PartyId);
+            m.Property(x => x.AddedAt);
+            m.HasKey("ClientListId", nameof(ClientListMember.PartyId));
+            m.HasIndex(x => x.PartyId);
+            m.HasOne<Party>().WithMany().HasForeignKey(x => x.PartyId).OnDelete(DeleteBehavior.Restrict);
+        });
+        b.Navigation(x => x.Members).UsePropertyAccessMode(PropertyAccessMode.Field);
     }
 }
 
