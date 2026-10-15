@@ -42,6 +42,90 @@
             </section>
         }
 
+        @if (_owners is { } owners)
+        {
+            @* Who owns the horse now (ownership-model.md): staff only. Names here never reach another owner. *@
+            <section id="owners" class="grid grid-cols-[minmax(0,1fr)] gap-3" aria-labelledby="owners-heading">
+                <div class="flex flex-wrap items-baseline justify-between gap-2">
+                    <h2 id="owners-heading">Owners</h2>
+                    <span class="text-small text-text-muted">@owners.Allocated</span>
+                </div>
+                @if (owners.Owners.Count == 0)
+                {
+                    <p class="text-text-muted">No owners yet.</p>
+                }
+                else
+                {
+                    <ul class="card grid !p-0">
+                        @foreach (var owner in owners.Owners)
+                        {
+                            <li class="flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-border-subtle px-4 py-3 last:border-b-0">
+                                <span class="grid min-w-0 flex-1">
+                                    <span class="font-strong">@owner.Name@(owner.IsHouse ? " (house share)" : null)</span>
+                                    <span class="truncate text-small text-text-muted">@string.Join(" · ", new[] { owner.Email, owner.Mobile }.Where(c => c is not null))</span>
+                                </span>
+                                @if (owner.Invited is not null)
+                                {
+                                    <span class="badge bg-surface-sunken text-text-muted">@owner.Invited</span>
+                                }
+                                <span class="w-[64px] text-right font-strong tabular-nums">@owner.Percent</span>
+                                <span class="text-small text-text-muted">since @owner.Since</span>
+                            </li>
+                        }
+                    </ul>
+                }
+
+                @if (CanManage && _horse.Managed)
+                {
+                    @if (!_addingOwner)
+                    {
+                        <button type="button" class="btn-secondary justify-self-start" @onclick="() => (_addingOwner, _ownerError) = (true, null)">Add an owner</button>
+                    }
+                    else
+                    {
+                        <form class="card grid gap-4" @onsubmit="AddOwnerAsync" @onsubmit:preventDefault aria-label="Add an owner">
+                            <div class="grid gap-4 sm:grid-cols-2">
+                                <div class="field sm:col-span-2">
+                                    <label class="field-label" for="owner-name">Name</label>
+                                    <input id="owner-name" class="input" maxlength="200" @bind="_ownerName" />
+                                </div>
+                                <div class="field">
+                                    <label class="field-label" for="owner-email">Email</label>
+                                    <input id="owner-email" class="input" type="email" @bind="_ownerEmail" />
+                                </div>
+                                <div class="field">
+                                    <label class="field-label" for="owner-mobile">Mobile</label>
+                                    <input id="owner-mobile" class="input" type="tel" @bind="_ownerMobile" placeholder="04xx xxx xxx" />
+                                </div>
+                                <div class="field">
+                                    <label class="field-label" for="owner-share">Share (%)</label>
+                                    <input id="owner-share" class="input" type="number" min="0.1" max="100" step="0.1" @bind="_ownerShare" />
+                                    <span class="field-hint">@owners.Unallocated.ToString("0.#")% still unallocated.</span>
+                                </div>
+                                <div class="field">
+                                    <label class="field-label" for="owner-since">Owner since</label>
+                                    <input id="owner-since" class="input" type="date" @bind="_ownerSince" />
+                                </div>
+                            </div>
+                            <p class="field-hint">Someone already known by their email is linked, not added twice. A new owner is sent their invitation to the owners' portal.</p>
+                            @if (_ownerError is not null)
+                            {
+                                <p class="alert-danger" role="alert">@_ownerError</p>
+                            }
+                            <div class="flex flex-wrap gap-3">
+                                <button type="submit" class="btn-primary" disabled="@_busy">Add owner</button>
+                                <button type="button" class="btn-secondary" @onclick="() => _addingOwner = false">Cancel</button>
+                            </div>
+                        </form>
+                    }
+                }
+                @if (_ownerAdded is not null)
+                {
+                    <p class="rounded-control bg-status-success-bg px-4 py-3 text-status-success-fg" role="status">@_ownerAdded</p>
+                }
+            </section>
+        }
+
         @if (_onHorse is { Count: > 0 })
         {
             <section class="grid grid-cols-[minmax(0,1fr)] gap-3" aria-labelledby="on-horse-heading">
@@ -148,6 +232,35 @@
 
     private HorseDetail? _horse;
     private List<EventSummary>? _events;
+    private OwnersView? _owners;
+    private bool _addingOwner;
+    private string? _ownerName, _ownerEmail, _ownerMobile, _ownerError, _ownerAdded;
+    private decimal? _ownerShare;
+    private DateTime _ownerSince = DateTime.Today;
+
+    /// <summary>Who owns a horse is for managers and admins; coordinators see the list.</summary>
+    private bool CanManage => Session.Current?.Role is "Manager" or "TenantAdmin";
+
+    private async Task AddOwnerAsync()
+    {
+        (_ownerError, _ownerAdded) = (null, null);
+        if (_ownerShare is not > 0) { _ownerError = "Give their share as a percentage."; return; }
+        _busy = true;
+        try
+        {
+            var result = await Api.AddOwnerAsync(Id, _ownerName ?? "", _ownerEmail, _ownerMobile, _ownerShare.Value, _ownerSince.ToString("yyyy-MM-dd"));
+            if (!result.Succeeded) { _ownerError = result.Error; return; }
+            _ownerAdded = result.Value!.IsNew
+                ? $"{_ownerName} added with {_ownerShare:0.#}%. Their invitation to the owners' portal is on its way."
+                : $"{_ownerName} was already known here, so their new {_ownerShare:0.#}% is linked to them.";
+            (_addingOwner, _ownerName, _ownerEmail, _ownerMobile, _ownerShare) = (false, null, null, null, null);
+            _owners = (await Api.HorseOwnersAsync(Id)).Value;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
     private string? _error;
     private bool _copied;
     private List<HorseItem>? _onHorse;
@@ -206,6 +319,7 @@
         _horse = horse.Value;
 
         _onHorse = (await Api.OnTheHorseAsync(Id)).Value;
+        _owners = (await Api.HorseOwnersAsync(Id)).Value;
         var events = await Api.HorseEventsAsync(Id);
         if (events.Succeeded) { _events = events.Value; Rail.Show(StaffRail.From(_horse!, _events!, null)); }
         else _error = events.Error;

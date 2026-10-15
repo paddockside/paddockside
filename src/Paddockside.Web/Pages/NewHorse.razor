@@ -1,0 +1,110 @@
+@page "/horses/new"
+@inject PaddocksideApi Api
+@inject SessionState Session
+@inject NavigationManager Navigation
+
+<PageTitle>New horse · Paddockside</PageTitle>
+
+@*
+    Adding a horse by hand (build plan, sprint 4): its name or sale lot, the basics, the day it came under management,
+    and the house share if the business holds one. Owners are added on the horse's page next. Managers and admins.
+*@
+<div class="grid max-w-2xl gap-6">
+    <a href="horses" class="btn-link justify-self-start">← All horses</a>
+    <h1>New horse</h1>
+
+    <form class="card grid gap-5" @onsubmit="SaveAsync" @onsubmit:preventDefault>
+        <fieldset class="grid gap-2">
+            <legend class="field-label mb-1">Known as</legend>
+            <label class="inline-flex items-center gap-2"><input type="radio" name="kind" class="size-[18px] accent-action-primary-bg" checked="@(_kind == "Registered")" @onchange="@(() => _kind = "Registered")" /> Its registered name</label>
+            <label class="inline-flex items-center gap-2"><input type="radio" name="kind" class="size-[18px] accent-action-primary-bg" checked="@(_kind == "SaleLot")" @onchange="@(() => _kind = "SaleLot")" /> A sale lot, not yet named</label>
+        </fieldset>
+
+        <div class="field">
+            <label class="field-label" for="horse-name">@(_kind == "SaleLot" ? "Lot" : "Name")</label>
+            <input id="horse-name" class="input" maxlength="100" @bind="_name" placeholder="@(_kind == "SaleLot" ? "Lot 231 (unnamed)" : "Faultless Miss")" />
+        </div>
+
+        <div class="grid gap-4 sm:grid-cols-2">
+            <div class="field">
+                <label class="field-label" for="horse-sex">Sex</label>
+                <select id="horse-sex" class="input" @bind="_sex">
+                    <option value="">Not recorded</option>
+                    @foreach (var sex in new[] { "Colt", "Filly", "Gelding", "Mare", "Stallion" })
+                    {
+                        <option value="@sex">@sex</option>
+                    }
+                </select>
+            </div>
+            <div class="field">
+                <label class="field-label" for="horse-foaled">Foaled (year)</label>
+                <input id="horse-foaled" class="input" type="number" min="1990" max="@DateTime.Today.Year" @bind="_foaled" />
+            </div>
+            <div class="field">
+                <label class="field-label" for="horse-sire">Sire</label>
+                <input id="horse-sire" class="input" maxlength="100" @bind="_sire" />
+            </div>
+            <div class="field">
+                <label class="field-label" for="horse-dam">Dam</label>
+                <input id="horse-dam" class="input" maxlength="100" @bind="_dam" />
+            </div>
+        </div>
+
+        <div class="grid gap-4 sm:grid-cols-2">
+            <div class="field">
+                <label class="field-label" for="horse-from">Managed from</label>
+                <input id="horse-from" class="input" type="date" @bind="_from" />
+                <span class="field-hint">The day @(Session.Current?.TenantName ?? "you") took it on.</span>
+            </div>
+            <div class="field">
+                <label class="field-label" for="horse-house">House share (%)</label>
+                <input id="horse-house" class="input" type="number" min="0" max="100" step="0.1" @bind="_house" />
+                <span class="field-hint">@(Session.Current?.TenantName ?? "The business")'s own share, if any. It's never sent anything.</span>
+            </div>
+        </div>
+
+        @if (_error is not null)
+        {
+            <p class="alert-danger" role="alert">@_error</p>
+        }
+
+        <div class="flex flex-wrap gap-3">
+            <button type="submit" class="btn-primary" disabled="@_busy">Add the horse</button>
+            <a href="horses" class="btn-secondary">Cancel</a>
+        </div>
+        <p class="field-hint">Next, add its owners on the horse's page.</p>
+    </form>
+</div>
+
+@code {
+    private string _kind = "Registered";
+    private string? _name;
+    private string _sex = "";
+    private int? _foaled;
+    private string? _sire;
+    private string? _dam;
+    private DateTime _from = DateTime.Today;
+    private decimal? _house;
+    private string? _error;
+    private bool _busy;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (Session.Current is null && await Session.RefreshAsync() is null) Navigation.NavigateTo("sign-in");
+    }
+
+    private async Task SaveAsync()
+    {
+        (_error, _busy) = (null, true);
+        try
+        {
+            var result = await Api.CreateHorseAsync(_name ?? "", _kind, _sex == "" ? null : _sex, _foaled, _sire, _dam, _from.ToString("yyyy-MM-dd"), _house is > 0 ? _house : null);
+            if (!result.Succeeded) { _error = result.Error; return; }
+            Navigation.NavigateTo($"horses/{result.Value!.Id}#owners");
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}

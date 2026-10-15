@@ -94,6 +94,15 @@ public sealed record Posted(Guid Id, int Recipients);
 
 public sealed record AttachmentView(string Name, string? Dropped);
 
+/// <param name="Invited">"Not signed in yet" until they first sign in to the portal.</param>
+public sealed record OwnerLine(Guid InterestId, Guid PartyId, string Name, string? Email, string? Mobile, string Percent, string Since, bool IsHouse, string? Invited);
+
+public sealed record OwnersView(List<OwnerLine> Owners, string Allocated, decimal Unallocated);
+
+public sealed record CreatedHorse(Guid Id);
+
+public sealed record AddedOwner(Guid Id, bool IsNew);
+
 public sealed record TodayRunner(Guid EventId, Guid HorseId, string Horse, string Type, string Title, string? Time, string? Stage, List<StepView> Steps, List<string> Attention);
 
 public sealed record TodayUndelivered(Guid ItemId, Guid? EventId, Guid HorseId, string Horse, string? Event, string Title, string Sent, string Detail);
@@ -288,6 +297,14 @@ public sealed class PaddocksideApi(HttpClient http)
 
     public Task<ApiResult<FactRecorded>> CorrectFactAsync(Guid itemId, IEnumerable<FactFieldInput> fields, string? note, bool tell) =>
         PostAsync<FactRecorded>($"api/items/{itemId}/correction", new { fields = fields.Select(f => new { label = f.Label, value = f.Value }), note, tell });
+
+    public Task<ApiResult<CreatedHorse>> CreateHorseAsync(string name, string nameKind, string? sex, int? foaledYear, string? sire, string? dam, string managedFrom, decimal? houseShare) =>
+        PostAsync<CreatedHorse>("api/horses", new { name, nameKind, sex, foaledYear, sire, dam, managedFrom, houseShare });
+
+    public Task<ApiResult<OwnersView>> HorseOwnersAsync(Guid horseId) => GetAsync<OwnersView>($"api/horses/{horseId}/owners");
+
+    public Task<ApiResult<AddedOwner>> AddOwnerAsync(Guid horseId, string name, string? email, string? mobile, decimal percent, string? since) =>
+        PostAsync<AddedOwner>($"api/horses/{horseId}/owners", new { name, email, mobile, percent, since });
 
     public Task<ApiResult<object>> SetRaceDayAsync(Guid eventId, RaceDayView details) =>
         PutAsync<object>($"api/events/{eventId}/race-day", new { gate = details.Gate, dining = details.Dining, note = details.Note });

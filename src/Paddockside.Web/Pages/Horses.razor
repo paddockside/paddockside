@@ -6,7 +6,13 @@
 <PageTitle>Horses · Paddockside</PageTitle>
 
 <div class="grid gap-4">
-    <h1>Horses</h1>
+    <div class="flex flex-wrap items-center justify-between gap-3">
+        <h1>Horses</h1>
+        @if (Session.Current?.Role is "Manager" or "TenantAdmin")
+        {
+            <a href="horses/new" class="btn-primary">New horse</a>
+        }
+    </div>
 
     @if (_error is not null)
     {
