@@ -57,7 +57,10 @@ public sealed record PromptRequest(string Kind, string Question, List<string>? O
 public sealed record OwnerOption(Guid Id, string Name);
 
 public sealed record EventPage(EventSummary Event, Guid HorseId, string HorseName, List<ItemView> Items, List<string> StepOptions, List<OwnerOption> Owners,
-    Dictionary<string, PromptRequest> StepPrompts, string? Tickets = null);
+    Dictionary<string, PromptRequest> StepPrompts, string? Tickets = null, RaceDayView? RaceDay = null);
+
+/// <summary>A race's details for owners on the day: gate, dining, a note.</summary>
+public sealed record RaceDayView(string? Gate, string? Dining, string? Note);
 
 public sealed record TicketLine(Guid PartyId, string Name, bool IsHouse, int? Asked, int Given, int? Confirmed);
 
@@ -187,7 +190,7 @@ public sealed record OwnerShare(string Line, string Detail);
 public sealed record OwnerEarlier(Guid Id, string Title);
 
 public sealed record OwnerEventPage(EventSummary Event, Guid HorseId, string Horse, List<OwnerItem> Items, string? Heading = null, string? GlanceTitle = null,
-    List<OwnerField>? Glance = null, OwnerTickets? Tickets = null, OwnerShare? Share = null, List<OwnerEarlier>? Earlier = null);
+    List<OwnerField>? Glance = null, OwnerTickets? Tickets = null, OwnerShare? Share = null, List<OwnerEarlier>? Earlier = null, RaceDayView? RaceDay = null);
 
 public sealed record Contacted(Guid Id);
 
@@ -244,6 +247,9 @@ public sealed class PaddocksideApi(HttpClient http)
 
     public Task<ApiResult<CreatedEvent>> CreateEventAsync(Guid horseId, string type, string title, string? keyDate, bool open) =>
         PostAsync<CreatedEvent>($"api/horses/{horseId}/events", new { type, title, keyDate, open });
+
+    public Task<ApiResult<object>> SetRaceDayAsync(Guid eventId, RaceDayView details) =>
+        PutAsync<object>($"api/events/{eventId}/race-day", new { gate = details.Gate, dining = details.Dining, note = details.Note });
 
     public Task<ApiResult<object>> OpenEventAsync(Guid eventId) => PostAsync<object>($"api/events/{eventId}/open", new { });
 

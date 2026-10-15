@@ -70,6 +70,24 @@
                         <dt class="text-text-muted">@f.Label</dt>
                         <dd>@f.Value</dd>
                     }
+                    @if (_page.RaceDay is { } raceDay)
+                    {
+                        @if (raceDay.Gate is not null)
+                        {
+                            <dt class="text-text-muted">Gate</dt>
+                            <dd>@raceDay.Gate</dd>
+                        }
+                        @if (raceDay.Dining is not null)
+                        {
+                            <dt class="text-text-muted">Dining</dt>
+                            <dd>@raceDay.Dining</dd>
+                        }
+                        @if (raceDay.Note is not null)
+                        {
+                            <dt class="text-text-muted">Also</dt>
+                            <dd>@raceDay.Note</dd>
+                        }
+                    }
                     @if (_page.Tickets is { } tickets)
                     {
                         <dt class="text-text-muted">Tickets</dt>

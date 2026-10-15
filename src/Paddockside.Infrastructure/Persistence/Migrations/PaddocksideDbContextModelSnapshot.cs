@@ -170,10 +170,18 @@ namespace Paddockside.Infrastructure.Persistence.Migrations
                     b.Property<Guid?>("ClosedByPartyId")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<string>("Dining")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
                     b.Property<string>("EventType")
                         .IsRequired()
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("Gate")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
 
                     b.Property<Guid>("HorseId")
                         .HasColumnType("uniqueidentifier");
@@ -183,6 +191,10 @@ namespace Paddockside.Infrastructure.Persistence.Migrations
 
                     b.Property<DateTimeOffset?>("OpenedAt")
                         .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("RaceDayNote")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
 
                     b.Property<string>("Status")
                         .IsRequired()

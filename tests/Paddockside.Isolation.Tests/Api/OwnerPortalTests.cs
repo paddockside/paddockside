@@ -113,6 +113,38 @@ public sealed partial class OwnerSignInTests
         Assert.Empty(page.Earlier);
     }
 
+    private sealed record RaceDay(string? Gate, string? Dining, string? Note);
+
+    private sealed record WithRaceDay(RaceDay? RaceDay);
+
+    [Fact]
+    public async Task Staff_give_owners_the_gate_and_dining_for_a_race_and_saving_sends_nothing()
+    {
+        var seed = await SeedAsync();
+        using var staff = await Api.SignedInAsync(seed.TenantId, MemberRole.Coordinator);
+        using var ann = await SignInAsync(seed.AnnEmail);
+        var sentBefore = Api.Emails.Sent.Count;
+
+        Assert.Equal(HttpStatusCode.NoContent, (await staff.PutApiAsync($"/api/events/{seed.EventId}/race-day",
+            new { gate = "  Owners' entrance, bring your phone ", dining = "Chairman's dining room", note = "" })).StatusCode);
+        Assert.Equal(new RaceDay("Owners' entrance, bring your phone", "Chairman's dining room", null),
+            (await staff.GetFromJsonAsync<WithRaceDay>($"/api/events/{seed.EventId}"))!.RaceDay);
+
+        Assert.Equal("Chairman's dining room", (await ann.GetFromJsonAsync<WithRaceDay>($"/api/my/events/{seed.EventId}"))!.RaceDay!.Dining);
+        Assert.Equal(sentBefore, Api.Emails.Sent.Count);
+
+        // Cleared, owners see nothing; too long, or not a race, is refused; a viewer can't; another tenant's isn't found.
+        await staff.PutApiAsync($"/api/events/{seed.EventId}/race-day", new { gate = "", dining = " ", note = (string?)null });
+        Assert.Null((await ann.GetFromJsonAsync<WithRaceDay>($"/api/my/events/{seed.EventId}"))!.RaceDay);
+        Assert.Equal(HttpStatusCode.BadRequest, (await staff.PutApiAsync($"/api/events/{seed.EventId}/race-day", new { gate = new string('x', 201), dining = "", note = "" })).StatusCode);
+        var vet = (await (await staff.PostApiAsync($"/api/horses/{seed.HorseId}/events", new { type = "Veterinary", title = "Scope", keyDate = (string?)null, open = true }))
+            .Content.ReadFromJsonAsync<CreatedEvent>())!.Id;
+        Assert.Equal(HttpStatusCode.BadRequest, (await staff.PutApiAsync($"/api/events/{vet}/race-day", new { gate = "Main gate", dining = "", note = "" })).StatusCode);
+        using var viewer = await Api.SignedInAsync(seed.TenantId, MemberRole.Viewer);
+        Assert.Equal(HttpStatusCode.Forbidden, (await viewer.PutApiAsync($"/api/events/{seed.EventId}/race-day", new { gate = "Main gate", dining = "", note = "" })).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await staff.PutApiAsync($"/api/events/{db.A.EventId}/race-day", new { gate = "Main gate", dining = "", note = "" })).StatusCode);
+    }
+
     [Fact]
     public async Task Staff_view_an_event_as_one_owner_sees_it_and_nothing_is_marked_seen()
     {

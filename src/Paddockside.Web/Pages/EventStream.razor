@@ -178,6 +178,66 @@ else
                 </dl>
             </section>
 
+            @if (_page.RaceDay is { } raceDay)
+            {
+                @* Race-day details for owners: information about the day, shown on their page; saving sends nothing. *@
+                <section class="grid gap-2" aria-labelledby="race-day-heading">
+                    <div class="flex items-center justify-between gap-2">
+                        <h2 id="race-day-heading" class="@SideHeading">For owners on the day</h2>
+                        @if (_raceDayDraft is null)
+                        {
+                            <button type="button" class="text-small font-strong underline underline-offset-4" @onclick="() => _raceDayDraft = new(raceDay.Gate, raceDay.Dining, raceDay.Note)">Edit</button>
+                        }
+                    </div>
+                    @if (_raceDayDraft is { } draft)
+                    {
+                        <form class="grid gap-3" @onsubmit="SaveRaceDayAsync" @onsubmit:preventDefault>
+                            <div class="field">
+                                <label class="field-label" for="race-day-gate">Gate</label>
+                                <input id="race-day-gate" class="input" maxlength="200" placeholder="Owners' entrance, bring your phone" @bind="draft.Gate" />
+                            </div>
+                            <div class="field">
+                                <label class="field-label" for="race-day-dining">Dining</label>
+                                <input id="race-day-dining" class="input" maxlength="200" placeholder="Chairman's dining room" @bind="draft.Dining" />
+                            </div>
+                            <div class="field">
+                                <label class="field-label" for="race-day-note">Anything else</label>
+                                <input id="race-day-note" class="input" maxlength="200" placeholder="Dress code, parking" @bind="draft.Note" />
+                            </div>
+                            <p class="field-hint">Owners see this on their page for the race. Saving doesn't send anything.</p>
+                            <div class="flex flex-wrap gap-3">
+                                <button type="submit" class="btn-primary min-h-[36px] px-4" disabled="@_busy">Save</button>
+                                <button type="button" class="btn-secondary min-h-[36px] px-4" @onclick="() => _raceDayDraft = null">Cancel</button>
+                            </div>
+                        </form>
+                    }
+                    else if (raceDay.Gate is null && raceDay.Dining is null && raceDay.Note is null)
+                    {
+                        <p class="text-small text-text-muted">Gate and dining aren't set. Owners see them at a glance once they are.</p>
+                    }
+                    else
+                    {
+                        <dl class="grid grid-cols-[96px_minmax(0,1fr)] gap-x-3 gap-y-1">
+                            @if (raceDay.Gate is not null)
+                            {
+                                <dt class="text-text-muted">Gate</dt>
+                                <dd>@raceDay.Gate</dd>
+                            }
+                            @if (raceDay.Dining is not null)
+                            {
+                                <dt class="text-text-muted">Dining</dt>
+                                <dd>@raceDay.Dining</dd>
+                            }
+                            @if (raceDay.Note is not null)
+                            {
+                                <dt class="text-text-muted">Note</dt>
+                                <dd>@raceDay.Note</dd>
+                            }
+                        </dl>
+                    }
+                </section>
+            }
+
             @if (_tickets is { } t)
             {
                 <section class="grid grid-cols-[minmax(0,1fr)] gap-3">
@@ -263,6 +323,32 @@ else
     private string? _error;
     private string? _saved;
     private bool _busy;
+    private RaceDayDraft? _raceDayDraft;
+
+    /// <summary>The race-day details being edited.</summary>
+    private sealed class RaceDayDraft(string? gate, string? dining, string? note)
+    {
+        public string? Gate { get; set; } = gate;
+        public string? Dining { get; set; } = dining;
+        public string? Note { get; set; } = note;
+    }
+
+    private async Task SaveRaceDayAsync()
+    {
+        if (_raceDayDraft is not { } draft) return;
+        (_busy, _error, _saved) = (true, null, null);
+        try
+        {
+            var result = await Api.SetRaceDayAsync(Id, new RaceDayView(draft.Gate, draft.Dining, draft.Note));
+            if (!result.Succeeded) { _error = result.Error; return; }
+            _raceDayDraft = null;
+            await Load();
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
 
     private const string SideHeading = "text-small font-strong uppercase tracking-wide text-text-muted";
 

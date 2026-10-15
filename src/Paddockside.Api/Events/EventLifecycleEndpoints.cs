@@ -26,6 +26,9 @@ public static class EventLifecycleEndpoints
 
     public sealed record Created(Guid Id);
 
+    /// <summary>A race's details for the day; blank clears one.</summary>
+    public sealed record RaceDayRequest(string? Gate, string? Dining, string? Note);
+
     private static readonly string[] CanCreate = [nameof(MemberRole.Coordinator), nameof(MemberRole.Manager), nameof(MemberRole.TenantAdmin)];
 
     private static readonly TimeZoneInfo Sydney = TimeZoneInfo.FindSystemTimeZoneById("Australia/Sydney");
@@ -43,6 +46,33 @@ public static class EventLifecycleEndpoints
         app.MapGet("/api/event-types", () => Results.Ok(Types)).RequireAuthorization(StaffPolicy.Name);
         app.MapPost("/api/horses/{id:guid}/events", Create).RequireAuthorization(StaffPolicy.Name);
         app.MapPost("/api/events/{id:guid}/open", Open).RequireAuthorization(StaffPolicy.Name);
+        app.MapPut("/api/events/{id:guid}/race-day", SetRaceDay).RequireAuthorization(StaffPolicy.Name);
+    }
+
+    /// <summary>
+    /// Race-day details for owners (gate, dining, a note): shown at a glance on their event page. Saving sends
+    /// nothing; staff tell owners with the tickets message as usual, and the page always has the latest.
+    /// </summary>
+    private static async Task<IResult> SetRaceDay(Guid id, RaceDayRequest request, ClaimsPrincipal user, PaddocksideDbContext db, AuditLog audit,
+        CancellationToken cancellationToken)
+    {
+        if (!CanCreate.Contains(user.FindFirstValue(SessionClaims.Role)))
+            return Results.Problem(statusCode: StatusCodes.Status403Forbidden, title: "Your role can read events but not change them.");
+        var e = await db.Events.SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
+        if (e is null) return Results.NotFound();
+        try
+        {
+            e.SetRaceDayDetails(request.Gate, request.Dining, request.Note);
+        }
+        catch (DomainException ex)
+        {
+            return Problem(ex.Message);
+        }
+
+        await db.SaveChangesAsync(cancellationToken);
+        await audit.RecordAsync(e.TenantId, "event.race-day", $"Race-day details for \"{e.Title}\": gate {e.Gate ?? "none"}, dining {e.Dining ?? "none"}",
+            "Event", e.Id, cancellationToken: cancellationToken);
+        return Results.NoContent();
     }
 
     private static async Task<IResult> Create(Guid id, NewEventRequest request, ClaimsPrincipal user, PaddocksideDbContext db, AuditLog audit,

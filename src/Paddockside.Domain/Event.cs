@@ -48,6 +48,32 @@ public sealed class Event
 
     public Guid? ClosedByPartyId { get; private set; }
 
+    /// <summary>
+    /// Race-day details staff give owners for a race start: which gate to use. Information about the day, not a step:
+    /// nothing arrives to tick it off, and setting it sends nothing. Owners see it at a glance on the event.
+    /// </summary>
+    public string? Gate { get; private set; }
+
+    /// <summary>Where the owners eat on the day ("Chairman's dining room").</summary>
+    public string? Dining { get; private set; }
+
+    /// <summary>Anything else owners need for the day: dress code, parking.</summary>
+    public string? RaceDayNote { get; private set; }
+
+    public const int RaceDayDetailLength = 200;
+
+    public void SetRaceDayDetails(string? gate, string? dining, string? note)
+    {
+        if (EventType != EventTypes.RaceStart.Code) throw new DomainException("Race-day details are for a race start.");
+        static string? Clean(string? value, string what)
+        {
+            var trimmed = string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+            if (trimmed?.Length > RaceDayDetailLength) throw new DomainException($"Keep the {what} under {RaceDayDetailLength} characters.");
+            return trimmed;
+        }
+        (Gate, Dining, RaceDayNote) = (Clean(gate, "gate"), Clean(dining, "dining"), Clean(note, "note"));
+    }
+
     public void Open(DateTimeOffset at)
     {
         if (Status != EventStatus.Draft) throw new DomainException($"Only a draft event can be opened (this one is {Status}).");

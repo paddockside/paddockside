@@ -57,7 +57,7 @@ public static class OwnerEndpoints
     /// <remarks>Never the other owners' names: owners don't see who else owns the horse (David, 14 Oct 2026).</remarks>
     public sealed record OwnerEventPage(HorseEndpoints.EventSummary Event, Guid HorseId, string Horse, IReadOnlyList<OwnerItem> Items,
         string? Heading = null, string? GlanceTitle = null, IReadOnlyList<OwnerField>? Glance = null, OwnerTickets? Tickets = null,
-        OwnerShare? Share = null, IReadOnlyList<OwnerEarlier>? Earlier = null);
+        OwnerShare? Share = null, IReadOnlyList<OwnerEarlier>? Earlier = null, Events.EventEndpoints.RaceDayView? RaceDay = null);
 
     public sealed record ReplyRequest(string Body);
 
@@ -258,6 +258,7 @@ public static class OwnerEndpoints
             Tickets = await TicketsForAsync(db, e, items, party.Id, tenant, cancellationToken),
             Share = Share(horse, party.Id, tenant),
             Earlier = await EarlierAsync(db, viewer, horse, e.Id, cancellationToken),
+            RaceDay = e.Gate is null && e.Dining is null && e.RaceDayNote is null ? null : new Events.EventEndpoints.RaceDayView(e.Gate, e.Dining, e.RaceDayNote),
         };
     }
 

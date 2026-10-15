@@ -62,7 +62,8 @@ public static class EventEndpoints
         IReadOnlyList<string> StepOptions,
         IReadOnlyList<OwnerOption> Owners,
         IReadOnlyDictionary<string, PromptRequest> StepPrompts,
-        string? Tickets = null);
+        string? Tickets = null,
+        RaceDayView? RaceDay = null);
 
     /// <param name="Kind">Count, YesNo or Choice.</param>
     public sealed record PromptRequest(string Kind, string Question, IReadOnlyList<string>? Options, int? Max);
@@ -75,6 +76,9 @@ public static class EventEndpoints
     public sealed record AnswerRequest(Guid PartyId, string Value);
 
     public sealed record Posted(Guid Id, int Recipients);
+
+    /// <summary>A race's details for the day, for owners; null for other event types.</summary>
+    public sealed record RaceDayView(string? Gate, string? Dining, string? Note);
 
     private static readonly string[] CanPost = [nameof(MemberRole.Coordinator), nameof(MemberRole.Manager), nameof(MemberRole.TenantAdmin)];
 
@@ -182,7 +186,8 @@ public static class EventEndpoints
             tickets = TicketEndpoints.Summary(allocation?.Available, asked, allocation?.Given ?? 0);
         }
 
-        return Results.Ok(new EventPage(summary, horse.Id, horse.Name, views, type.Steps.Select(s => s.Label).ToList(), owners, stepPrompts, tickets));
+        return Results.Ok(new EventPage(summary, horse.Id, horse.Name, views, type.Steps.Select(s => s.Label).ToList(), owners, stepPrompts, tickets,
+            e.EventType == EventTypes.RaceStart.Code ? new RaceDayView(e.Gate, e.Dining, e.RaceDayNote) : null));
     }
 
     private static async Task<IResult> Post(
