@@ -343,6 +343,54 @@ public sealed class InboundEmailTests(IsolationDatabase db, ApiFactoryFixture ap
         Assert.Equal(HttpStatusCode.BadRequest, (await coordinator.PostApiAsync($"/api/items/{reply.Id}/reply-to-sender", new { body = "Again" })).StatusCode);
     }
 
+    private sealed record EmailedMedia(Guid Id, string Kind, string ContentType, string FileName);
+
+    private sealed record EmailItem(Guid Id, string Scope, string? Title, List<EmailedMedia>? Media, string? Shared);
+
+    private sealed record EmailEventPage(List<EmailItem> Items);
+
+    [Fact]
+    public async Task A_trainers_emailed_photos_and_video_come_onto_the_horse_for_staff_and_are_shared_once()
+    {
+        var seed = await SeedTenantAsync(eventInWindow: true);
+        var photo = new byte[30_000];
+        Random.Shared.NextBytes(photo);
+        var payload = Payload($"bel-esprit@{seed.Slug}.in.paddockside.com.au", seed.TomEmail, "This morning's work", "Went beautifully.",
+        [
+            Attachment("gallop.jpg", "image/jpeg", photo),
+            Attachment("work.mov", "application/octet-stream", new byte[5000]), // a phone video with no proper type
+            Attachment("invoice.pdf", "application/pdf", Encoding.ASCII.GetBytes("%PDF-1.4 test")),
+            Attachment("logo.png", "image/png", new byte[900], contentId: "logo@01"),
+        ]);
+        await InboundAsync(payload);
+        await ProcessQueueAsync();
+
+        // The photo and the video come with the email; the invoice and the signature logo don't. Staff only, as the email is.
+        using var staff = await Api.SignedInAsync(seed.TenantId, MemberRole.Coordinator);
+        var page = (await staff.GetFromJsonAsync<EmailEventPage>($"/api/events/{seed.EventId}"))!;
+        var email = page.Items.Single(i => i.Title == "This morning's work");
+        Assert.Equal("Internal", email.Scope);
+        Assert.Equal([("gallop.jpg", "Photo", "image/jpeg"), ("work.mov", "Video", "video/quicktime")], email.Media!.Select(m => (m.FileName, m.Kind, m.ContentType)));
+        Assert.Equal(photo, await staff.GetByteArrayAsync($"/api/media/{email.Media![0].Id}"));
+        Assert.Null(email.Shared);
+
+        // Shared with the owners: a new item they can see, holding the same files; the email stays staff only. Once.
+        var shared = await staff.PostApiAsync($"/api/items/{email.Id}/share-media", new { caption = "Tom's report: she went beautifully." });
+        Assert.Equal(HttpStatusCode.Created, shared.StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, (await staff.PostApiAsync($"/api/items/{email.Id}/share-media", new { caption = "" })).StatusCode);
+
+        page = (await staff.GetFromJsonAsync<EmailEventPage>($"/api/events/{seed.EventId}"))!;
+        Assert.StartsWith("Shared with owners", page.Items.Single(i => i.Id == email.Id).Shared);
+        var forOwners = page.Items.Single(i => i.Scope == "Owners" && i.Title == "New photos and video");
+        Assert.Equal(2, forOwners.Media!.Count);
+        Assert.Equal(photo, await staff.GetByteArrayAsync($"/api/media/{forOwners.Media[0].Id}"));
+
+        // Only an email's media is shared this way, not a post already for owners; a viewer can't share.
+        Assert.Equal(HttpStatusCode.BadRequest, (await staff.PostApiAsync($"/api/items/{forOwners.Id}/share-media", new { caption = "" })).StatusCode);
+        using var viewer = await Api.SignedInAsync(seed.TenantId, MemberRole.Viewer);
+        Assert.Equal(HttpStatusCode.Forbidden, (await viewer.PostApiAsync($"/api/items/{email.Id}/share-media", new { caption = "" })).StatusCode);
+    }
+
     private static object Attachment(string name, string contentType, byte[] content, string? contentId = null) =>
         new { Name = name, Content = Convert.ToBase64String(content), ContentType = contentType, ContentLength = content.Length, ContentID = contentId ?? "" };
 

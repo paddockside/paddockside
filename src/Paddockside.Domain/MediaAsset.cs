@@ -42,12 +42,30 @@ public sealed class MediaAsset
         ["audio/ogg"] = (MediaKind.Audio, ".ogg"),
     };
 
+    /// <summary>Phones and mail programs often send no type, or a generic one; the extension says what it is.</summary>
+    private static readonly Dictionary<string, string> ByExtension = new(StringComparer.OrdinalIgnoreCase)
+    {
+        [".jpg"] = "image/jpeg", [".jpeg"] = "image/jpeg", [".png"] = "image/png", [".webp"] = "image/webp", [".gif"] = "image/gif",
+        [".heic"] = "image/heic", [".mp4"] = "video/mp4", [".m4v"] = "video/mp4", [".mov"] = "video/quicktime", [".webm"] = "video/webm",
+        [".mp3"] = "audio/mpeg", [".m4a"] = "audio/mp4", [".aac"] = "audio/aac", [".wav"] = "audio/wav", [".ogg"] = "audio/ogg",
+    };
+
+    /// <summary>The type to keep a file as: its own if we know it, else from its extension; null if it isn't media.</summary>
+    public static string? TypeFor(string? contentType, string fileName) =>
+        contentType is not null && Types.ContainsKey(contentType) ? contentType.ToLowerInvariant()
+        : ByExtension.GetValueOrDefault(Path.GetExtension(fileName));
+
     /// <summary>For EF Core materialisation.</summary>
     private MediaAsset() => (FileName, ContentType, BlobName) = (null!, null!, null!);
 
+    /// <summary>
+    /// A new file on <paramref name="item"/>: a media item staff add, or an email that came in with photos or video
+    /// attached (staff only, like the email, until staff share it).
+    /// </summary>
     public MediaAsset(StreamItem item, string fileName, string contentType, long length, DateTimeOffset at)
     {
-        if (item.Kind != StreamItemKind.Media) throw new DomainException("Media belongs to a media item.");
+        if (item.Kind != StreamItemKind.Media && item is not { Kind: StreamItemKind.Message, Direction: StreamItemDirection.Inbound })
+            throw new DomainException("Media belongs to a media item, or to an email that brought it.");
         if (!Types.TryGetValue(contentType, out var type)) throw new DomainException($"{fileName} isn't a photo, video or voice note we can keep.");
         if (length <= 0) throw new DomainException($"{fileName} is empty.");
         if (length > MaxBytes) throw new DomainException($"{fileName} is too big: the most is {MaxBytes / 1024 / 1024} MB.");
@@ -81,7 +99,18 @@ public sealed class MediaAsset
     public long Length { get; }
 
     /// <summary>Where the original is kept in the media container: tenant / horse / asset.</summary>
-    public string BlobName { get; }
+    public string BlobName { get; private init; }
 
     public DateTimeOffset CreatedAt { get; }
+
+    /// <summary>The asset this was shared from: an emailed photo staff shared with owners. The same stored file.</summary>
+    public Guid? SharedFromId { get; private set; }
+
+    /// <summary>The same file on a media item staff share with owners; nothing is copied in storage.</summary>
+    public MediaAsset ShareOn(StreamItem mediaItem, DateTimeOffset at)
+    {
+        if (mediaItem.Kind != StreamItemKind.Media) throw new DomainException("Shared media goes on a media item.");
+        if (mediaItem.HorseId != HorseId) throw new DomainException("Shared media stays on its own horse.");
+        return new MediaAsset(mediaItem, FileName, ContentType, Length, at) { SharedFromId = Id, BlobName = BlobName };
+    }
 }

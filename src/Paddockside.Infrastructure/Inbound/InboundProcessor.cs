@@ -23,7 +23,7 @@ namespace Paddockside.Infrastructure.Inbound;
 /// </list>
 /// All of it runs inside the tenant the mail was addressed to, so a token from another tenant simply is not found.
 /// </summary>
-public sealed partial class InboundProcessor(TenantScopedDb tenants, IOptions<EmailOptions> email, TimeProvider clock)
+public sealed partial class InboundProcessor(TenantScopedDb tenants, IOptions<EmailOptions> email, TimeProvider clock, IInboundStore inbound, IMediaStore media)
 {
     public async Task ProcessAsync(Guid tenantId, Guid inboundMessageId, CancellationToken cancellationToken)
     {
@@ -44,6 +44,10 @@ public sealed partial class InboundProcessor(TenantScopedDb tenants, IOptions<Em
         {
             await MatchAsync(db, message, display, now, cancellationToken);
         }
+
+        // Placed straight away (a reply, or the horse's own address): its photos and video come with it.
+        if (message.StreamItemId is { } itemId && db.ChangeTracker.Entries<StreamItem>().FirstOrDefault(e => e.Entity.Id == itemId)?.Entity is { } item)
+            await InboundMedia.AttachAsync(db, inbound, media, message, item, now, cancellationToken);
 
         await db.SaveChangesAsync(cancellationToken);
     }

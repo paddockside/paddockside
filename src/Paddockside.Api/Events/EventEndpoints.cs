@@ -43,7 +43,8 @@ public static class EventEndpoints
         PromptView? Prompt = null,
         bool CanReplyToSender = false,
         string? Channel = null,
-        IReadOnlyList<MediaView>? Media = null);
+        IReadOnlyList<MediaView>? Media = null,
+        string? Shared = null);
 
     /// <summary>One photo, video or voice note; its file is at /api/media/{Id}.</summary>
     public sealed record MediaView(Guid Id, string Kind, string ContentType, string FileName, long Length);
@@ -124,6 +125,9 @@ public static class EventEndpoints
         var answers = (await db.PromptAnswers.AsNoTracking().Where(a => itemIds.Contains(a.StreamItemId)).ToListAsync(cancellationToken)).ToLookup(a => a.StreamItemId);
         var media = (await db.MediaAssets.AsNoTracking().Where(a => itemIds.Contains(a.StreamItemId)).OrderBy(a => a.CreatedAt).ToListAsync(cancellationToken))
             .ToLookup(a => a.StreamItemId);
+        // An email's photos that staff shared with owners: when, in words, on the email.
+        var sharedFrom = media.SelectMany(g => g).Where(a => a.SharedFromId != null)
+            .GroupBy(a => a.SharedFromId!.Value).ToDictionary(g => g.Key, g => g.Min(a => a.CreatedAt));
         partyIds = partyIds.Concat(answers.SelectMany(g => g).Select(a => a.PartyId)).Distinct().ToList();
         var parties = await db.Parties.AsNoTracking().Where(p => partyIds.Contains(p.Id)).ToDictionaryAsync(p => p.Id, p => p.DisplayName, cancellationToken);
         var tenant = await db.Tenants.AsNoTracking().SingleAsync(cancellationToken);
@@ -170,7 +174,9 @@ public static class EventEndpoints
                     i.Prompt is null ? null : Tally(i, tenant, horse, answers[i.Id].ToList(), parties, now),
                     i is { Kind: StreamItemKind.Message, Direction: StreamItemDirection.Inbound },
                     i.Direction == StreamItemDirection.Inbound ? i.Channel : null,
-                    media[i.Id].Select(ToView).ToList());
+                    media[i.Id].Select(ToView).ToList(),
+                    media[i.Id].Select(a => sharedFrom.TryGetValue(a.Id, out var at) ? at : (DateTimeOffset?)null).Min() is { } shared
+                        ? $"Shared with owners {Words.Recently(shared, now).ToLowerInvariant()}" : null);
             })
             .ToList();
 

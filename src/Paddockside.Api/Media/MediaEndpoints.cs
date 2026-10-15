@@ -24,6 +24,8 @@ public static class MediaEndpoints
 {
     public sealed record Uploaded(Guid Id, int Files, int Recipients);
 
+    public sealed record ShareRequest(string? Caption);
+
     /// <summary>A handful of photos at once, or one video; more is a second post.</summary>
     public const int MaxFiles = 10;
 
@@ -32,20 +34,13 @@ public static class MediaEndpoints
 
     private static readonly string[] CanPost = [nameof(MemberRole.Coordinator), nameof(MemberRole.Manager), nameof(MemberRole.TenantAdmin)];
 
-    /// <summary>Browsers sometimes send no type for phone formats; the extension says what it is.</summary>
-    private static readonly Dictionary<string, string> ByExtension = new(StringComparer.OrdinalIgnoreCase)
-    {
-        [".jpg"] = "image/jpeg", [".jpeg"] = "image/jpeg", [".png"] = "image/png", [".webp"] = "image/webp", [".gif"] = "image/gif",
-        [".heic"] = "image/heic", [".mp4"] = "video/mp4", [".m4v"] = "video/mp4", [".mov"] = "video/quicktime", [".webm"] = "video/webm",
-        [".mp3"] = "audio/mpeg", [".m4a"] = "audio/mp4", [".aac"] = "audio/aac", [".wav"] = "audio/wav", [".ogg"] = "audio/ogg",
-    };
-
     public static void MapMediaEndpoints(this IEndpointRouteBuilder app)
     {
         app.MapPost("/api/events/{id:guid}/media", Upload).RequireAuthorization(StaffPolicy.Name)
             .WithMetadata(new Microsoft.AspNetCore.Mvc.RequestSizeLimitAttribute(MaxRequestBytes))
             .DisableAntiforgery(); // the API's own request header guards unsafe requests (RequireApiRequestHeader)
         app.MapGet("/api/media/{id:guid}", Get).RequireAuthorization();
+        app.MapPost("/api/items/{id:guid}/share-media", Share).RequireAuthorization(StaffPolicy.Name);
     }
 
     /// <summary>
@@ -83,8 +78,7 @@ public static class MediaEndpoints
         var caption = form["caption"].ToString();
         if (caption.Length > 4000) return Problem("That caption is too long.");
 
-        string TypeOf(IFormFile file) => MediaAsset.Types.ContainsKey(file.ContentType ?? "") ? file.ContentType!
-            : ByExtension.GetValueOrDefault(Path.GetExtension(file.FileName)) ?? file.ContentType ?? "";
+        string TypeOf(IFormFile file) => MediaAsset.TypeFor(file.ContentType, file.FileName) ?? file.ContentType ?? "";
         var kinds = files.Select(f => MediaAsset.Types.TryGetValue(TypeOf(f), out var t) ? t.Kind : MediaKind.Photo).ToList();
 
         StreamItem item;
@@ -120,6 +114,47 @@ public static class MediaEndpoints
             $"Added {Describe(assets.Select(a => a.Asset).ToList())} to \"{e.Title}\" on {horse.Name} ({(scope == StreamItemScope.Internal ? "staff only" : "shared with owners")})",
             "StreamItem", item.Id, cancellationToken: cancellationToken);
         return Results.Created($"/api/events/{id}", new Uploaded(item.Id, assets.Count, deliveries.Count));
+    }
+
+    /// <summary>
+    /// An email's photos and video, shared with the horse's owners: a new media item on the same event, with the
+    /// caption staff write, holding the same stored files. The email itself stays staff only (it hasn't been checked
+    /// for what owners may see); only its media goes out. Once only.
+    /// </summary>
+    private static async Task<IResult> Share(Guid id, ShareRequest request, ClaimsPrincipal user, PaddocksideDbContext db, AuditLog audit,
+        TimeProvider clock, EmailDispatchSignal emailSignal, ISmsSender texts, CancellationToken cancellationToken)
+    {
+        if (!CanPost.Contains(user.FindFirstValue(SessionClaims.Role)))
+            return Results.Problem(statusCode: StatusCodes.Status403Forbidden, title: "Your role can read events but not share from them.");
+        var source = await db.StreamItems.SingleOrDefaultAsync(i => i.Id == id, cancellationToken);
+        if (source is null) return Results.NotFound();
+        var assets = await db.MediaAssets.Where(a => a.StreamItemId == id).OrderBy(a => a.CreatedAt).ToListAsync(cancellationToken);
+        if (source is not { Kind: StreamItemKind.Message, Direction: StreamItemDirection.Inbound } || assets.Count == 0)
+            return Problem("There are no photos or video on this to share.");
+        if (source.EventId is not { } eventId) return Problem("Place it on an event first; owners see media on their horse's events.");
+        var assetIds = assets.Select(a => a.Id).ToList();
+        if (await db.MediaAssets.AnyAsync(a => a.SharedFromId != null && assetIds.Contains(a.SharedFromId.Value), cancellationToken))
+            return Results.Problem(statusCode: StatusCodes.Status409Conflict, title: "These are already shared with the owners.");
+        if ((request.Caption?.Length ?? 0) > 4000) return Problem("That caption is too long.");
+
+        var e = await db.Events.SingleAsync(x => x.Id == eventId, cancellationToken);
+        if (e.Status == EventStatus.Draft) return Problem("This event is still a draft: owners can't see it. Open it first.");
+        var horse = await db.Horses.Include(h => h.ManagementPeriods).Include(h => h.Interests).AsSplitQuery().SingleAsync(h => h.Id == e.HorseId, cancellationToken);
+        var tenant = await db.Tenants.SingleAsync(cancellationToken);
+        var now = clock.GetUtcNow();
+
+        var item = StreamItem.Media(horse, e, Title(assets.Select(a => a.Kind).ToList()), request.Caption, StreamItemScope.Owners, now,
+            user.FindFirstValue(ClaimTypes.Email) ?? "Staff");
+        db.StreamItems.Add(item);
+        db.MediaAssets.AddRange(assets.Select((a, n) => a.ShareOn(item, now.AddMilliseconds(n))));
+        var deliveries = await OutboundQueue.QueueAsync(db, tenant, horse, e, item, null, texts.IsConfigured, now, cancellationToken);
+        e.RecordActivity();
+        await db.SaveChangesAsync(cancellationToken);
+        if (deliveries.Count > 0) emailSignal.Notify();
+
+        await audit.RecordAsync(tenant.Id, "media.shared", $"Shared {Describe(assets)} from {source.AuthorName}'s email with the owners of {horse.Name} (\"{e.Title}\")",
+            "StreamItem", item.Id, cancellationToken: cancellationToken);
+        return Results.Created($"/api/events/{eventId}", new Uploaded(item.Id, assets.Count, deliveries.Count));
     }
 
     /// <summary>

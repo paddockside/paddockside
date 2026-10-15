@@ -597,6 +597,9 @@ namespace Paddockside.Infrastructure.Persistence.Migrations
                     b.Property<long>("Length")
                         .HasColumnType("bigint");
 
+                    b.Property<Guid?>("SharedFromId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<Guid>("StreamItemId")
                         .HasColumnType("uniqueidentifier");
 
@@ -610,6 +613,8 @@ namespace Paddockside.Infrastructure.Persistence.Migrations
                     b.HasIndex("StreamItemId");
 
                     b.HasIndex("TenantId");
+
+                    b.HasIndex("TenantId", "SharedFromId");
 
                     b.HasIndex("TenantId", "StreamItemId");
 

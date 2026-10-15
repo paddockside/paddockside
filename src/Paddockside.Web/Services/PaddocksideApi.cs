@@ -44,7 +44,8 @@ public sealed record ItemView(
     PromptView? Prompt = null,
     bool CanReplyToSender = false,
     string? Channel = null,
-    List<MediaView>? Media = null);
+    List<MediaView>? Media = null,
+    string? Shared = null);
 
 /// <summary>A photo, video or voice note; its file is at api/media/{Id}.</summary>
 public sealed record MediaView(Guid Id, string Kind, string ContentType, string FileName, long Length);
@@ -119,7 +120,7 @@ public sealed record InboundView(
     string Channel = "Email");
 
 public sealed record HorseItem(Guid Id, string Kind, string At, string? Title, string Body, string? Author, string? Channel, bool CanReplyToSender = false,
-    List<HorseReply>? Replies = null);
+    List<HorseReply>? Replies = null, List<MediaView>? Media = null);
 
 public sealed record HorseReply(string Author, string At, string Body);
 
@@ -269,6 +270,10 @@ public sealed class PaddocksideApi(HttpClient http)
 
         return await SendContentAsync<MediaUploaded>(HttpMethod.Post, $"api/events/{eventId}/media", form);
     }
+
+    /// <summary>An email's photos and video, shared with the owners as a new post with this caption.</summary>
+    public Task<ApiResult<MediaUploaded>> ShareMediaAsync(Guid itemId, string caption) =>
+        PostAsync<MediaUploaded>($"api/items/{itemId}/share-media", new { caption });
 
     public Task<ApiResult<object>> SetRaceDayAsync(Guid eventId, RaceDayView details) =>
         PutAsync<object>($"api/events/{eventId}/race-day", new { gate = details.Gate, dining = details.Dining, note = details.Note });

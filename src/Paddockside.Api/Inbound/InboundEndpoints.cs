@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Paddockside.Api.Audit;
 using Paddockside.Api.Formatting;
 using Paddockside.Api.Security;
+using Paddockside.Application.Messaging;
 using Paddockside.Domain;
 using Paddockside.Infrastructure.Identity;
 using Paddockside.Infrastructure.Persistence;
@@ -177,7 +178,7 @@ public static class InboundEndpoints
     /// horse. It becomes a staff-only item there, like any inbound mail; the candidate staff picked is flagged.
     /// </summary>
     private static async Task<IResult> Place(Guid id, PlaceRequest request, ClaimsPrincipal user, PaddocksideDbContext db, AuditLog audit, TimeProvider clock,
-        CancellationToken cancellationToken)
+        IInboundStore inbound, IMediaStore media, CancellationToken cancellationToken)
     {
         if (!CanPlace.Contains(user.FindFirstValue(SessionClaims.Role)))
             return Results.Problem(statusCode: StatusCodes.Status403Forbidden, title: "Your role can read the queue but not place mail.");
@@ -208,6 +209,7 @@ public static class InboundEndpoints
             confirmed ? $"Suggestion confirmed by {StaffName(user)}: {where}." : $"Placed by {StaffName(user)}: {where}.", now);
         foreach (var candidate in await db.MatchCandidates.Where(c => c.InboundMessageId == id && c.HorseId == horse.Id).ToListAsync(cancellationToken))
             if (candidate.EventId == e?.Id || e is null) candidate.Choose();
+        await Infrastructure.Inbound.InboundMedia.AttachAsync(db, inbound, media, message, item, now, cancellationToken); // its photos and video come with it
 
         await db.SaveChangesAsync(cancellationToken);
         await audit.RecordAsync(message.TenantId, "inbound.placed", $"Placed \"{message.Subject ?? "(no subject)"}\" from {message.FromAddress} on {where}",

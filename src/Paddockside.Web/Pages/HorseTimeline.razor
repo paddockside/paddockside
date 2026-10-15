@@ -56,6 +56,11 @@
                             <p class="font-strong">@item.Title</p>
                         }
                         <p class="line-clamp-2 whitespace-pre-line break-words">@item.Body</p>
+                        @if (item.Media is { Count: > 0 } media)
+                        {
+                            <MediaGallery Media="media" Describe="@(item.Title ?? _horse.Name)" />
+                            <p class="text-small text-text-muted">Staff only. Place it on an event to share @(media.Count == 1 ? "it" : "them") with the owners.</p>
+                        }
                         @foreach (var reply in item.Replies ?? [])
                         {
                             <div class="ml-4 grid gap-1 border-l-2 border-border-subtle pl-3">

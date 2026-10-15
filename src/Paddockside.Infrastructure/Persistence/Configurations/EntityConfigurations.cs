@@ -251,6 +251,7 @@ internal sealed class MediaAssetConfiguration : IEntityTypeConfiguration<MediaAs
         b.Property(x => x.CreatedAt);
         b.HasIndex(x => new { x.TenantId, x.StreamItemId });
         b.HasIndex(x => new { x.TenantId, x.HorseId, x.CreatedAt });
+        b.HasIndex(x => new { x.TenantId, x.SharedFromId });
 
         b.HasOne<StreamItem>().WithMany().HasForeignKey(x => x.StreamItemId).OnDelete(DeleteBehavior.Restrict);
         b.HasOne<Horse>().WithMany().HasForeignKey(x => x.HorseId).OnDelete(DeleteBehavior.Restrict);
