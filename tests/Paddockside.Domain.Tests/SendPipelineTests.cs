@@ -63,6 +63,43 @@ public sealed class SendPipelineTests
     }
 
     [Fact]
+    public void A_fact_or_photos_owners_are_sent_get_reply_addresses_and_a_reply_threads_under_them()
+    {
+        var s = new Stable();
+        var ann = s.Owner("Ann", 1000);
+        var at = On(2026, 10, 6);
+        var fact = StreamItem.Fact(s.Horse, null, "Acceptance", "Racing NSW", [new FactField("Barrier", "4")], at);
+        var photos = StreamItem.Media(s.Horse, null, "New photos", "", StreamItemScope.Owners, at, "Kate");
+        var forStaff = StreamItem.Media(s.Horse, null, "New photos", "", StreamItemScope.Internal, at, "Kate");
+        var note = StreamItem.Note(s.Horse, null, "Staff only", at, "Kate");
+
+        foreach (var sent in new[] { fact, photos })
+        {
+            Assert.True(sent.IsSentToOwners);
+            Assert.Equal(sent.Id, RoutingAddress.ForRecipient(sent, ann.Id, RoutingToken.New(), at).StreamItemId);
+            Assert.Equal(sent.Id, sent.Reply(s.Horse, null, "Ann", ann.Id, "Email", "Great news, thanks", at.AddHours(1)).InReplyToId);
+        }
+
+        // Staff-only photos and notes never go to owners, so they have no reply address.
+        Assert.False(forStaff.IsSentToOwners);
+        Assert.Throws<DomainException>(() => RoutingAddress.ForRecipient(forStaff, ann.Id, RoutingToken.New(), at));
+        Assert.Throws<DomainException>(() => note.Reply(s.Horse, null, "Ann", ann.Id, "Email", "Hi", at));
+    }
+
+    [Fact]
+    public void A_correction_says_what_changed_and_refuses_one_that_changes_nothing()
+    {
+        var s = new Stable();
+        var fact = StreamItem.Fact(s.Horse, null, "Acceptance", "Racing NSW", [new FactField("Race", "R4"), new FactField("Barrier", "4")], On(2026, 10, 6));
+        Assert.Equal("Race: R4\nBarrier: 4", fact.Body);
+
+        var corrected = fact.Correct(s.Horse, null, [new FactField("Race", "R4"), new FactField("Barrier", "9")], On(2026, 10, 7), "scratching");
+        Assert.Equal("Corrected: barrier 4 → 9 (scratching).\nRace: R4\nBarrier: 9", corrected.Body);
+        Assert.Equal((fact.Id, "scratching"), (corrected.SupersedesId!.Value, corrected.CorrectionNote));
+        Assert.Throws<DomainException>(() => fact.Correct(s.Horse, null, [new FactField("Race", "R4"), new FactField("Barrier", "4")], On(2026, 10, 7)));
+    }
+
+    [Fact]
     public void Tenant_slugs_keep_only_lowercase_letters_and_digits()
     {
         Assert.Equal("laureloakbloodstockdemo", new Tenant("Laurel Oak Bloodstock (demo)").Slug);

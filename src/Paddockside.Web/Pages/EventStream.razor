@@ -119,7 +119,18 @@ else
                                 @switch (item.Kind)
                                 {
                                     case "Fact":
-                                        <FactCard Compact Model="item.ToFact()" />
+                                        <FactCard Compact Model="item.ToFact()" OnCorrect="() => (_correcting, _recordingFact) = (item.Id, false)" />
+                                        @if (_correcting == item.Id)
+                                        {
+                                            <div class="rounded-card border border-border-subtle bg-surface-raised p-4">
+                                                <FactForm EventId="Id" Correcting="item" OnSaved="FactSaved" OnCancel="() => _correcting = null" />
+                                            </div>
+                                        }
+                                        @foreach (var reply in item.Replies)
+                                        {
+                                            @* An owner who replied to the email about this fact. *@
+                                            <p class="rounded-control bg-surface-sunken px-3 py-2 text-small"><span class="font-strong">@reply.Author</span> · @reply.At: @reply.Body</p>
+                                        }
                                         break;
                                     case "Note":
                                         <article class="grid gap-2 rounded-card border border-border-subtle bg-kind-note-bg p-4 sm:px-[20px]">
@@ -206,6 +217,14 @@ else
                         <dd>@value</dd>
                     }
                 </dl>
+                @if (_recordingFact)
+                {
+                    <FactForm EventId="Id" Templates="_page.FactTemplates ?? []" Sources="_page.FactSources ?? []" OnSaved="FactSaved" OnCancel="() => _recordingFact = false" />
+                }
+                else
+                {
+                    <button type="button" class="justify-self-start text-small font-strong underline underline-offset-4" @onclick="() => (_recordingFact, _correcting) = (true, null)">Record a fact</button>
+                }
             </section>
 
             @if (_page.RaceDay is { } raceDay)
@@ -355,6 +374,15 @@ else
     private bool _busy;
     private RaceDayDraft? _raceDayDraft;
     private Guid? _sharing;
+    private bool _recordingFact;
+    private Guid? _correcting;
+
+    /// <summary>A fact recorded or corrected: say so, and show it.</summary>
+    private async Task FactSaved(string message)
+    {
+        (_recordingFact, _correcting, _error, _saved) = (false, null, null, message);
+        await Load();
+    }
     private string? _shareCaption;
 
     private async Task ShareAsync(ItemView item)

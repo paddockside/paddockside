@@ -1,0 +1,177 @@
+@inject PaddocksideApi Api
+
+@*
+    Recording a fact by hand (a nomination, an acceptance, a barrier, a result), or correcting one when the source
+    changes it. Recording: choose the kind and its usual fields are laid out, say where it came from, who can see it,
+    and whether to tell the owners. Correcting: change the values and say why; the old values are kept and owners see
+    the fact marked corrected. Staff only. A fact is data, so it stays a card, never a message.
+*@
+<form class="grid gap-3" @onsubmit="SaveAsync" @onsubmit:preventDefault aria-label="@(Correcting is null ? "Record a fact" : $"Correct {Correcting.Title}")">
+    @if (Correcting is null)
+    {
+        <div class="field">
+            <label class="field-label" for="@_id-kind">What is it?</label>
+            <select id="@_id-kind" class="input" value="@_kind" @onchange="e => Choose(e.Value?.ToString())">
+                @foreach (var (template, n) in Templates.Select((t, n) => (t, n)))
+                {
+                    <option value="@n">@(string.IsNullOrEmpty(template.Title) ? template.Label : template.Title)</option>
+                }
+            </select>
+        </div>
+        <div class="field">
+            <label class="field-label" for="@_id-title">Title</label>
+            <input id="@_id-title" class="input" maxlength="100" @bind="_title" placeholder="Acceptance" />
+        </div>
+        <div class="field">
+            <label class="field-label" for="@_id-source">Where it came from</label>
+            <input id="@_id-source" class="input" maxlength="100" list="@_id-sources" @bind="_source" placeholder="Racing NSW" />
+            <datalist id="@_id-sources">
+                @foreach (var source in Sources)
+                {
+                    <option value="@source"></option>
+                }
+            </datalist>
+        </div>
+    }
+
+    <fieldset class="grid gap-2">
+        <legend class="field-label mb-1">@(Correcting is null ? "Values" : "Correct values")</legend>
+        @foreach (var (row, n) in _rows.Select((r, n) => (r, n)))
+        {
+            <div class="grid grid-cols-[minmax(0,2fr)_minmax(0,3fr)] gap-2">
+                <label class="sr-only" for="@_id-label-@n">Label @(n + 1)</label>
+                <input id="@_id-label-@n" class="input" maxlength="60" @bind="row.Label" placeholder="Label" readonly="@(Correcting is not null && row.Existing)" />
+                <label class="sr-only" for="@_id-value-@n">@(string.IsNullOrWhiteSpace(row.Label) ? $"Value {n + 1}" : row.Label)</label>
+                <input id="@_id-value-@n" class="input" maxlength="200" @bind="row.Value" />
+            </div>
+        }
+        <button type="button" class="justify-self-start text-small font-strong underline underline-offset-4" @onclick="() => _rows.Add(new())">Add a line</button>
+        <p class="field-hint">Leave a value empty to leave it out.</p>
+    </fieldset>
+
+    @if (Correcting is not null)
+    {
+        <div class="field">
+            <label class="field-label" for="@_id-note">Why it changed (optional)</label>
+            <input id="@_id-note" class="input" maxlength="300" @bind="_note" placeholder="Redraw after a scratching" />
+        </div>
+    }
+    else
+    {
+        <fieldset class="grid gap-2">
+            <legend class="field-label mb-1">Who can see it</legend>
+            <label class="inline-flex items-center gap-2"><input type="radio" name="@_id-scope" class="size-[18px] accent-action-primary-bg" checked="@_owners" @onchange="() => (_owners, _tell) = (true, true)" /> The owners</label>
+            <label class="inline-flex items-center gap-2"><input type="radio" name="@_id-scope" class="size-[18px] accent-action-primary-bg" checked="@(!_owners)" @onchange="() => (_owners, _tell) = (false, false)" /> Staff only</label>
+        </fieldset>
+    }
+
+    @if (_owners)
+    {
+        <label class="inline-flex items-start gap-2">
+            <input type="checkbox" class="mt-1 size-[18px] accent-action-primary-bg" checked="@_tell" @onchange="e => _tell = e.Value is true" />
+            <span>@(Correcting is null ? "Tell the owners now" : "Tell the owners about the correction")
+                <span class="block text-small text-text-muted">By email or text, as each has chosen. Otherwise it's just on their page.</span></span>
+        </label>
+    }
+
+    @if (_error is not null)
+    {
+        <p class="alert-danger" role="alert">@_error</p>
+    }
+
+    <div class="flex flex-wrap gap-3">
+        <button type="submit" class="btn-primary min-h-[36px] px-4" disabled="@_busy">@(Correcting is null ? "Record" : "Save correction")</button>
+        <button type="button" class="btn-secondary min-h-[36px] px-4" @onclick="OnCancel">Cancel</button>
+    </div>
+</form>
+
+@code {
+    private readonly string _id = $"fact-{Guid.NewGuid():N}";
+    private readonly List<Row> _rows = [];
+    private string _kind = "0";
+    private string? _title;
+    private string? _source;
+    private string? _note;
+    private bool _owners = true;
+    private bool _tell = true;
+    private bool _busy;
+    private string? _error;
+
+    [Parameter, EditorRequired] public Guid EventId { get; set; }
+
+    /// <summary>The kinds of fact this event's type has (FactEndpoints.For).</summary>
+    [Parameter] public IReadOnlyList<FactTemplate> Templates { get; set; } = [];
+
+    [Parameter] public IReadOnlyList<string> Sources { get; set; } = [];
+
+    /// <summary>The fact being corrected; null to record a new one.</summary>
+    [Parameter] public ItemView? Correcting { get; set; }
+
+    /// <summary>Saved: what to tell the person, in words.</summary>
+    [Parameter] public EventCallback<string> OnSaved { get; set; }
+
+    [Parameter] public EventCallback OnCancel { get; set; }
+
+    private sealed class Row
+    {
+        public string? Label { get; set; }
+        public string? Value { get; set; }
+        public bool Existing { get; init; }
+    }
+
+    protected override void OnInitialized()
+    {
+        if (Correcting is { } fact)
+        {
+            _rows.AddRange(fact.Fields.Select(f => new Row { Label = f.Label, Value = f.Value, Existing = true }));
+            (_owners, _tell) = (fact.Scope != "Internal", fact.Scope != "Internal");
+        }
+        else
+        {
+            Choose("0");
+            _source = Sources.FirstOrDefault();
+        }
+    }
+
+    /// <summary>A kind of fact chosen: its title and usual fields laid out.</summary>
+    private void Choose(string? kind)
+    {
+        _kind = kind ?? "0";
+        if (!int.TryParse(_kind, out var n) || n < 0 || n >= Templates.Count) return;
+        var template = Templates[n];
+        _title = template.Title;
+        _rows.Clear();
+        _rows.AddRange(template.Fields.Select(f => new Row { Label = f }));
+        if (_rows.Count == 0) _rows.Add(new());
+    }
+
+    private async Task SaveAsync()
+    {
+        _error = null;
+        var fields = _rows.Where(r => !string.IsNullOrWhiteSpace(r.Value)).Select(r => new FactFieldInput(r.Label?.Trim() ?? "", r.Value!.Trim())).ToList();
+        if (fields.Count == 0) { _error = "Fill in at least one value."; return; }
+
+        _busy = true;
+        try
+        {
+            if (Correcting is { } fact)
+            {
+                var result = await Api.CorrectFactAsync(fact.Id, fields, _note, _owners && _tell);
+                if (!result.Succeeded) { _error = result.Error; return; }
+                await OnSaved.InvokeAsync(_owners && _tell ? $"Corrected, and the owners are being told ({result.Value!.Recipients} sent)." : "Corrected.");
+            }
+            else
+            {
+                var step = int.TryParse(_kind, out var n) && n < Templates.Count ? Templates[n].Step : null;
+                var result = await Api.RecordFactAsync(EventId, step, _title ?? "", _source ?? "", fields, _owners ? "Owners" : "Internal", _owners && _tell);
+                if (!result.Succeeded) { _error = result.Error; return; }
+                await OnSaved.InvokeAsync(_owners && _tell ? $"Recorded, and the owners are being told ({result.Value!.Recipients} sent)."
+                    : _owners ? "Recorded. Owners see it on their page." : "Recorded, for staff only.");
+            }
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}

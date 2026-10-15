@@ -134,6 +134,7 @@ app.MapReplyToSenderEndpoints();
 app.MapInboundEndpoints();
 app.MapTodayEndpoints();
 app.MapMediaEndpoints();
+app.MapFactEndpoints();
 app.MapClientAuthEndpoints();
 app.MapOwnerEndpoints();
 app.MapMemberEndpoints();

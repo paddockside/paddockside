@@ -63,6 +63,7 @@
             <Variant Label="Corrected by the source"><FactCard Model="AutumnRidge.Acceptance" /></Variant>
             <Variant Label="As received"><FactCard Model="AutumnRidge.Nomination" /></Variant>
             <Variant Label="Staff event page: one line, details on request"><FactCard Compact Model="AutumnRidge.Acceptance" /></Variant>
+            <Variant Label="Staff: record a fact (an acceptance)"><FactForm EventId="Guid.Empty" Templates="SampleFactTemplates" Sources="SampleSources" /></Variant>
             <Variant Label="Owner view of the corrected fact"><FactCard Model="AutumnRidge.Acceptance" Side="Side.Owner" /></Variant>
         </div>
     </Section>
@@ -124,4 +125,13 @@
         _theme = theme;
         await JS.InvokeVoidAsync("paddockside.setTheme", theme);
     }
+
+    private static readonly List<FactTemplate> SampleFactTemplates =
+    [
+        new("ACC_FACT", "Accepted", "Acceptance", ["Race", "Barrier", "Weight", "Jockey"]),
+        new("BARRIER", "Barrier", "Barrier draw", ["Barrier", "Field"]),
+        new(null, "Something else", "", []),
+    ];
+
+    private static readonly List<string> SampleSources = ["Racing NSW", "Racing Victoria"];
 }

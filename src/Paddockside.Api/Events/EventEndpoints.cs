@@ -70,7 +70,9 @@ public static class EventEndpoints
         IReadOnlyList<OwnerOption> Owners,
         IReadOnlyDictionary<string, PromptRequest> StepPrompts,
         string? Tickets = null,
-        RaceDayView? RaceDay = null);
+        RaceDayView? RaceDay = null,
+        IReadOnlyList<FactEndpoints.FactTemplate>? FactTemplates = null,
+        IReadOnlyList<string>? FactSources = null);
 
     /// <param name="Kind">Count, YesNo or Choice.</param>
     public sealed record PromptRequest(string Kind, string Question, IReadOnlyList<string>? Options, int? Max);
@@ -202,7 +204,8 @@ public static class EventEndpoints
         }
 
         return Results.Ok(new EventPage(summary, horse.Id, horse.Name, views, type.Steps.Select(s => s.Label).ToList(), owners, stepPrompts, tickets,
-            e.EventType == EventTypes.RaceStart.Code ? new RaceDayView(e.Gate, e.Dining, e.RaceDayNote) : null));
+            e.EventType == EventTypes.RaceStart.Code ? new RaceDayView(e.Gate, e.Dining, e.RaceDayNote) : null,
+            FactEndpoints.For(type), FactEndpoints.Sources));
     }
 
     private static async Task<IResult> Post(

@@ -142,6 +142,12 @@ public sealed class StreamItem
     /// <summary>How it arrived or went: email, text message, portal.</summary>
     public string? Channel { get; private set; }
 
+    /// <summary>
+    /// What can be sent to owners, each with their own reply address: our messages and media, and facts staff tell
+    /// them about. A reply to any of these threads under it, so it reaches staff in place.
+    /// </summary>
+    public bool IsSentToOwners => Kind == StreamItemKind.Fact || (Kind is StreamItemKind.Message or StreamItemKind.Media && Direction == StreamItemDirection.Outbound);
+
     /// <summary>A question owners answer with buttons (a count, yes or no, a choice); outbound messages only.</summary>
     public MessagePrompt? Prompt { get; private set; }
 
@@ -158,13 +164,20 @@ public sealed class StreamItem
     {
         var fieldList = fields.ToList();
         if (fieldList.Count == 0) throw new DomainException("A fact needs at least one field.");
-        return new StreamItem(horse, @event, StreamItemKind.Fact, scope, StreamItemDirection.Inbound, receivedAt, label, stepCode: stepCode)
+        return NewFact(horse, @event, label, source, fieldList, receivedAt, scope, stepCode, FieldLines(fieldList));
+    }
+
+    /// <summary>The fact in words, so an email or text about it reads properly: "Barrier: 9", one per line.</summary>
+    private static string FieldLines(IEnumerable<FactField> fields) => string.Join('\n', fields.Select(f => $"{f.Label}: {f.Value}"));
+
+    private static StreamItem NewFact(Horse horse, Event? @event, string label, string source, List<FactField> fields, DateTimeOffset receivedAt,
+        StreamItemScope scope, string? stepCode, string body) =>
+        new(horse, @event, StreamItemKind.Fact, scope, StreamItemDirection.Inbound, receivedAt, body, stepCode: stepCode)
         {
             Title = label,
             Source = source,
-            Fields = fieldList,
+            Fields = fields,
         };
-    }
 
     /// <summary>
     /// A corrected version of this fact from its source. Returns a new item that supersedes this one; this item is
@@ -175,9 +188,21 @@ public sealed class StreamItem
         if (Kind != StreamItemKind.Fact) throw new DomainException("Only a fact can be corrected.");
         if (horse.Id != HorseId || @event?.Id != EventId) throw new DomainException("A correction stays on the fact's own horse and event.");
 
-        var corrected = Fact(horse, @event, Title!, Source!, fields, receivedAt, Scope, StepCode);
+        var list = fields.ToList();
+        var changes = list
+            .Select(f => (f.Label, Was: Fields.FirstOrDefault(old => old.Label == f.Label)?.Value, Now: f.Value))
+            .Where(c => c.Was != c.Now)
+            .Select(c => c.Was is null ? $"{c.Label.ToLowerInvariant()} {c.Now}" : $"{c.Label.ToLowerInvariant()} {c.Was} → {c.Now}")
+            .ToList();
+        if (changes.Count == 0) throw new DomainException("Nothing has changed: change a value to correct it.");
+
+        if (list.Count == 0) throw new DomainException("A fact needs at least one field.");
+        var why = string.IsNullOrWhiteSpace(note) ? null : note.Trim();
+        // Said first, so an email or text about the correction leads with what changed.
+        var body = $"Corrected: {string.Join(", ", changes)}{(why is null ? "" : $" ({why})")}.\n{FieldLines(list)}";
+        var corrected = NewFact(horse, @event, Title!, Source!, list, receivedAt, Scope, StepCode, body);
         corrected.SupersedesId = Id;
-        corrected.CorrectionNote = note;
+        corrected.CorrectionNote = why;
         return corrected;
     }
 
@@ -210,7 +235,8 @@ public sealed class StreamItem
     /// </summary>
     public StreamItem Reply(Horse horse, Event? @event, string authorName, Guid? authorPartyId, string channel, string body, DateTimeOffset receivedAt)
     {
-        if (Kind != StreamItemKind.Message || InReplyToId is not null) throw new DomainException("Replies thread onto a message, not onto another reply.");
+        if (!(Kind == StreamItemKind.Message || IsSentToOwners) || InReplyToId is not null)
+            throw new DomainException("Replies thread onto a message, or something owners were sent, not onto another reply.");
         if (horse.Id != HorseId || @event?.Id != EventId) throw new DomainException("A reply stays on the message's own horse and event.");
 
         var scope = authorPartyId is null ? StreamItemScope.Internal : StreamItemScope.NamedParties;

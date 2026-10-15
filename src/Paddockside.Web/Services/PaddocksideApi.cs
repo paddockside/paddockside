@@ -64,7 +64,15 @@ public sealed record PromptRequest(string Kind, string Question, List<string>? O
 public sealed record OwnerOption(Guid Id, string Name);
 
 public sealed record EventPage(EventSummary Event, Guid HorseId, string HorseName, List<ItemView> Items, List<string> StepOptions, List<OwnerOption> Owners,
-    Dictionary<string, PromptRequest> StepPrompts, string? Tickets = null, RaceDayView? RaceDay = null);
+    Dictionary<string, PromptRequest> StepPrompts, string? Tickets = null, RaceDayView? RaceDay = null, List<FactTemplate>? FactTemplates = null,
+    List<string>? FactSources = null);
+
+/// <summary>A kind of fact staff can record on an event: its step, usual title and usual fields.</summary>
+public sealed record FactTemplate(string? Step, string Label, string Title, List<string> Fields);
+
+public sealed record FactFieldInput(string Label, string Value);
+
+public sealed record FactRecorded(Guid Id, int Recipients);
 
 /// <summary>A race's details for owners on the day: gate, dining, a note.</summary>
 public sealed record RaceDayView(string? Gate, string? Dining, string? Note);
@@ -274,6 +282,12 @@ public sealed class PaddocksideApi(HttpClient http)
     /// <summary>An email's photos and video, shared with the owners as a new post with this caption.</summary>
     public Task<ApiResult<MediaUploaded>> ShareMediaAsync(Guid itemId, string caption) =>
         PostAsync<MediaUploaded>($"api/items/{itemId}/share-media", new { caption });
+
+    public Task<ApiResult<FactRecorded>> RecordFactAsync(Guid eventId, string? step, string title, string source, IEnumerable<FactFieldInput> fields, string scope, bool tell) =>
+        PostAsync<FactRecorded>($"api/events/{eventId}/facts", new { step, title, source, fields = fields.Select(f => new { label = f.Label, value = f.Value }), scope, tell });
+
+    public Task<ApiResult<FactRecorded>> CorrectFactAsync(Guid itemId, IEnumerable<FactFieldInput> fields, string? note, bool tell) =>
+        PostAsync<FactRecorded>($"api/items/{itemId}/correction", new { fields = fields.Select(f => new { label = f.Label, value = f.Value }), note, tell });
 
     public Task<ApiResult<object>> SetRaceDayAsync(Guid eventId, RaceDayView details) =>
         PutAsync<object>($"api/events/{eventId}/race-day", new { gate = details.Gate, dining = details.Dining, note = details.Note });

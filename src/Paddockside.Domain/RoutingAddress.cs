@@ -82,8 +82,7 @@ public sealed class RoutingAddress
 
     public static RoutingAddress ForRecipient(StreamItem message, Guid partyId, string token, DateTimeOffset at)
     {
-        if (message.Kind != StreamItemKind.Message || message.Direction != StreamItemDirection.Outbound)
-            throw new DomainException("Recipient tokens are issued with outbound messages.");
+        if (!message.IsSentToOwners) throw new DomainException("Recipient tokens are issued with what owners are sent.");
         return new RoutingAddress(message.TenantId, token, RoutingAddressKind.Recipient, message.HorseId, message.EventId, message.Id, partyId, at);
     }
 

@@ -26,6 +26,10 @@
                 <span class="font-strong text-status-warning-fg"> · Corrected: @string.Join(", ", changed.Select(f => $"{f.Label.ToLowerInvariant()} {f.WasValue} → {f.Value}"))</span>
             }
             · <button type="button" class="underline underline-offset-4" aria-expanded="@_details" @onclick="() => _details = !_details">@(_details ? "Hide details" : "Details")</button>
+            @if (OnCorrect.HasDelegate)
+            {
+                <span> · </span><button type="button" class="underline underline-offset-4" @onclick="OnCorrect">Correct</button>
+            }
         </p>
         @if (_details)
         {
@@ -90,6 +94,9 @@
 
     /// <summary>One line on the staff event page, details on request.</summary>
     [Parameter] public bool Compact { get; set; }
+
+    /// <summary>Staff correct it (the source changed it); offered on the compact card when set.</summary>
+    [Parameter] public EventCallback OnCorrect { get; set; }
 
     /// <summary>"Randwick R6, 1400 m · Barrier 9 · Field 13 runners": a bare number gets its label.</summary>
     private string Summary => string.Join(" · ", Model.Fields.Select(f => f.Value.Length > 0 && char.IsDigit(f.Value[0]) ? $"{f.Label} {f.Value}" : f.Value));
