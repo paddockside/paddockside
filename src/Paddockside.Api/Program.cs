@@ -130,6 +130,7 @@ app.UseMiddleware<SupportSessionGuard>();
 app.MapAuthEndpoints();
 app.MapHorseEndpoints();
 app.MapHorseAdminEndpoints();
+app.MapOwnershipEndpoints();
 app.MapClientEndpoints();
 app.MapMailoutEndpoints();
 app.MapEventEndpoints();

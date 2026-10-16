@@ -90,5 +90,17 @@ public sealed partial class OwnerSignInTests
 
         var house = Assert.Single((await manager.GetFromJsonAsync<OwnerList>($"/api/horses/{horseId}/owners"))!.Owners);
         Assert.Equal(("Owners House", "10%", true, (string?)null), (house.Name, house.Percent, house.IsHouse, house.Invited));
+
+        // Syndication: the house sells part of its share to a client, who is invited like any owner.
+        var dan = $"dan-{Guid.NewGuid():N}@owners.test";
+        Assert.Equal(HttpStatusCode.NoContent, (await manager.PostApiAsync($"/api/horses/{horseId}/owners/{house.PartyId}/transfer", new
+        {
+            recipients = new object[] { new { clientId = house.PartyId, percent = 7.5m }, new { name = "Dan Buyer", email = dan, percent = 2.5m } },
+            on = (string?)null, access = "LockedOut",
+        })).StatusCode);
+        var owners = (await manager.GetFromJsonAsync<OwnerList>($"/api/horses/{horseId}/owners"))!;
+        Assert.Equal([("Owners House", "7.5%"), ("Dan Buyer", "2.5%")], owners.Owners.Select(o => (o.Name, o.Percent)));
+        await DispatchAsync();
+        Assert.Contains(Api.Emails.Sent, e => e.Email.ToAddress == dan);
     }
 }

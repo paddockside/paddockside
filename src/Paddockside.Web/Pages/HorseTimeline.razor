@@ -70,9 +70,19 @@
                                 }
                                 <span class="w-[64px] text-right font-strong tabular-nums">@owner.Percent</span>
                                 <span class="text-small text-text-muted">since @owner.Since</span>
+                                @if (CanManage && _horse.Managed)
+                                {
+                                    <button type="button" class="text-small font-strong underline underline-offset-4" aria-label="Change @owner.Name's share"
+                                            @onclick="() => (_changing, _addingOwner, _ending, _ownerAdded) = (owner.PartyId, false, false, null)">Change</button>
+                                }
                             </li>
                         }
                     </ul>
+                }
+
+                @if (_changing is { } changing && owners.Owners.FirstOrDefault(o => o.PartyId == changing) is { } changed)
+                {
+                    <OwnershipChange HorseId="Id" Owner="changed" HasHouse="@owners.Owners.Any(o => o.IsHouse)" OnDone="OwnershipChangedAsync" OnCancel="() => _changing = null" />
                 }
 
                 @if (CanManage && _horse.Managed)
@@ -122,6 +132,47 @@
                 @if (_ownerAdded is not null)
                 {
                     <p class="rounded-control bg-status-success-bg px-4 py-3 text-status-success-fg" role="status">@_ownerAdded</p>
+                }
+
+                @if (CanManage && _horse.Managed)
+                {
+                    @* The horse leaves (sold, retired): every owner stops together; its history stays (scenario 3b). *@
+                    @if (!_ending)
+                    {
+                        <button type="button" class="justify-self-start text-small underline underline-offset-4" @onclick="() => (_ending, _changing, _addingOwner, _endError) = (true, null, false, null)">
+                            @_horse.Name is leaving management…
+                        </button>
+                    }
+                    else
+                    {
+                        <form class="card grid gap-4 border-status-warning-fg" @onsubmit="EndAsync" @onsubmit:preventDefault aria-label="Leaving management">
+                            <h3 class="text-title">@_horse.Name leaves management</h3>
+                            <p>Every owner stops owning on that day. The horse and its history stay, and can be taken on again later.</p>
+                            <div class="grid gap-4 sm:grid-cols-2">
+                                <div class="field sm:col-span-2">
+                                    <label class="field-label" for="end-reason">Why</label>
+                                    <input id="end-reason" class="input" maxlength="200" @bind="_endReason" placeholder="Sold to a stud in Victoria" />
+                                </div>
+                                <div class="field">
+                                    <label class="field-label" for="end-on">On</label>
+                                    <input id="end-on" class="input" type="date" max="@DateTime.Today.ToString("yyyy-MM-dd")" @bind="_endOn" />
+                                </div>
+                                <fieldset class="grid gap-2">
+                                    <legend class="field-label mb-1">Afterwards, the owners</legend>
+                                    <label class="inline-flex items-center gap-2"><input type="radio" name="end-access" class="size-[18px] accent-action-primary-bg" checked="@(!_endReadOnly)" @onchange="() => _endReadOnly = false" /> No longer see the horse</label>
+                                    <label class="inline-flex items-center gap-2"><input type="radio" name="end-access" class="size-[18px] accent-action-primary-bg" checked="@_endReadOnly" @onchange="() => _endReadOnly = true" /> Can still read its history</label>
+                                </fieldset>
+                            </div>
+                            @if (_endError is not null)
+                            {
+                                <p class="alert-danger" role="alert">@_endError</p>
+                            }
+                            <div class="flex flex-wrap gap-3">
+                                <button type="submit" class="btn-primary" disabled="@_busy">@_horse.Name leaves management</button>
+                                <button type="button" class="btn-secondary" @onclick="() => _ending = false">Cancel</button>
+                            </div>
+                        </form>
+                    }
                 }
             </section>
         }
@@ -240,6 +291,35 @@
 
     /// <summary>Who owns a horse is for managers and admins; coordinators see the list.</summary>
     private bool CanManage => Session.Current?.Role is "Manager" or "TenantAdmin";
+
+    private Guid? _changing;
+    private bool _ending, _endReadOnly;
+    private string? _endReason, _endError;
+    private DateTime _endOn = DateTime.Today;
+
+    private async Task OwnershipChangedAsync(string message)
+    {
+        (_changing, _ownerAdded) = (null, message);
+        _owners = (await Api.HorseOwnersAsync(Id)).Value;
+    }
+
+    private async Task EndAsync()
+    {
+        (_endError, _busy) = (null, true);
+        try
+        {
+            var result = await Api.EndManagementAsync(Id, _endReason ?? "", _endOn.ToString("yyyy-MM-dd"), _endReadOnly ? "ReadOnly" : "LockedOut");
+            if (!result.Succeeded) { _endError = result.Error; return; }
+            _ending = false;
+            _ownerAdded = $"{_horse!.Name} has left management. Its owners are now past owners.";
+            _horse = (await Api.HorseAsync(Id)).Value ?? _horse;
+            _owners = (await Api.HorseOwnersAsync(Id)).Value;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
 
     private async Task AddOwnerAsync()
     {

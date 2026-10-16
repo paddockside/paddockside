@@ -1,0 +1,181 @@
+@inject PaddocksideApi Api
+
+@*
+    Changing one owner's share (ownership-model.md scenarios 1–3): pass all or part of it on — to themselves (keeping
+    part), an existing client, or someone new — or record that they've left with nobody taking over. The percentages
+    must add up to what they hold. Whoever stops owning is locked out of the horse in the portal, or keeps read-only
+    sight of their own time. Managers and admins.
+*@
+<form class="card grid gap-4" @onsubmit="SaveAsync" @onsubmit:preventDefault aria-label="Change @Owner.Name's share">
+    <h3 class="text-title">@Owner.Name's @Owner.Percent</h3>
+
+    <fieldset class="grid gap-2">
+        <legend class="field-label mb-1">What's happening</legend>
+        <label class="inline-flex items-center gap-2"><input type="radio" name="@_id-mode" class="size-[18px] accent-action-primary-bg" checked="@(!_leaving)" @onchange="() => _leaving = false" /> All or part of the share is passed on</label>
+        @if (!Owner.IsHouse)
+        {
+            <label class="inline-flex items-center gap-2"><input type="radio" name="@_id-mode" class="size-[18px] accent-action-primary-bg" checked="@_leaving" @onchange="() => _leaving = true" /> They're leaving, and nobody is taking over</label>
+        }
+    </fieldset>
+
+    @if (!_leaving)
+    {
+        <fieldset class="grid gap-3">
+            <legend class="field-label mb-1">Who has it now</legend>
+            @foreach (var (row, n) in _rows.Select((r, n) => (r, n)))
+            {
+                <div class="grid gap-2 rounded-control border border-border-subtle p-3">
+                    <div class="flex flex-wrap items-end gap-3">
+                        <div class="field min-w-0 flex-1 basis-[14rem]">
+                            <label class="field-label" for="@_id-who-@n">Person</label>
+                            <select id="@_id-who-@n" class="input" @bind="row.Who">
+                                <option value="@Owner.PartyId">@Owner.Name (keeps this part)</option>
+                                <option value="new">Someone new…</option>
+                                @foreach (var client in _clients.Where(c => c.Id != Owner.PartyId))
+                                {
+                                    <option value="@client.Id">@client.Name</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="field w-[8rem]">
+                            <label class="field-label" for="@_id-pct-@n">Share (%)</label>
+                            <input id="@_id-pct-@n" class="input" type="number" min="0.1" max="100" step="0.1" @bind="row.Percent" @bind:after="StateHasChanged" />
+                        </div>
+                        @if (_rows.Count > 1)
+                        {
+                            <button type="button" class="min-h-control text-small underline underline-offset-4" @onclick="() => _rows.Remove(row)">Remove</button>
+                        }
+                    </div>
+                    @if (row.Who == "new")
+                    {
+                        <div class="grid gap-3 sm:grid-cols-3">
+                            <div class="field">
+                                <label class="field-label" for="@_id-name-@n">Name</label>
+                                <input id="@_id-name-@n" class="input" @bind="row.Name" />
+                            </div>
+                            <div class="field">
+                                <label class="field-label" for="@_id-email-@n">Email</label>
+                                <input id="@_id-email-@n" class="input" type="email" @bind="row.Email" />
+                            </div>
+                            <div class="field">
+                                <label class="field-label" for="@_id-mobile-@n">Mobile</label>
+                                <input id="@_id-mobile-@n" class="input" type="tel" @bind="row.Mobile" />
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+            <div class="flex flex-wrap items-center gap-4">
+                <button type="button" class="text-small font-strong underline underline-offset-4" @onclick="@(() => _rows.Add(new Row { Who = "new" }))">Add someone</button>
+                <span class="text-small @(Total == Held ? "text-action-primary-bg" : "text-status-warning-fg")" role="status">
+                    @Total.ToString("0.#")% of their @Owner.Percent passed on@(Total == Held ? "" : $": {Math.Abs(Held - Total):0.#}% {(Total < Held ? "still to place" : "too much")}")
+                </span>
+            </div>
+            <p class="field-hint">To keep part, leave @Owner.Name in with what they keep. Someone already known by their email is linked, not added twice; a new owner is sent their portal invitation.</p>
+        </fieldset>
+    }
+    else if (HasHouse)
+    {
+        <label class="inline-flex items-center gap-2">
+            <input type="checkbox" class="size-[18px] accent-action-primary-bg" checked="@_toHouse" @onchange="e => _toHouse = e.Value is true" />
+            Their share goes back to the house share (otherwise it's left unallocated)
+        </label>
+    }
+
+    <div class="grid gap-4 sm:grid-cols-2">
+        <div class="field">
+            <label class="field-label" for="@_id-on">On</label>
+            <input id="@_id-on" class="input" type="date" max="@DateTime.Today.ToString("yyyy-MM-dd")" @bind="_on" />
+        </div>
+        @if (Leaves)
+        {
+            <fieldset class="grid gap-2">
+                <legend class="field-label mb-1">Afterwards, @Owner.Name</legend>
+                <label class="inline-flex items-center gap-2"><input type="radio" name="@_id-access" class="size-[18px] accent-action-primary-bg" checked="@(!_readOnly)" @onchange="() => _readOnly = false" /> No longer sees the horse</label>
+                <label class="inline-flex items-center gap-2"><input type="radio" name="@_id-access" class="size-[18px] accent-action-primary-bg" checked="@_readOnly" @onchange="() => _readOnly = true" /> Can still read what happened while they owned it</label>
+            </fieldset>
+        }
+    </div>
+
+    @if (_error is not null)
+    {
+        <p class="alert-danger" role="alert">@_error</p>
+    }
+    <div class="flex flex-wrap gap-3">
+        <button type="submit" class="btn-primary" disabled="@(_busy || (!_leaving && Total != Held))">@(_leaving ? "Record that they've left" : "Pass the share on")</button>
+        <button type="button" class="btn-secondary" @onclick="OnCancel">Cancel</button>
+    </div>
+</form>
+
+@code {
+    private readonly string _id = $"own-{Guid.NewGuid():N}";
+    private readonly List<Row> _rows = [];
+    private List<ClientRow> _clients = [];
+    private bool _leaving, _toHouse = true, _readOnly, _busy;
+    private DateTime _on = DateTime.Today;
+    private string? _error;
+
+    [Parameter, EditorRequired] public Guid HorseId { get; set; }
+
+    [Parameter, EditorRequired] public OwnerLine Owner { get; set; } = null!;
+
+    /// <summary>The business holds a house share, so a leaver's share can go back to it.</summary>
+    [Parameter] public bool HasHouse { get; set; }
+
+    [Parameter] public EventCallback<string> OnDone { get; set; }
+
+    [Parameter] public EventCallback OnCancel { get; set; }
+
+    private sealed class Row
+    {
+        public string Who { get; set; } = "";
+        public decimal? Percent { get; set; }
+        public string? Name { get; set; }
+        public string? Email { get; set; }
+        public string? Mobile { get; set; }
+    }
+
+    private decimal Held => decimal.Parse(Owner.Percent.TrimEnd('%'), System.Globalization.CultureInfo.InvariantCulture);
+
+    private decimal Total => _rows.Sum(r => r.Percent ?? 0);
+
+    /// <summary>They stop owning: they leave, or none of the share stays with them.</summary>
+    private bool Leaves => _leaving || _rows.All(r => r.Who != Owner.PartyId.ToString() || (r.Percent ?? 0) == 0);
+
+    protected override async Task OnInitializedAsync()
+    {
+        _rows.Add(new Row { Who = "new", Percent = Held });
+        _clients = (await Api.ClientsAsync(null, null, null)).Value ?? [];
+    }
+
+    private async Task SaveAsync()
+    {
+        (_error, _busy) = (null, true);
+        try
+        {
+            var on = _on.ToString("yyyy-MM-dd");
+            var access = Leaves && _readOnly ? "ReadOnly" : "LockedOut";
+            ApiResult<object> result;
+            if (_leaving)
+            {
+                result = await Api.OwnerLeavesAsync(HorseId, Owner.PartyId, HasHouse && _toHouse, on, access);
+            }
+            else
+            {
+                var recipients = _rows.Where(r => (r.Percent ?? 0) > 0).Select(r => Guid.TryParse(r.Who, out var id)
+                    ? new ShareRecipient(id, null, null, null, r.Percent!.Value)
+                    : new ShareRecipient(null, r.Name, r.Email, r.Mobile, r.Percent!.Value)).ToList();
+                result = await Api.TransferShareAsync(HorseId, Owner.PartyId, recipients, on, access);
+            }
+
+            if (!result.Succeeded) { _error = result.Error; return; }
+            await OnDone.InvokeAsync(_leaving
+                ? $"{Owner.Name} has left{(HasHouse && _toHouse ? "; their share is back with the house" : "; their share is unallocated")}."
+                : $"{Owner.Name}'s share has been passed on. Anyone new is sent their portal invitation.");
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}

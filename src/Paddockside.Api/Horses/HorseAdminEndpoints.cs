@@ -106,11 +106,13 @@ public static class HorseAdminEndpoints
         var partyIds = current.Select(i => i.PartyId).Distinct().ToList();
         var parties = await db.Parties.AsNoTracking().Where(p => partyIds.Contains(p.Id)).ToDictionaryAsync(p => p.Id, cancellationToken);
         var now = clock.GetUtcNow();
+        // One line per person: after buying a co-owner's share someone holds two interests, but owns one share.
         var lines = current
-            .Select(i => (Interest: i, Party: parties[i.PartyId]))
+            .GroupBy(i => i.PartyId)
+            .Select(g => (Interests: g.ToList(), Party: parties[g.Key]))
             .OrderByDescending(x => x.Party.Id == tenant.HousePartyId).ThenBy(x => x.Party.DisplayName)
-            .Select(x => new OwnerLine(x.Interest.Id, x.Party.Id, x.Party.DisplayName, x.Party.PrimaryEmail?.Value, x.Party.PrimaryMobile?.Value,
-                Percent(x.Interest.Units), Words.Day(x.Interest.EffectiveFrom, now), x.Party.Id == tenant.HousePartyId,
+            .Select(x => new OwnerLine(x.Interests[0].Id, x.Party.Id, x.Party.DisplayName, x.Party.PrimaryEmail?.Value, x.Party.PrimaryMobile?.Value,
+                Percent(x.Interests.Sum(i => i.Units)), Words.Day(x.Interests.Min(i => i.EffectiveFrom), now), x.Party.Id == tenant.HousePartyId,
                 x.Party.Id == tenant.HousePartyId || x.Party.PersonId is not null ? null : "Not signed in yet"))
             .ToList();
         var allocated = current.Sum(i => i.Units);
@@ -146,24 +148,11 @@ public static class HorseAdminEndpoints
         if (current.Sum(i => i.Units) + units > 100 * UnitsPerPercent)
             return Problem($"That would take {horse.Name} past 100%: {Percent(100 * UnitsPerPercent - current.Sum(i => i.Units))} is left.");
 
-        // The same person, found by their email; otherwise someone new.
-        var party = email is null ? null
-            : (await db.Parties.Where(p => p.Contacts.Any(c => c.Kind == ContactKind.Email && c.Value == email)).Take(2).ToListAsync(cancellationToken)) is [var one] ? one : null;
-        var isNew = party is null;
+        Party party;
+        bool isNew;
         try
         {
-            if (party is null)
-            {
-                party = new Party(horse.TenantId, name);
-                if (email is not null) party.AddEmail(email);
-                if (mobile is not null) party.AddMobile(mobile);
-                db.Parties.Add(party);
-            }
-            else if (mobile is not null && !party.Contacts.Any(c => c.Kind == ContactKind.Mobile && c.Value == PhoneNumbers.Normalise(mobile)))
-            {
-                party.AddMobile(mobile, primary: party.PrimaryMobile is null);
-            }
-
+            (party, isNew) = await FindOrAddPartyAsync(db, horse.TenantId, name, email, mobile, cancellationToken);
             if (current.Any(i => i.PartyId == party.Id))
                 return Results.Problem(statusCode: StatusCodes.Status409Conflict, title: $"{party.DisplayName} already owns part of {horse.Name}. To change their share, transfer it.");
             horse.AddInterest(party, await HoldingAsync(db, horse, HoldingEntityType.ManagedSyndicate, $"{horse.Name} Syndicate", cancellationToken), units, from);
@@ -179,8 +168,31 @@ public static class HorseAdminEndpoints
         return Results.Created($"/api/horses/{id}/owners", new { party.Id, isNew });
     }
 
+    /// <summary>
+    /// The person with this email if they're already known here, otherwise someone new (with this email or mobile).
+    /// A new mobile is added to someone known. Throws DomainException for an address or number that isn't one.
+    /// </summary>
+    internal static async Task<(Party Party, bool IsNew)> FindOrAddPartyAsync(PaddocksideDbContext db, Guid tenantId, string name, string? email, string? mobile,
+        CancellationToken cancellationToken)
+    {
+        var party = email is null ? null
+            : (await db.Parties.Where(p => p.Contacts.Any(c => c.Kind == ContactKind.Email && c.Value == email)).Take(2).ToListAsync(cancellationToken)) is [var one] ? one : null;
+        if (party is null)
+        {
+            party = new Party(tenantId, name);
+            if (email is not null) party.AddEmail(email);
+            if (mobile is not null) party.AddMobile(mobile);
+            db.Parties.Add(party);
+            return (party, true);
+        }
+
+        if (mobile is not null && !party.Contacts.Any(c => c.Kind == ContactKind.Mobile && c.Value == PhoneNumbers.Normalise(mobile)))
+            party.AddMobile(mobile, primary: party.PrimaryMobile is null);
+        return (party, false);
+    }
+
     /// <summary>The horse's holding entity of this type, reused: its syndicate, or the house share.</summary>
-    private static async Task<HoldingEntity> HoldingAsync(PaddocksideDbContext db, Horse horse, HoldingEntityType type, string name, CancellationToken cancellationToken)
+    internal static async Task<HoldingEntity> HoldingAsync(PaddocksideDbContext db, Horse horse, HoldingEntityType type, string name, CancellationToken cancellationToken)
     {
         var ids = horse.Interests.Select(i => i.HoldingEntityId).Distinct().ToList();
         var existing = db.ChangeTracker.Entries<HoldingEntity>().Select(e => e.Entity).FirstOrDefault(h => ids.Contains(h.Id) && h.Type == type)
@@ -195,16 +207,16 @@ public static class HorseAdminEndpoints
 
     public static string Percent(long units) => $"{((decimal)units / UnitsPerPercent).ToString("0.#", CultureInfo.InvariantCulture)}%";
 
-    private static bool ValidPercent(decimal percent) => percent is >= 0 and <= 100 && percent * UnitsPerPercent == Math.Round(percent * UnitsPerPercent);
+    internal static bool ValidPercent(decimal percent) => percent is >= 0 and <= 100 && percent * UnitsPerPercent == Math.Round(percent * UnitsPerPercent);
 
-    private static DateTimeOffset? Day(string? value)
+    internal static DateTimeOffset? Day(string? value)
     {
         if (!DateOnly.TryParseExact(value, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var day)) return null;
         var midnight = day.ToDateTime(TimeOnly.MinValue);
         return new DateTimeOffset(midnight, Sydney.GetUtcOffset(midnight));
     }
 
-    private static string? Clean(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+    internal static string? Clean(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
     private static IResult Problem(string title) => Results.Problem(statusCode: StatusCodes.Status400BadRequest, title: title);
 }

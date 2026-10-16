@@ -103,6 +103,9 @@ public sealed record CreatedHorse(Guid Id);
 
 public sealed record AddedOwner(Guid Id, bool IsNew);
 
+/// <param name="ClientId">An existing client; otherwise Name with Email or Mobile.</param>
+public sealed record ShareRecipient(Guid? ClientId, string? Name, string? Email, string? Mobile, decimal Percent);
+
 public sealed record ClientRow(Guid Id, string Name, string? Email, string? Mobile, string Status, string? Horses, bool SignedIn, bool EmailBounced, List<string> Lists);
 
 public sealed record ClientHorse(Guid HorseId, string Name, string Share, string When);
@@ -378,6 +381,15 @@ public sealed class PaddocksideApi(HttpClient http)
 
     public Task<ApiResult<MailoutCreated>> SendMailoutAsync(string subject, string body, IEnumerable<Guid> listIds, IEnumerable<string> statuses, IEnumerable<Guid> clientIds, Guid? horseId) =>
         PostAsync<MailoutCreated>("api/mailouts", new { subject, body, listIds, statuses, clientIds, horseId });
+
+    public Task<ApiResult<object>> TransferShareAsync(Guid horseId, Guid partyId, IEnumerable<ShareRecipient> recipients, string? on, string access) =>
+        PostAsync<object>($"api/horses/{horseId}/owners/{partyId}/transfer", new { recipients, on, access });
+
+    public Task<ApiResult<object>> OwnerLeavesAsync(Guid horseId, Guid partyId, bool toHouse, string? on, string access) =>
+        PostAsync<object>($"api/horses/{horseId}/owners/{partyId}/exit", new { toHouse, on, access });
+
+    public Task<ApiResult<object>> EndManagementAsync(Guid horseId, string reason, string? on, string access) =>
+        PostAsync<object>($"api/horses/{horseId}/end-management", new { reason, on, access });
 
     public Task<ApiResult<object>> SetRaceDayAsync(Guid eventId, RaceDayView details) =>
         PutAsync<object>($"api/events/{eventId}/race-day", new { gate = details.Gate, dining = details.Dining, note = details.Note });
