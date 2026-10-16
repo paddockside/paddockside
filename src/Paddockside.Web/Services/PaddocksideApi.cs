@@ -97,7 +97,7 @@ public sealed record AttachmentView(string Name, string? Dropped);
 /// <param name="Invited">"Not signed in yet" until they first sign in to the portal.</param>
 public sealed record OwnerLine(Guid InterestId, Guid PartyId, string Name, string? Email, string? Mobile, string Percent, string Since, bool IsHouse, string? Invited);
 
-public sealed record OwnersView(List<OwnerLine> Owners, string Allocated, decimal Unallocated);
+public sealed record OwnersView(List<OwnerLine> Owners, string Allocated, decimal Unallocated, string? Warning = null, bool Over = false);
 
 public sealed record CreatedHorse(Guid Id);
 
@@ -147,8 +147,10 @@ public sealed record TodayQuiet(Guid Id, string Horse, string Type, string Title
 /// <param name="State">"ok", "warn" or "off".</param>
 public sealed record TodayHealth(string Label, string State, string Detail);
 
+public sealed record TodayOverAllocated(Guid HorseId, string Horse, string Allocated);
+
 public sealed record TodayPage(string Date, List<TodayRunner> Today, List<TodayRunner> Tomorrow, List<TodayUndelivered> Undelivered, TodayQueue Queue,
-    List<TodayQuiet> Dormant, List<TodayQuiet> Drafts, List<TodayHealth> Health);
+    List<TodayQuiet> Dormant, List<TodayQuiet> Drafts, List<TodayHealth> Health, List<TodayOverAllocated>? OverAllocated = null);
 
 public sealed record InboundView(
     Guid Id,

@@ -57,6 +57,20 @@
             </div>
 
             <aside class="grid grid-cols-[minmax(0,1fr)] gap-4" aria-label="Needs a look">
+                @if (_page.OverAllocated is { Count: > 0 } over)
+                {
+                    @* A mistake, not a to-do: shares that add up to more than the whole horse. *@
+                    <section class="grid gap-2 rounded-card border border-status-danger-fg bg-status-danger-bg px-4 py-4 text-status-danger-fg" aria-labelledby="over-heading">
+                        <h2 id="over-heading" class="@SideHeading !text-status-danger-fg">Shares to correct</h2>
+                        <ul class="grid gap-1">
+                            @foreach (var h in over)
+                            {
+                                <li><a href="horses/@h.HorseId#owners" class="font-strong underline underline-offset-4">@h.Horse</a>: shares add up to @h.Allocated</li>
+                            }
+                        </ul>
+                    </section>
+                }
+
                 <a href="inbound" class="grid gap-1 rounded-card border border-border-subtle bg-surface-raised px-4 py-4 hover:border-border-strong">
                     <span class="@SideHeading">Pending</span>
                     @if (_page.Queue.Waiting == 0)

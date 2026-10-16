@@ -16,7 +16,7 @@ public sealed partial class OwnerSignInTests
 
     private sealed record OwnerRow(Guid PartyId, string Name, string? Email, string? Mobile, string Percent, bool IsHouse, string? Invited);
 
-    private sealed record OwnerList(List<OwnerRow> Owners, string Allocated, decimal Unallocated);
+    private sealed record OwnerList(List<OwnerRow> Owners, string Allocated, decimal Unallocated, string? Warning = null, bool Over = false);
 
     private sealed record HorseInbox(string Name, string? InboxAddress, int CurrentOwners);
 
@@ -54,6 +54,7 @@ public sealed partial class OwnerSignInTests
         Assert.Equal(["Ann Owner", "Carol Owner"], owners.Owners.Select(o => o.Name));
         Assert.Equal(("12.5%", carol), (owners.Owners[1].Percent, owners.Owners[1].Email));
         Assert.Equal(("17.5% of 100% allocated", 82.5m), (owners.Allocated, owners.Unallocated));
+        Assert.Equal(("82.5% has no owner yet.", false), (owners.Warning, owners.Over)); // a note, not an alarm
 
         // No more than the whole horse; not twice; a share to one decimal place; someone who can be reached.
         object Owner(string name, string? email, decimal percent) => new { name, email, mobile = (string?)null, percent, since = today };

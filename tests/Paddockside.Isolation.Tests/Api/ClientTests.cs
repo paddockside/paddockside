@@ -32,9 +32,11 @@ public sealed partial class OwnerSignInTests
         var pat = new Party(seed.TenantId, "Pat Former");
         pat.AddEmail($"pat-{Guid.NewGuid():N}@owners.test");
         context.Parties.Add(pat);
-        var holding = await context.HoldingEntities.FirstAsync();
-        var interest = horse.AddInterest(pat, holding, 100, DateTimeOffset.UtcNow.AddMonths(-10));
-        horse.ExitInterest(interest.Id, DateTimeOffset.UtcNow.AddMonths(-2));
+        // Pat bought a tenth of the horse from Bob, then left: a horse is never more than 100%.
+        var bob = await context.Parties.SingleAsync(p => p.Id == seed.BobId);
+        var bobs = horse.Interests.Single(i => i.PartyId == seed.BobId && i.IsActive);
+        var passed = horse.TransferInterest(bobs.Id, DateTimeOffset.UtcNow.AddMonths(-10), [(bob, 400), (pat, 100)]);
+        horse.ExitInterest(passed.Single(i => i.PartyId == pat.Id).Id, DateTimeOffset.UtcNow.AddMonths(-2));
         await context.SaveChangesAsync();
         return pat.Id;
     }

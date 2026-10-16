@@ -39,8 +39,12 @@ public static class TodayEndpoints
     /// <param name="State">"ok", "warn" or "off".</param>
     public sealed record Health(string Label, string State, string Detail);
 
+    /// <summary>A horse whose shares add up to more than the whole horse: a mistake that must be put right.</summary>
+    public sealed record OverAllocated(Guid HorseId, string Horse, string Allocated);
+
     public sealed record TodayPage(string Date, IReadOnlyList<Runner> Today, IReadOnlyList<Runner> Tomorrow, IReadOnlyList<Undelivered> Undelivered,
-        QueueState Queue, IReadOnlyList<QuietEvent> Dormant, IReadOnlyList<QuietEvent> Drafts, IReadOnlyList<Health> Health);
+        QueueState Queue, IReadOnlyList<QuietEvent> Dormant, IReadOnlyList<QuietEvent> Drafts, IReadOnlyList<Health> Health,
+        IReadOnlyList<OverAllocated>? OverAllocated = null);
 
     private static readonly string[] RunnerTypes = [EventTypes.RaceStart.Code, EventTypes.BarrierTrial.Code];
 
@@ -131,7 +135,12 @@ public static class TodayEndpoints
             new QueueState(waiting.Count, waiting.Count == 0 ? null : Words.Recently(waiting.Min(), now)),
             dormant,
             drafts,
-            await HealthAsync(db, email, texts, now, cancellationToken));
+            await HealthAsync(db, email, texts, now, cancellationToken),
+            (await db.Horses.AsNoTracking().Include(h => h.ManagementPeriods).Include(h => h.Interests).AsSplitQuery().ToListAsync(cancellationToken))
+                .Where(h => h.AllocatedUnits > Horse.WholeUnits)
+                .OrderBy(h => h.Name)
+                .Select(h => new OverAllocated(h.Id, h.Name, Horse.Percent(h.AllocatedUnits)))
+                .ToList());
     }
 
     private static string Excerpt(string body) => body.Length <= 60 ? body : $"{body[..60].TrimEnd()}…";

@@ -104,6 +104,15 @@ public sealed class Horse
         period.Close(on, reason);
     }
 
+    /// <summary>
+    /// The whole horse in units: 1,000, so one unit is a tenth of a percent (ownership-model.md: units stored,
+    /// percentages shown). Live shares in a management period never add up to more.
+    /// </summary>
+    public const long WholeUnits = 1000;
+
+    /// <summary>The units held now, by live interests in the open management period.</summary>
+    public long AllocatedUnits => CurrentManagementPeriod is { } period ? _interests.Where(i => i.ManagementPeriodId == period.Id && i.IsLive).Sum(i => i.Units) : 0;
+
     public ManagedInterest AddInterest(
         Party party,
         HoldingEntity holdingEntity,
@@ -117,8 +126,16 @@ public sealed class Horse
         if (holdingEntity.TenantId != TenantId) throw new DomainException("The holding entity belongs to a different tenant.");
         if (!holdingEntity.ExpandsInternally)
             throw new DomainException($"'{holdingEntity.Name}' is an external holding: it is display-only and holds no managed interests.");
+        if (units <= 0) throw new DomainException("A share must be more than nothing.");
+        // Never more than the whole horse, however the share is added: a form, the Ops tool, an import.
+        if (AllocatedUnits + units > WholeUnits)
+            throw new DomainException($"That would take {Name} past 100%: {Percent(WholeUnits - AllocatedUnits)} is left.");
         return CreateInterest(party, holdingEntity.Id, units, effectiveFrom, kind, initialState, derivedFrom: null);
     }
+
+    /// <summary>Units as a percentage of the horse: 25 is "2.5%".</summary>
+    public static string Percent(long units) =>
+        $"{((decimal)Math.Max(0, units) / (WholeUnits / 100)).ToString("0.#", System.Globalization.CultureInfo.InvariantCulture)}%";
 
     public void ActivateInterest(Guid interestId) => FindInterest(interestId).Activate();
 

@@ -220,9 +220,11 @@ public sealed partial class OwnerSignInTests
             var tenant = await context.Tenants.SingleAsync();
             var horse = await context.Horses.Include(h => h.ManagementPeriods).Include(h => h.Interests).SingleAsync();
             var house = new Party(tenant.Id, "House share", PartyKind.Organisation);
-            var holding = new HoldingEntity(tenant.Id, "House", HoldingEntityType.HouseShare);
-            context.AddRange(house, holding);
-            horse.AddInterest(house, holding, 100, DateTimeOffset.UtcNow.AddDays(-1));
+            context.Add(house);
+            // The house takes a tenth of the horse from Bob's half: a horse is never more than 100%.
+            var bob = await context.Parties.SingleAsync(p => p.Id == seed.BobId);
+            var bobs = horse.Interests.Single(i => i.PartyId == seed.BobId && i.IsActive);
+            horse.TransferInterest(bobs.Id, DateTimeOffset.UtcNow.AddDays(-1), [(bob, 400), (house, 100)]);
             tenant.SetHouseParty(house);
             await context.SaveChangesAsync();
             houseId = house.Id;

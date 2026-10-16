@@ -48,8 +48,12 @@
             <section id="owners" class="grid grid-cols-[minmax(0,1fr)] gap-3" aria-labelledby="owners-heading">
                 <div class="flex flex-wrap items-baseline justify-between gap-2">
                     <h2 id="owners-heading">Owners</h2>
-                    <span class="text-small text-text-muted">@owners.Allocated</span>
+                    <span class="text-small @(owners.Over ? "font-strong text-status-danger-fg" : "text-text-muted")">@owners.Allocated</span>
                 </div>
+                @if (owners.Warning is { } warning)
+                {
+                    <p class="@(owners.Over ? "alert-danger" : "rounded-control bg-status-warning-bg px-4 py-3 text-status-warning-fg")" role="@(owners.Over ? "alert" : null)">@warning</p>
+                }
                 @if (owners.Owners.Count == 0)
                 {
                     <p class="text-text-muted">No owners yet.</p>

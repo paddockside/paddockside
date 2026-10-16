@@ -6,6 +6,20 @@ namespace Paddockside.Domain.Tests;
 public sealed class OwnershipScenarioTests
 {
     [Fact]
+    public void A_horse_is_never_owned_more_than_once_over_whichever_way_a_share_is_added()
+    {
+        var s = new Stable();
+        s.Owner("Ann", 600);
+        s.Owner("Ben", 400);
+        Assert.Equal(Horse.WholeUnits, s.Horse.AllocatedUnits);
+
+        var extra = Assert.Throws<DomainException>(() => s.Owner("Cal", 50));
+        Assert.Contains("past 100%: 0% is left", extra.Message);
+        Assert.Throws<DomainException>(() => s.Owner("Dee", 0));
+        Assert.Equal("2.5%", Horse.Percent(25));
+    }
+
+    [Fact]
     public void Scenario1_exiting_owner_is_locked_out_and_the_remaining_three_absorb_the_share()
     {
         var s = new Stable();

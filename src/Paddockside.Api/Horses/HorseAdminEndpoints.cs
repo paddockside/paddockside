@@ -34,7 +34,18 @@ public static class HorseAdminEndpoints
     public sealed record OwnerLine(Guid InterestId, Guid PartyId, string Name, string? Email, string? Mobile, string Percent, string Since, bool IsHouse, string? Invited);
 
     /// <param name="Allocated">"95% of 100% allocated".</param>
-    public sealed record OwnersView(IReadOnlyList<OwnerLine> Owners, string Allocated, decimal Unallocated);
+    /// <param name="Warning">When the shares don't add up to the whole horse, in words.</param>
+    /// <param name="Over">More than 100%: a mistake to correct, not just shares still to sell.</param>
+    public sealed record OwnersView(IReadOnlyList<OwnerLine> Owners, string Allocated, decimal Unallocated, string? Warning = null, bool Over = false);
+
+    /// <summary>
+    /// What's wrong with a horse's shares, if anything. Over 100% can't be added any more (Horse.AddInterest), but
+    /// a horse set up before that rule may be; under 100% is often shares not yet sold, so it's a note, not an alarm.
+    /// </summary>
+    public static (string? Warning, bool Over) Allocation(long allocated, bool managed) => !managed || allocated == Horse.WholeUnits ? (null, false)
+        : allocated > Horse.WholeUnits
+            ? ($"Over-allocated: the shares add up to {Percent(allocated)}. Correct it before owners are told their shares, for example by recording that someone added by mistake has left.", true)
+            : ($"{Percent(Horse.WholeUnits - allocated)} has no owner yet.", false);
 
     /// <param name="Since">yyyy-MM-dd; today if empty.</param>
     public sealed record NewOwnerRequest(string Name, string? Email, string? Mobile, decimal Percent, string? Since);
@@ -116,7 +127,8 @@ public static class HorseAdminEndpoints
                 x.Party.Id == tenant.HousePartyId || x.Party.PersonId is not null ? null : "Not signed in yet"))
             .ToList();
         var allocated = current.Sum(i => i.Units);
-        return Results.Ok(new OwnersView(lines, $"{Percent(allocated)} of 100% allocated", Math.Max(0, 100m - (decimal)allocated / UnitsPerPercent)));
+        var (warning, over) = Allocation(allocated, horse.CurrentManagementPeriod is not null);
+        return Results.Ok(new OwnersView(lines, $"{Percent(allocated)} of 100% allocated", Math.Max(0, 100m - (decimal)allocated / UnitsPerPercent), warning, over));
     }
 
     /// <summary>
