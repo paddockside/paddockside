@@ -50,6 +50,60 @@ public sealed class Party
 
     public void Unsubscribe(DateTimeOffset at) => UnsubscribedAt ??= at;
 
+    /// <summary>"Mr", "Dr": as the business addresses them.</summary>
+    public string? Title { get; private set; }
+
+    public string? Company { get; private set; }
+
+    /// <summary>Their postal or street address, as written (lines kept).</summary>
+    public string? Address { get; private set; }
+
+    /// <summary>Staff notes about them, never shown to them.</summary>
+    public string? Notes { get; private set; }
+
+    /// <summary>Numbers that aren't their mobile, as written: "8883 1066 (Work)". Nothing is sent to these.</summary>
+    public string? OtherPhones { get; private set; }
+
+    public string? Website { get; private set; }
+
+    /// <summary>Other ways to find them (LinkedIn, Facebook, Twitter, Messenger), one per line.</summary>
+    public string? Social { get; private set; }
+
+    /// <summary>
+    /// The groups they were in where they came from (Relenta), kept as imported: lists and horses that aren't in
+    /// Paddockside yet, so a horse added later for its history can find its old owners.
+    /// </summary>
+    public string? SourceGroups { get; private set; }
+
+    public const int DetailLength = 500, NotesLength = 4000, SourceGroupsLength = 20_000;
+
+    /// <summary>The details beyond how to reach them. Blank clears one; nothing here is ever sent to.</summary>
+    public void SetDetails(string? title, string? company, string? address, string? notes, string? otherPhones, string? website, string? social)
+    {
+        static string? Clean(string? value, int length, string what)
+        {
+            var trimmed = string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+            if (trimmed?.Length > length) throw new DomainException($"Keep the {what} under {length} characters.");
+            return trimmed;
+        }
+
+        Title = Clean(title, 50, "title");
+        Company = Clean(company, 200, "company");
+        Address = Clean(address, DetailLength, "address");
+        Notes = Clean(notes, NotesLength, "notes");
+        OtherPhones = Clean(otherPhones, DetailLength, "other phone numbers");
+        Website = Clean(website, 300, "website");
+        Social = Clean(social, DetailLength, "social links");
+    }
+
+    /// <summary>Where they came from: when they first became a client there, and the groups they were in.</summary>
+    public void RecordSource(DateTimeOffset? since, string? groups)
+    {
+        if (since is { } at && (AddedAt is null || at < AddedAt)) AddedAt = at;
+        var trimmed = string.IsNullOrWhiteSpace(groups) ? null : groups.Trim();
+        SourceGroups = trimmed is { Length: > SourceGroupsLength } ? trimmed[..SourceGroupsLength] : trimmed;
+    }
+
     /// <summary>They asked staff to be put back on (in words; staff record it).</summary>
     public void Resubscribe() => UnsubscribedAt = null;
 

@@ -126,7 +126,8 @@ public sealed class Horse
         if (holdingEntity.TenantId != TenantId) throw new DomainException("The holding entity belongs to a different tenant.");
         if (!holdingEntity.ExpandsInternally)
             throw new DomainException($"'{holdingEntity.Name}' is an external holding: it is display-only and holds no managed interests.");
-        if (units <= 0) throw new DomainException("A share must be more than nothing.");
+        // A share to confirm (Pending) may be 0: linked to the horse, its size not yet known (a Relenta import).
+        if (units < 0 || (units == 0 && initialState != InterestState.Pending)) throw new DomainException("A share must be more than nothing.");
         // Never more than the whole horse, however the share is added: a form, the Ops tool, an import.
         if (AllocatedUnits + units > WholeUnits)
             throw new DomainException($"That would take {Name} past 100%: {Percent(WholeUnits - AllocatedUnits)} is left.");
@@ -138,6 +139,22 @@ public sealed class Horse
         $"{((decimal)Math.Max(0, units) / (WholeUnits / 100)).ToString("0.#", System.Globalization.CultureInfo.InvariantCulture)}%";
 
     public void ActivateInterest(Guid interestId) => FindInterest(interestId).Activate();
+
+    /// <summary>
+    /// Someone linked to the horse whose share isn't known yet (a Relenta import): listed as "share to confirm",
+    /// with no access, no updates and no invitation until staff confirm it.
+    /// </summary>
+    public ManagedInterest AddShareToConfirm(Party party, HoldingEntity holdingEntity, DateTimeOffset effectiveFrom) =>
+        AddInterest(party, holdingEntity, 0, effectiveFrom, InterestKind.Ownership, InterestState.Pending);
+
+    /// <summary>Their share is now known: it gets its size, within the whole horse, and starts.</summary>
+    public void ConfirmShare(Guid interestId, long units)
+    {
+        var interest = FindInterest(interestId);
+        if (AllocatedUnits - interest.Units + units > WholeUnits)
+            throw new DomainException($"That would take {Name} past 100%: {Percent(WholeUnits - AllocatedUnits + interest.Units)} is left.");
+        interest.Confirm(units);
+    }
 
     /// <summary>An owner leaves without a successor (or the successors are recorded separately).</summary>
     public void ExitInterest(Guid interestId, DateTimeOffset on, AccessPolicy policy = AccessPolicy.LockedOut) =>

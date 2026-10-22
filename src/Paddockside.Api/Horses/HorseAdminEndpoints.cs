@@ -31,7 +31,9 @@ public static class HorseAdminEndpoints
 
     /// <param name="Percent">"5%", from the units.</param>
     /// <param name="Invited">Not yet signed in to the portal: "Invited"; signed in: null.</param>
-    public sealed record OwnerLine(Guid InterestId, Guid PartyId, string Name, string? Email, string? Mobile, string Percent, string Since, bool IsHouse, string? Invited);
+    /// <param name="ToConfirm">Linked to the horse (a Relenta import) but their share isn't known: no access or updates until it's set.</param>
+    public sealed record OwnerLine(Guid InterestId, Guid PartyId, string Name, string? Email, string? Mobile, string Percent, string Since, bool IsHouse, string? Invited,
+        bool ToConfirm = false);
 
     /// <param name="Allocated">"95% of 100% allocated".</param>
     /// <param name="Warning">When the shares don't add up to the whole horse, in words.</param>
@@ -114,7 +116,10 @@ public static class HorseAdminEndpoints
         var current = horse.CurrentManagementPeriod is { } period
             ? horse.Interests.Where(i => i.ManagementPeriodId == period.Id && i.IsActive).ToList()
             : [];
-        var partyIds = current.Select(i => i.PartyId).Distinct().ToList();
+        var toConfirm = horse.CurrentManagementPeriod is { } open
+            ? horse.Interests.Where(i => i.ManagementPeriodId == open.Id && i.State == InterestState.Pending && current.All(c => c.PartyId != i.PartyId)).ToList()
+            : [];
+        var partyIds = current.Concat(toConfirm).Select(i => i.PartyId).Distinct().ToList();
         var parties = await db.Parties.AsNoTracking().Where(p => partyIds.Contains(p.Id)).ToDictionaryAsync(p => p.Id, cancellationToken);
         var now = clock.GetUtcNow();
         // One line per person: after buying a co-owner's share someone holds two interests, but owns one share.
@@ -126,6 +131,10 @@ public static class HorseAdminEndpoints
                 Percent(x.Interests.Sum(i => i.Units)), Words.Day(x.Interests.Min(i => i.EffectiveFrom), now), x.Party.Id == tenant.HousePartyId,
                 x.Party.Id == tenant.HousePartyId || x.Party.PersonId is not null ? null : "Not signed in yet"))
             .ToList();
+        // Then the people whose share is still to confirm: listed, so it can be set, but not counted.
+        lines.AddRange(toConfirm.GroupBy(i => i.PartyId).Select(g => parties[g.Key]).OrderBy(p => p.DisplayName)
+            .Select(p => new OwnerLine(toConfirm.First(i => i.PartyId == p.Id).Id, p.Id, p.DisplayName, p.PrimaryEmail?.Value, p.PrimaryMobile?.Value,
+                "Share to confirm", Words.Day(toConfirm.First(i => i.PartyId == p.Id).EffectiveFrom, now), false, null, ToConfirm: true)));
         var allocated = current.Sum(i => i.Units);
         var (warning, over) = Allocation(allocated, horse.CurrentManagementPeriod is not null);
         return Results.Ok(new OwnersView(lines, $"{Percent(allocated)} of 100% allocated", Math.Max(0, 100m - (decimal)allocated / UnitsPerPercent), warning, over));

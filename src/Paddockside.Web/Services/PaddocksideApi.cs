@@ -95,7 +95,8 @@ public sealed record Posted(Guid Id, int Recipients);
 public sealed record AttachmentView(string Name, string? Dropped);
 
 /// <param name="Invited">"Not signed in yet" until they first sign in to the portal.</param>
-public sealed record OwnerLine(Guid InterestId, Guid PartyId, string Name, string? Email, string? Mobile, string Percent, string Since, bool IsHouse, string? Invited);
+public sealed record OwnerLine(Guid InterestId, Guid PartyId, string Name, string? Email, string? Mobile, string Percent, string Since, bool IsHouse, string? Invited,
+    bool ToConfirm = false);
 
 public sealed record OwnersView(List<OwnerLine> Owners, string Allocated, decimal Unallocated, string? Warning = null, bool Over = false);
 
@@ -113,7 +114,20 @@ public sealed record ClientHorse(Guid HorseId, string Name, string Share, string
 public sealed record ListRef(Guid Id, string Name);
 
 public sealed record ClientDetail(Guid Id, string Name, string? Email, string? Mobile, string? HowWeKnowThem, string Status, string? Added, bool SignedIn,
-    bool EmailBounced, string? Invitation, bool CanResend, List<ClientHorse> CurrentHorses, List<ClientHorse> PastHorses, List<ListRef> Lists, string? Unsubscribed = null);
+    bool EmailBounced, string? Invitation, bool CanResend, List<ClientHorse> CurrentHorses, List<ClientHorse> PastHorses, List<ListRef> Lists, string? Unsubscribed = null,
+    ClientDetails? Details = null);
+
+/// <summary>Everything else about a client: never sent to, staff only.</summary>
+public sealed record ClientDetails(string? Title, string? Company, string? Address, string? Notes, string? OtherPhones, string? Website, string? Social, string? SourceGroups = null);
+
+/// <param name="Kind">"Horse" (one of yours), "List", or "HorseName" (probably a horse not set up here).</param>
+public sealed record ImportGroup(string Name, int Contacts, string Kind, Guid? HorseId, string? Horse);
+
+public sealed record ImportCouple(int Row, string Name);
+
+public sealed record ImportPreview(int Contacts, int New, int Existing, int WithoutEmail, int Unsubscribed, List<ImportGroup> Groups, List<ImportCouple> Couples);
+
+public sealed record ImportResult(int Added, int Updated, int Unsubscribed, int ListsMade, int OnLists, int LinkedToHorses, List<ImportCouple> Couples);
 
 public sealed record MailoutReason(string Why, int Count);
 
@@ -355,8 +369,29 @@ public sealed class PaddocksideApi(HttpClient http)
     public Task<ApiResult<ClientCreated>> AddClientAsync(string name, string? email, string? mobile, string? howWeKnowThem, IEnumerable<Guid> listIds) =>
         PostAsync<ClientCreated>("api/clients", new { name, email, mobile, howWeKnowThem, listIds });
 
-    public Task<ApiResult<object>> UpdateClientAsync(Guid id, string name, string? email, string? mobile, string? howWeKnowThem) =>
-        PutAsync<object>($"api/clients/{id}", new { name, email, mobile, howWeKnowThem });
+    public Task<ApiResult<object>> UpdateClientAsync(Guid id, string name, string? email, string? mobile, string? howWeKnowThem, ClientDetails? details = null) =>
+        PutAsync<object>($"api/clients/{id}", new { name, email, mobile, howWeKnowThem, details });
+
+    /// <summary>What a Relenta export holds and how its groups sort, before anything is saved.</summary>
+    public Task<ApiResult<ImportPreview>> PreviewRelentaAsync(byte[] file, string fileName) =>
+        SendContentAsync<ImportPreview>(HttpMethod.Post, "api/imports/relenta/preview", ImportForm(file, fileName, null));
+
+    /// <summary>The import: everyone in, the groups chosen as lists, the horses chosen linked (share to confirm).</summary>
+    public Task<ApiResult<ImportResult>> ImportRelentaAsync(byte[] file, string fileName, IEnumerable<string> lists, IEnumerable<string> horses) =>
+        SendContentAsync<ImportResult>(HttpMethod.Post, "api/imports/relenta", ImportForm(file, fileName, new { lists, horses }));
+
+    private static MultipartFormDataContent ImportForm(byte[] file, string fileName, object? choices)
+    {
+        var form = new MultipartFormDataContent();
+        var content = new ByteArrayContent(file);
+        content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("text/csv");
+        form.Add(content, "file", fileName);
+        if (choices is not null) form.Add(new StringContent(System.Text.Json.JsonSerializer.Serialize(choices, new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web))), "choices");
+        return form;
+    }
+
+    public Task<ApiResult<object>> ConfirmShareAsync(Guid horseId, Guid partyId, decimal percent) =>
+        PostAsync<object>($"api/horses/{horseId}/owners/{partyId}/confirm", new { percent });
 
     public Task<ApiResult<object>> ResendInvitationAsync(Guid id) => PostAsync<object>($"api/clients/{id}/invitation", new { });
 

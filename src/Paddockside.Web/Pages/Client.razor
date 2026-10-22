@@ -68,6 +68,34 @@
                             <label class="field-label" for="edit-how">How you know them</label>
                             <input id="edit-how" class="input" maxlength="300" @bind="_how" />
                         </div>
+                        <div class="field">
+                            <label class="field-label" for="edit-title">Title</label>
+                            <input id="edit-title" class="input" maxlength="50" @bind="_details.Title" />
+                        </div>
+                        <div class="field">
+                            <label class="field-label" for="edit-company">Company</label>
+                            <input id="edit-company" class="input" maxlength="200" @bind="_details.Company" />
+                        </div>
+                        <div class="field sm:col-span-2">
+                            <label class="field-label" for="edit-address">Address</label>
+                            <textarea id="edit-address" class="input min-h-[5rem] py-3" maxlength="500" @bind="_details.Address"></textarea>
+                        </div>
+                        <div class="field">
+                            <label class="field-label" for="edit-phones">Other phone numbers</label>
+                            <input id="edit-phones" class="input" maxlength="500" @bind="_details.OtherPhones" />
+                        </div>
+                        <div class="field">
+                            <label class="field-label" for="edit-website">Website</label>
+                            <input id="edit-website" class="input" maxlength="300" @bind="_details.Website" />
+                        </div>
+                        <div class="field sm:col-span-2">
+                            <label class="field-label" for="edit-social">Social (one per line)</label>
+                            <textarea id="edit-social" class="input min-h-[4rem] py-3" maxlength="500" @bind="_details.Social"></textarea>
+                        </div>
+                        <div class="field sm:col-span-2">
+                            <label class="field-label" for="edit-notes">Notes (staff only)</label>
+                            <textarea id="edit-notes" class="input min-h-[6rem] py-3" maxlength="4000" @bind="_details.Notes"></textarea>
+                        </div>
                     </div>
                     <p class="field-hint">A corrected email replaces the old one. If they sign in to the owners' portal, their own sign-in address isn't changed here.</p>
                     <div class="flex flex-wrap gap-3">
@@ -91,7 +119,23 @@
                     <dd>@(client.Mobile ?? "None")</dd>
                     <dt class="text-text-muted">How you know them</dt>
                     <dd>@(client.HowWeKnowThem ?? "Not recorded")</dd>
+                    @if (client.Details is { } d)
+                    {
+                        @foreach (var (label, value) in new[] { ("Title", d.Title), ("Company", d.Company), ("Address", d.Address), ("Other phones", d.OtherPhones),
+                            ("Website", d.Website), ("Social", d.Social), ("Notes", d.Notes) }.Where(x => x.Item2 is not null))
+                        {
+                            <dt class="text-text-muted">@label</dt>
+                            <dd class="whitespace-pre-line break-words">@value</dd>
+                        }
+                    }
                 </dl>
+                @if (client.Details?.SourceGroups is { } groups)
+                {
+                    <details>
+                        <summary class="cursor-pointer text-small font-strong">Their Relenta groups</summary>
+                        <p class="mt-2 text-small text-text-muted">@groups</p>
+                    </details>
+                }
             }
         </section>
 
@@ -206,15 +250,34 @@
         _lists = (await Api.ClientListsAsync()).Value ?? [];
     }
 
-    private void StartEditing() =>
+    private DetailsDraft _details = new();
+
+    /// <summary>The other details being edited.</summary>
+    private sealed class DetailsDraft
+    {
+        public string? Title { get; set; }
+        public string? Company { get; set; }
+        public string? Address { get; set; }
+        public string? Notes { get; set; }
+        public string? OtherPhones { get; set; }
+        public string? Website { get; set; }
+        public string? Social { get; set; }
+    }
+
+    private void StartEditing()
+    {
         (_editing, _name, _email, _mobile, _how, _message, _error) = (true, _client!.Name, _client.Email, _client.Mobile, _client.HowWeKnowThem, null, null);
+        var d = _client.Details;
+        _details = new DetailsDraft { Title = d?.Title, Company = d?.Company, Address = d?.Address, Notes = d?.Notes, OtherPhones = d?.OtherPhones, Website = d?.Website, Social = d?.Social };
+    }
 
     private async Task SaveAsync()
     {
         (_busy, _error, _message) = (true, null, null);
         try
         {
-            var result = await Api.UpdateClientAsync(Id, _name ?? "", _email, _mobile, _how);
+            var result = await Api.UpdateClientAsync(Id, _name ?? "", _email, _mobile, _how,
+                new ClientDetails(_details.Title ?? "", _details.Company ?? "", _details.Address ?? "", _details.Notes ?? "", _details.OtherPhones ?? "", _details.Website ?? "", _details.Social ?? ""));
             if (!result.Succeeded) { _error = result.Error; return; }
             (_editing, _message) = (false, "Saved.");
             await LoadAsync();

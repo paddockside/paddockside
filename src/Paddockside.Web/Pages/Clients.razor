@@ -15,10 +15,16 @@
 <div class="grid gap-6">
     <div class="flex flex-wrap items-center justify-between gap-3">
         <h1>Clients</h1>
-        @if (CanEdit && !_adding)
-        {
-            <button type="button" class="btn-primary" @onclick="() => (_adding, _addError) = (true, null)">Add a client</button>
-        }
+        <div class="flex flex-wrap gap-3">
+            @if (Session.Current?.Role is "Manager" or "TenantAdmin")
+            {
+                <a href="clients/import" class="btn-secondary">Import from Relenta</a>
+            }
+            @if (CanEdit && !_adding)
+            {
+                <button type="button" class="btn-primary" @onclick="() => (_adding, _addError) = (true, null)">Add a client</button>
+            }
+        </div>
     </div>
 
     @if (_adding)

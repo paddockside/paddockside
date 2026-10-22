@@ -1,0 +1,195 @@
+@page "/clients/import"
+@inject PaddocksideApi Api
+@inject SessionState Session
+@inject NavigationManager Navigation
+
+<PageTitle>Import from Relenta · Paddockside</PageTitle>
+
+@*
+    Bringing clients across from Relenta (David, 23 Oct 2026): choose the export, see what's in it before anything is
+    saved, then sort its groups — tick the ones to keep as client lists, and the horses to link people to (share to
+    confirm, nothing sent). Everyone in the file comes in either way; each client keeps the Relenta groups they
+    were in, so an old horse added later can find its people. Managers and admins.
+*@
+<div class="grid max-w-5xl gap-6">
+    <a href="clients" class="btn-link justify-self-start">← Clients</a>
+    <h1>Import from Relenta</h1>
+
+    @if (_result is { } result)
+    {
+        <section class="card grid gap-3" aria-labelledby="done-heading">
+            <h2 id="done-heading" class="text-title">Imported</h2>
+            <ul class="grid gap-1">
+                <li>@result.Added new @(result.Added == 1 ? "client" : "clients"), @result.Updated already here and filled in</li>
+                <li>@result.OnLists put on lists@(result.ListsMade > 0 ? $" ({result.ListsMade} new {(result.ListsMade == 1 ? "list" : "lists")})" : null)</li>
+                <li>@result.LinkedToHorses linked to horses, share to confirm: nothing has been sent to them</li>
+                @if (result.Unsubscribed > 0)
+                {
+                    <li>@result.Unsubscribed unsubscribed from mailouts, as they were in Relenta</li>
+                }
+            </ul>
+            @if (result.Couples.Count > 0)
+            {
+                <p class="text-small text-text-muted">Came in as one client each (Relenta has them together): @string.Join(", ", result.Couples.Select(c => c.Name)).</p>
+            }
+            <div class="flex flex-wrap gap-3">
+                <a href="clients" class="btn-primary">See the clients</a>
+                <a href="horses" class="btn-secondary">Set shares on the horses</a>
+            </div>
+        </section>
+    }
+    else
+    {
+        <section class="card grid gap-3" aria-labelledby="file-heading">
+            <h2 id="file-heading" class="text-title">1. The Relenta export</h2>
+            <p class="text-small text-text-muted">In Relenta, export the contacts as CSV. Nothing is saved until you press Import at the end.</p>
+            <label class="field-label" for="relenta-file">File</label>
+            <InputFile id="relenta-file" accept=".csv,text/csv" OnChange="ChosenAsync" class="text-small" />
+            @if (_error is not null)
+            {
+                <p class="alert-danger" role="alert">@_error</p>
+            }
+            @if (_busy && _preview is null)
+            {
+                <p class="text-text-muted" role="status">Reading…</p>
+            }
+        </section>
+
+        @if (_preview is { } preview)
+        {
+            <section class="card grid gap-2" aria-labelledby="who-heading">
+                <h2 id="who-heading" class="text-title">2. Who's in it</h2>
+                <p><strong>@preview.Contacts contacts</strong>: @preview.New new, @preview.Existing already here (they'll be filled in, not doubled)@(preview.WithoutEmail > 0 ? $", {preview.WithoutEmail} without an email" : null).</p>
+                @if (preview.Unsubscribed > 0)
+                {
+                    <p class="text-small text-text-muted">@preview.Unsubscribed unsubscribed or "do not mass-email" in Relenta: they come in, unsubscribed from mailouts.</p>
+                }
+                @if (preview.Couples.Count > 0)
+                {
+                    <p class="text-small text-text-muted">Two people under one contact, coming in as one client each: @string.Join(", ", preview.Couples.Select(c => c.Name)).</p>
+                }
+            </section>
+
+            <section class="card grid gap-4" aria-labelledby="groups-heading">
+                <h2 id="groups-heading" class="text-title">3. Their groups (@preview.Groups.Count)</h2>
+                <div class="flex flex-wrap gap-2" role="group" aria-label="Show">
+                    @foreach (var (kind, label) in Piles)
+                    {
+                        var count = preview.Groups.Count(g => g.Kind == kind);
+                        <button type="button" aria-pressed="@(_pile == kind ? "true" : "false")" @onclick="() => _pile = kind"
+                                class="inline-flex min-h-[36px] items-center rounded-pill border px-3 text-small font-medium @(_pile == kind ? "border-action-primary-bg bg-scope-owners-bg text-scope-owners-fg" : "border-border-strong bg-surface-raised hover:bg-surface-sunken")">
+                            @label (@count)
+                        </button>
+                    }
+                </div>
+                <p class="text-small text-text-muted">@PileHint</p>
+                <div class="flex flex-wrap gap-4 text-small">
+                    <button type="button" class="underline underline-offset-4" @onclick="() => TickAll(true)">Tick all shown</button>
+                    <button type="button" class="underline underline-offset-4" @onclick="() => TickAll(false)">Untick all shown</button>
+                    <span class="ml-auto text-text-muted">@_lists.Count kept as lists · @_horses.Count horses linked</span>
+                </div>
+                <ul class="grid max-h-[32rem] overflow-y-auto rounded-control border border-border-subtle">
+                    @foreach (var group in preview.Groups.Where(g => g.Kind == _pile))
+                    {
+                        var ticked = _pile == "Horse" ? _horses.Contains(group.Name) : _lists.Contains(group.Name);
+                        <li class="border-b border-border-subtle last:border-b-0">
+                            <label class="flex cursor-pointer items-center gap-3 px-3 py-2 hover:bg-surface-sunken">
+                                <input type="checkbox" class="size-[18px] accent-action-primary-bg" checked="@ticked" @onchange="() => Toggle(group)" />
+                                <span class="min-w-0 flex-1">@group.Name@(group.Horse is { } horse && !string.Equals(horse, group.Name, StringComparison.OrdinalIgnoreCase) ? $" → {horse}" : null)</span>
+                                <span class="text-small text-text-muted">@group.Contacts</span>
+                            </label>
+                        </li>
+                    }
+                </ul>
+            </section>
+
+            <section class="card grid gap-3" aria-labelledby="go-heading">
+                <h2 id="go-heading" class="text-title">4. Import</h2>
+                <p>All @preview.Contacts contacts come in. @_lists.Count @(_lists.Count == 1 ? "group becomes a list" : "groups become lists"); people in @_horses.Count @(_horses.Count == 1 ? "horse's group are" : "horses' groups are") linked to those horses with their share to confirm. Nothing is sent to anyone.</p>
+                <button type="button" class="btn-primary justify-self-start" disabled="@_busy" @onclick="ImportAsync">Import @preview.Contacts contacts</button>
+            </section>
+        }
+    }
+</div>
+
+@code {
+    private static readonly (string Kind, string Label)[] Piles = [("List", "Look like lists"), ("HorseName", "Look like horse names"), ("Horse", "Match your horses")];
+
+    private byte[]? _file;
+    private string _fileName = "relenta.csv";
+    private ImportPreview? _preview;
+    private ImportResult? _result;
+    private readonly HashSet<string> _lists = new(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<string> _horses = new(StringComparer.OrdinalIgnoreCase);
+    private string _pile = "List";
+    private bool _busy;
+    private string? _error;
+
+    private string PileHint => _pile switch
+    {
+        "List" => "Groups with words or years horses don't have (Owners, Social, Cup, Golf, 2023…). Tick the ones to keep as client lists.",
+        "HorseName" => "Probably horses not set up in Paddockside. Leave them unticked: each client keeps these groups, so an old horse added later can find its people. Tick any that are really lists.",
+        _ => "The names of horses already here. Ticked, their people are linked to the horse with their share to confirm: no updates or invitation until you enter it.",
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (Session.Current is null && await Session.RefreshAsync() is null) Navigation.NavigateTo("sign-in");
+    }
+
+    private async Task ChosenAsync(InputFileChangeEventArgs e)
+    {
+        (_error, _preview, _busy) = (null, null, true);
+        try
+        {
+            using var stream = e.File.OpenReadStream(20L * 1024 * 1024);
+            using var memory = new MemoryStream();
+            await stream.CopyToAsync(memory);
+            (_file, _fileName) = (memory.ToArray(), e.File.Name);
+            var result = await Api.PreviewRelentaAsync(_file, _fileName);
+            if (!result.Succeeded) { _error = result.Error; return; }
+            _preview = result.Value;
+            _lists.Clear();
+            _horses.Clear();
+            foreach (var g in _preview!.Groups.Where(g => g.Kind == "Horse")) _horses.Add(g.Name); // a horse of yours is linked unless you untick it
+        }
+        catch (IOException)
+        {
+            _error = "That file is too big for one import.";
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private void Toggle(ImportGroup group)
+    {
+        var set = _pile == "Horse" ? _horses : _lists;
+        if (!set.Remove(group.Name)) set.Add(group.Name);
+    }
+
+    private void TickAll(bool on)
+    {
+        var set = _pile == "Horse" ? _horses : _lists;
+        foreach (var g in _preview!.Groups.Where(g => g.Kind == _pile))
+            if (on) set.Add(g.Name);
+            else set.Remove(g.Name);
+    }
+
+    private async Task ImportAsync()
+    {
+        if (_file is null) return;
+        (_error, _busy) = (null, true);
+        try
+        {
+            var result = await Api.ImportRelentaAsync(_file, _fileName, _lists, _horses);
+            if (!result.Succeeded) { _error = result.Error; return; }
+            _result = result.Value;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}

@@ -32,9 +32,14 @@ public static class ClientEndpoints
     /// <param name="Invitation">Where their portal invitation is up to, in words; null for someone with nothing to be invited to.</param>
     public sealed record ClientDetail(Guid Id, string Name, string? Email, string? Mobile, string? HowWeKnowThem, string Status, string? Added, bool SignedIn,
         bool EmailBounced, string? Invitation, bool CanResend, IReadOnlyList<ClientHorse> CurrentHorses, IReadOnlyList<ClientHorse> PastHorses,
-        IReadOnlyList<ListRef> Lists, string? Unsubscribed = null);
+        IReadOnlyList<ListRef> Lists, string? Unsubscribed = null, ClientDetails? Details = null);
 
-    public sealed record ClientRequest(string Name, string? Email, string? Mobile, string? HowWeKnowThem, IReadOnlyList<Guid>? ListIds = null);
+    /// <summary>Everything else about them, from Relenta or typed in: never sent to, staff only.</summary>
+    public sealed record ClientDetails(string? Title, string? Company, string? Address, string? Notes, string? OtherPhones, string? Website, string? Social,
+        string? SourceGroups);
+
+    /// <param name="Details">Null leaves their other details as they are; given, it replaces them (blank clears one).</param>
+    public sealed record ClientRequest(string Name, string? Email, string? Mobile, string? HowWeKnowThem, IReadOnlyList<Guid>? ListIds = null, ClientDetails? Details = null);
 
     public sealed record ListView(Guid Id, string Name, int Count);
 
@@ -109,7 +114,8 @@ public static class ClientEndpoints
             standing.Current.Select(h => new ClientHorse(h.HorseId, h.Name, h.Share, $"since {Words.Day(h.At, now)}")).ToList(),
             standing.Past.Select(h => new ClientHorse(h.HorseId, h.Name, h.Share, $"until {Words.Day(h.At, now)}")).ToList(),
             world.Lists.Where(l => l.Members.Any(m => m.PartyId == id)).OrderBy(l => l.Name).Select(l => new ListRef(l.Id, l.Name)).ToList(),
-            party.UnsubscribedAt is { } gone ? $"Unsubscribed from mailouts {Words.Recently(gone, now).ToLowerInvariant()}" : null));
+            party.UnsubscribedAt is { } gone ? $"Unsubscribed from mailouts {Words.Recently(gone, now).ToLowerInvariant()}" : null,
+            new ClientDetails(party.Title, party.Company, party.Address, party.Notes, party.OtherPhones, party.Website, party.Social, party.SourceGroups)));
     }
 
     /// <summary>A prospect, or anyone not yet here: someone already known by their email is not added twice.</summary>
@@ -169,6 +175,7 @@ public static class ClientEndpoints
             party.ChangeEmail(email);
             party.ChangeMobile(Clean(request.Mobile));
             party.SetHowWeKnowThem(request.HowWeKnowThem);
+            if (request.Details is { } d) party.SetDetails(d.Title, d.Company, d.Address, d.Notes, d.OtherPhones, d.Website, d.Social);
         }
         catch (DomainException ex)
         {
@@ -329,8 +336,11 @@ public static class ClientEndpoints
                 if (theirs.Count == 0) continue;
                 var period = horse.CurrentManagementPeriod;
                 var now = theirs.Where(i => period is not null && i.ManagementPeriodId == period.Id && i.IsActive).ToList();
+                var pending = theirs.Where(i => period is not null && i.ManagementPeriodId == period.Id && i.State == InterestState.Pending).ToList();
                 if (now.Count > 0)
                     current.Add(new Holding(horse.Id, horse.Name, HorseAdminEndpoints.Percent(now.Sum(i => i.Units)), now.Min(i => i.EffectiveFrom)));
+                else if (pending.Count > 0)
+                    current.Add(new Holding(horse.Id, horse.Name, "(share to confirm)", pending.Min(i => i.EffectiveFrom)));
                 else
                     past.Add(new Holding(horse.Id, horse.Name, "",
                         theirs.Max(i => i.EffectiveTo) ?? horse.ManagementPeriods.Where(p => p.To is not null).Max(p => p.To) ?? theirs.Max(i => i.EffectiveFrom)));

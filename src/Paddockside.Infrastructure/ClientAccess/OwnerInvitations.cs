@@ -18,7 +18,7 @@ public static class OwnerInvitations
         if (tenant is not { InviteOwnersOnFirstInterest: true }) return 0;
 
         var partyIds = added.Select(i => i.PartyId).Distinct().ToList();
-        var earlier = await db.Set<ManagedInterest>().Where(i => partyIds.Contains(i.PartyId)).Select(i => i.PartyId).Distinct().ToListAsync(cancellationToken);
+        var earlier = await db.Set<ManagedInterest>().Where(i => partyIds.Contains(i.PartyId) && i.State != InterestState.Pending).Select(i => i.PartyId).Distinct().ToListAsync(cancellationToken);
         var invited = await db.OwnerInvitations.Where(i => partyIds.Contains(i.PartyId)).Select(i => i.PartyId).ToListAsync(cancellationToken);
         var linked = await db.Parties.Where(p => partyIds.Contains(p.Id) && p.PersonId != null).Select(p => p.Id).ToListAsync(cancellationToken);
         return Queue(db, tenant, added, [.. earlier, .. invited, .. linked], at);
@@ -31,7 +31,7 @@ public static class OwnerInvitations
         if (tenant is not { InviteOwnersOnFirstInterest: true }) return 0;
 
         var partyIds = added.Select(i => i.PartyId).Distinct().ToList();
-        var earlier = db.Set<ManagedInterest>().Where(i => partyIds.Contains(i.PartyId)).Select(i => i.PartyId).Distinct().ToList();
+        var earlier = db.Set<ManagedInterest>().Where(i => partyIds.Contains(i.PartyId) && i.State != InterestState.Pending).Select(i => i.PartyId).Distinct().ToList();
         var invited = db.OwnerInvitations.Where(i => partyIds.Contains(i.PartyId)).Select(i => i.PartyId).ToList();
         var linked = db.Parties.Where(p => partyIds.Contains(p.Id) && p.PersonId != null).Select(p => p.Id).ToList();
         return Queue(db, tenant, added, [.. earlier, .. invited, .. linked], at);
@@ -54,8 +54,15 @@ public static class OwnerInvitations
         return queued;
     }
 
+    /// <summary>
+    /// Shares that start counting now: added as active, or a "share to confirm" just confirmed. A share still to
+    /// confirm (a Relenta import's 0% link) invites nobody: nothing reaches a client before staff enter their share.
+    /// </summary>
     private static List<ManagedInterest> NewInterests(PaddocksideDbContext db) =>
-        db.ChangeTracker.Entries<ManagedInterest>().Where(e => e.State == EntityState.Added).Select(e => e.Entity).ToList();
+        db.ChangeTracker.Entries<ManagedInterest>()
+            .Where(e => e.Entity.IsActive && (e.State == EntityState.Added
+                || (e.State == EntityState.Modified && Equals(e.Property(nameof(ManagedInterest.State)).OriginalValue, InterestState.Pending))))
+            .Select(e => e.Entity).ToList();
 
     private static Tenant? TrackedTenant(PaddocksideDbContext db) =>
         db.ChangeTracker.Entries<Tenant>().Select(e => e.Entity).FirstOrDefault();

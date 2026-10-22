@@ -43,6 +43,14 @@ internal sealed class PartyConfiguration : IEntityTypeConfiguration<Party>
         b.Property(x => x.HowWeKnowThem).HasMaxLength(Party.HowWeKnowThemLength);
         b.Property(x => x.AddedAt);
         b.Property(x => x.UnsubscribedAt);
+        b.Property(x => x.Title).HasMaxLength(50);
+        b.Property(x => x.Company).HasMaxLength(200);
+        b.Property(x => x.Address).HasMaxLength(Party.DetailLength);
+        b.Property(x => x.Notes).HasMaxLength(Party.NotesLength);
+        b.Property(x => x.OtherPhones).HasMaxLength(Party.DetailLength);
+        b.Property(x => x.Website).HasMaxLength(300);
+        b.Property(x => x.Social).HasMaxLength(Party.DetailLength);
+        b.Property(x => x.SourceGroups).HasMaxLength(Party.SourceGroupsLength);
 
         // Contacts belong to their party (and its tenant filter); they are never queried on their own.
         b.OwnsMany(x => x.Contacts, c =>

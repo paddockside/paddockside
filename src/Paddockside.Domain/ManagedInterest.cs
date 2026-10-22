@@ -52,7 +52,8 @@ public sealed class ManagedInterest
         InterestState state,
         Guid? derivedFromId)
     {
-        if (units <= 0) throw new DomainException("An interest must hold a positive number of units.");
+        if (units < 0 || (units == 0 && state != InterestState.Pending))
+            throw new DomainException("An interest must hold a positive number of units (only a share to confirm may be 0).");
         TenantId = horse.TenantId;
         HorseId = horse.Id;
         ManagementPeriodId = period.Id;
@@ -80,7 +81,7 @@ public sealed class ManagedInterest
     public InterestKind Kind { get; }
 
     /// <summary>Stored as units, which survive splitting; percentages are a display concern (ownership-model.md §5.5).</summary>
-    public long Units { get; }
+    public long Units { get; private set; }
 
     /// <summary>Commercial start.</summary>
     public DateTimeOffset EffectiveFrom { get; }
@@ -109,9 +110,18 @@ public sealed class ManagedInterest
     public bool WasHeldAt(DateTimeOffset at) =>
         State != InterestState.Pending && EffectiveFrom <= at && (EffectiveTo is null || at < EffectiveTo);
 
+    /// <summary>A share to confirm gets its size and starts: the owner now counts, and is invited.</summary>
+    internal void Confirm(long units)
+    {
+        if (State != InterestState.Pending) throw new DomainException($"Only a share to confirm can be confirmed (this one is {State}).");
+        if (units <= 0) throw new DomainException("A confirmed share must be more than nothing.");
+        (Units, State) = (units, InterestState.Active);
+    }
+
     internal void Activate()
     {
         if (State != InterestState.Pending) throw new DomainException($"Only a pending interest can be activated (this one is {State}).");
+        if (Units == 0) throw new DomainException("This share's size isn't known yet: confirm it with its percentage.");
         State = InterestState.Active;
     }
 
