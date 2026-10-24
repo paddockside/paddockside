@@ -60,43 +60,8 @@
                 }
                 else
                 {
-                    <ul class="card grid !p-0">
-                        @foreach (var owner in owners.Owners)
-                        {
-                            <li class="flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-border-subtle px-4 py-3 last:border-b-0">
-                                <span class="grid min-w-0 flex-1">
-                                    <span class="font-strong">@owner.Name@(owner.IsHouse ? " (house share)" : null)</span>
-                                    <span class="truncate text-small text-text-muted">@string.Join(" · ", new[] { owner.Email, owner.Mobile }.Where(c => c is not null))</span>
-                                </span>
-                                @if (owner.Invited is not null)
-                                {
-                                    <span class="badge bg-surface-sunken text-text-muted">@owner.Invited</span>
-                                }
-                                @if (owner.ToConfirm)
-                                {
-                                    @* Linked by the Relenta import: no access or updates until their share is set. *@
-                                    <span class="badge bg-status-warning-bg text-status-warning-fg">Share to confirm</span>
-                                    @if (CanManage && _horse.Managed)
-                                    {
-                                        <form class="flex items-center gap-2" @onsubmit="() => ConfirmAsync(owner)" @onsubmit:preventDefault>
-                                            <label class="sr-only" for="confirm-@owner.PartyId">@owner.Name's share (%)</label>
-                                            <input id="confirm-@owner.PartyId" class="input min-h-[36px] w-[6rem]" type="number" min="0.1" max="100" step="0.1" placeholder="%"
-                                                   @bind:get="_confirmPercent.GetValueOrDefault(owner.PartyId)" @bind:set="value => _confirmPercent[owner.PartyId] = value" />
-                                            <button type="submit" class="btn-secondary min-h-[36px] px-3" disabled="@_busy">Set share</button>
-                                        </form>
-                                    }
-                                    continue;
-                                }
-                                <span class="w-[64px] text-right font-strong tabular-nums">@owner.Percent</span>
-                                <span class="text-small text-text-muted">since @owner.Since</span>
-                                @if (CanManage && _horse.Managed)
-                                {
-                                    <button type="button" class="text-small font-strong underline underline-offset-4" aria-label="Change @owner.Name's share"
-                                            @onclick="() => (_changing, _addingOwner, _ending, _ownerAdded) = (owner.PartyId, false, false, null)">Change</button>
-                                }
-                            </li>
-                        }
-                    </ul>
+                    <OwnerRows Owners="owners.Owners" CanManage="@(CanManage && _horse.Managed)" Busy="_busy"
+                               OnChange="owner => (_changing, _addingOwner, _ending, _ownerAdded) = (owner.PartyId, false, false, null)" OnConfirm="set => ConfirmAsync(set.Owner, set.Percent)" />
                 }
 
                 @if (_changing is { } changing && owners.Owners.FirstOrDefault(o => o.PartyId == changing) is { } changed)
@@ -316,12 +281,11 @@
     private bool CanManage => Session.Current?.Role is "Manager" or "TenantAdmin";
 
     private Guid? _changing;
-    private readonly Dictionary<Guid, decimal?> _confirmPercent = new();
 
     /// <summary>A share to confirm gets its size: they own it now, see the horse, and are invited.</summary>
-    private async Task ConfirmAsync(OwnerLine owner)
+    private async Task ConfirmAsync(OwnerLine owner, decimal? typed)
     {
-        if (_confirmPercent.GetValueOrDefault(owner.PartyId) is not { } percent || percent <= 0) { _ownerError = "Give their share as a percentage."; return; }
+        if (typed is not { } percent || percent <= 0) { _ownerError = "Give their share as a percentage."; return; }
         (_busy, _ownerError, _ownerAdded) = (true, null, null);
         try
         {

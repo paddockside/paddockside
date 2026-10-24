@@ -1,0 +1,61 @@
+@*
+    A horse's owners now, one line per person: their share and since when, or "Share to confirm" (linked by a Relenta
+    import, nothing sent until it's set) with a box to set it. Managers and admins can change a share or set one.
+    Staff only: names here never reach another owner.
+*@
+<ul class="card grid !p-0">
+    @foreach (var owner in Owners)
+    {
+        <li class="flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-border-subtle px-4 py-3 last:border-b-0">
+            <span class="grid min-w-0 flex-[1_1_12rem]">
+                <span class="font-strong">@owner.Name@(owner.IsHouse ? " (house share)" : null)</span>
+                <span class="truncate text-small text-text-muted">@string.Join(" · ", new[] { owner.Email, owner.Mobile }.Where(c => c is not null))</span>
+            </span>
+            @if (owner.Invited is not null)
+            {
+                <span class="badge bg-surface-sunken text-text-muted">@owner.Invited</span>
+            }
+            @if (owner.ToConfirm)
+            {
+                <span class="badge bg-status-warning-bg text-status-warning-fg">Share to confirm</span>
+                @if (CanManage)
+                {
+                    <form class="flex items-center gap-2" @onsubmit="() => ConfirmAsync(owner)" @onsubmit:preventDefault>
+                        <label class="sr-only" for="confirm-@owner.PartyId">@owner.Name's share (%)</label>
+                        <input id="confirm-@owner.PartyId" class="input min-h-[36px] w-[6rem]" type="number" min="0.1" max="100" step="0.1" placeholder="%"
+                               @bind:get="_percent.GetValueOrDefault(owner.PartyId)" @bind:set="value => _percent[owner.PartyId] = value" />
+                        <button type="submit" class="btn-secondary min-h-[36px] px-3" disabled="@Busy">Set share</button>
+                    </form>
+                }
+            }
+            else
+            {
+                <span class="w-[64px] text-right font-strong tabular-nums">@owner.Percent</span>
+                <span class="text-small text-text-muted">since @owner.Since</span>
+                @if (CanManage)
+                {
+                    <button type="button" class="text-small font-strong underline underline-offset-4" aria-label="Change @owner.Name's share"
+                            @onclick="() => OnChange.InvokeAsync(owner)">Change</button>
+                }
+            }
+        </li>
+    }
+</ul>
+
+@code {
+    private readonly Dictionary<Guid, decimal?> _percent = [];
+
+    [Parameter, EditorRequired] public IReadOnlyList<OwnerLine> Owners { get; set; } = [];
+
+    /// <summary>Managers and admins, on a horse under management.</summary>
+    [Parameter] public bool CanManage { get; set; }
+
+    [Parameter] public bool Busy { get; set; }
+
+    [Parameter] public EventCallback<OwnerLine> OnChange { get; set; }
+
+    /// <summary>A share to confirm, set: the owner and the percentage typed.</summary>
+    [Parameter] public EventCallback<(OwnerLine Owner, decimal? Percent)> OnConfirm { get; set; }
+
+    private Task ConfirmAsync(OwnerLine owner) => OnConfirm.InvokeAsync((owner, _percent.GetValueOrDefault(owner.PartyId)));
+}

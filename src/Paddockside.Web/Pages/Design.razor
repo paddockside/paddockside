@@ -68,6 +68,13 @@
         </div>
     </Section>
 
+    <Section Title="OwnerRows" Doc="ownership-model.md">
+        <div class="grid gap-4 lg:grid-cols-2">
+            <Variant Label="Manager: owners, and two shares to confirm"><OwnerRows Owners="SampleOwners" CanManage /></Variant>
+            <Variant Label="Coordinator: the same, read only"><OwnerRows Owners="SampleOwners" /></Variant>
+        </div>
+    </Section>
+
     <Section Title="OwnerItemCard" Doc="message-thread.md">
         <div class="grid gap-4 lg:grid-cols-2">
             <Variant Label="Owner: a question with their answer, and their reply"><OwnerItemCard Item="AutumnRidge.OwnerTicketsMessage" TenantName="Laurel Oak Bloodstock" ViewerName="Margaret Doyle" /></Variant>
@@ -134,4 +141,11 @@
     ];
 
     private static readonly List<string> SampleSources = ["Racing NSW", "Racing Victoria"];
+
+    private static readonly List<OwnerLine> SampleOwners =
+    [
+        new(Guid.NewGuid(), Guid.NewGuid(), "Laurel Oak house share", null, null, "100%", "Friday 23 October", true, null),
+        new(Guid.NewGuid(), Guid.NewGuid(), "Gus Grady", "gus@example.test", "+61410340321", "Share to confirm", "Friday 23 October", false, null, ToConfirm: true),
+        new(Guid.NewGuid(), Guid.NewGuid(), "Nicole & Craig Mackay", "mackay@example.test", null, "Share to confirm", "Friday 23 October", false, null, ToConfirm: true),
+    ];
 }
