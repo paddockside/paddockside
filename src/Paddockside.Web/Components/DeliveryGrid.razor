@@ -1,0 +1,73 @@
+@*
+    Delivery by event as a grid: one row per owner, one column per thing sent to owners, and in each cell what became
+    of it for them (Opened, Bounced: mailbox full, In the portal only…). Staff only.
+*@
+<div class="card overflow-x-auto !p-0">
+    <table class="w-full border-collapse text-small">
+        <caption class="sr-only">Each owner, and what happened to each thing sent about @Report.Event</caption>
+        <thead>
+            <tr class="text-left align-bottom">
+                <th scope="col" class="sticky left-0 min-w-[10rem] bg-surface-raised px-4 py-3 font-strong">Owner</th>
+                @foreach (var item in Report.Items)
+                {
+                    <th scope="col" class="min-w-[9rem] px-3 py-3 font-regular">
+                        <span class="block font-strong">@item.Title</span>
+                        <span class="block text-text-muted">@item.Sent</span>
+                        <span class="block text-text-muted">@item.Summary</span>
+                    </th>
+                }
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var owner in Report.Owners)
+            {
+                <tr class="border-t border-border-subtle align-top">
+                    <th scope="row" class="sticky left-0 bg-surface-raised px-4 py-3 text-left font-regular">
+                        <a href="clients/@owner.PartyId" class="font-strong underline-offset-4 hover:underline">@owner.Name</a>
+                        @if (!owner.CurrentOwner)
+                        {
+                            <span class="block text-text-muted">No longer an owner</span>
+                        }
+                    </th>
+                    @foreach (var cell in owner.Cells)
+                    {
+                        <td class="px-3 py-3">
+                            @if (cell.State == "None")
+                            {
+                                <span class="text-text-muted">Not an owner then</span>
+                            }
+                            else
+                            {
+                                <span class="badge @Classes(cell.State)">@Label(cell.State)</span>
+                                @if (cell.Detail is not null)
+                                {
+                                    <span class="mt-1 block text-text-muted">@cell.Detail</span>
+                                }
+                            }
+                        </td>
+                    }
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public DeliveryReport Report { get; set; } = default!;
+
+    private static string Label(string state) => state switch
+    {
+        "PortalOnly" => "In the portal only",
+        "NotSent" => "Not sent",
+        "Waiting" => "Waiting to send",
+        _ => state,
+    };
+
+    private static string Classes(string state) => state switch
+    {
+        "Opened" or "Replied" => "bg-status-success-bg text-status-success-fg",
+        "Bounced" or "NotSent" => "bg-status-danger-bg text-status-danger-fg",
+        "Waiting" => "bg-status-warning-bg text-status-warning-fg",
+        _ => "bg-surface-sunken text-text-muted",
+    };
+}

@@ -1,6 +1,5 @@
 using System.Globalization;
 using System.Security.Claims;
-using System.Text;
 using Microsoft.EntityFrameworkCore;
 using Paddockside.Api.Formatting;
 using Paddockside.Api.Security;
@@ -61,18 +60,9 @@ public static class AuditEndpoints
         if (!IsTenantAdmin(user)) return Results.Problem(statusCode: StatusCodes.Status403Forbidden, title: "Only a tenant admin can export the audit log.");
         var entries = await Filter(db, q, action).OrderByDescending(e => e.At).Take(50_000).ToListAsync(cancellationToken);
 
-        var csv = new StringBuilder("At (UTC),Who,Kind,Action,Summary,Before,After,IP address,Device\r\n");
-        foreach (var e in entries)
-            csv.AppendJoin(',', [e.At.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture), Cell(e.ActorName), e.ActorKind.ToString(),
-                e.Action, Cell(e.Summary), Cell(e.OldValue), Cell(e.NewValue), Cell(e.IpAddress), Cell(e.Device)]).Append("\r\n");
-        return Results.File(Encoding.UTF8.GetPreamble().Concat(Encoding.UTF8.GetBytes(csv.ToString())).ToArray(), "text/csv", "audit-log.csv");
-    }
-
-    /// <summary>A CSV cell: quoted, and never starting with a character a spreadsheet would run as a formula.</summary>
-    private static string Cell(string? value)
-    {
-        var text = value ?? "";
-        if (text.Length > 0 && "=+-@\t\r".Contains(text[0])) text = "'" + text;
-        return $"\"{text.Replace("\"", "\"\"")}\"";
+        string[] header = ["At (UTC)", "Who", "Kind", "Action", "Summary", "Before", "After", "IP address", "Device"];
+        return Csv.File(entries.Select(e => (IEnumerable<string>)[e.At.UtcDateTime.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture),
+                Csv.Cell(e.ActorName), e.ActorKind.ToString(), e.Action, Csv.Cell(e.Summary), Csv.Cell(e.OldValue), Csv.Cell(e.NewValue),
+                Csv.Cell(e.IpAddress), Csv.Cell(e.Device)]).Prepend(header), "audit-log.csv");
     }
 }

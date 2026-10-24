@@ -1,0 +1,69 @@
+@page "/events/{Id:guid}/delivery"
+@inject PaddocksideApi Api
+@inject SessionState Session
+@inject NavigationManager Navigation
+
+<PageTitle>Who saw what · Paddockside</PageTitle>
+
+@*
+    Delivery by event (search-reporting.md §4): who was told what about this race, and did they open it. One row per
+    owner, one column per thing sent to owners, oldest first. "Opened" is any sign they saw it: the email was
+    opened, they read it in the portal, or they replied. Downloads as a spreadsheet.
+*@
+<div class="grid grid-cols-[minmax(0,1fr)] gap-6">
+    <a href="events/@Id" class="btn-link justify-self-start">← Back to the event</a>
+
+    @if (_error is not null)
+    {
+        <Error Message="@_error" />
+    }
+    else if (_report is null)
+    {
+        <p class="text-text-muted" role="status">Loading…</p>
+    }
+    else
+    {
+        var r = _report;
+        <div class="flex flex-wrap items-end justify-between gap-3">
+            <div class="grid gap-1">
+                <p class="text-small text-text-muted">@r.Horse</p>
+                <h1>Who saw what: @r.Event</h1>
+            </div>
+            <a class="btn-link" href="api/reports/delivery/@Id/export.csv" download>Download as a spreadsheet (CSV)</a>
+        </div>
+        <p class="text-text-muted">Everything owners were sent about this event, and what became of it for each of them. Opened means the email was opened, they read it in the portal, or they replied.</p>
+
+        @if (r.Items.Count == 0)
+        {
+            <div class="card"><p>Nothing has been sent to owners about this event yet.</p></div>
+        }
+        else if (r.Owners.Count == 0)
+        {
+            <div class="card"><p>This horse has no owners to send to.</p></div>
+        }
+        else
+        {
+            <DeliveryGrid Report="r" />
+        }
+    }
+</div>
+
+@code {
+    [Parameter] public Guid Id { get; set; }
+
+    private DeliveryReport? _report;
+    private string? _error;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (Session.Current is null && await Session.RefreshAsync() is null)
+        {
+            Navigation.NavigateTo("sign-in");
+            return;
+        }
+
+        var result = await Api.DeliveryReportAsync(Id);
+        if (result.Succeeded) _report = result.Value;
+        else _error = result.Error;
+    }
+}

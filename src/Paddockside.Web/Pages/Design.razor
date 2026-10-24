@@ -68,6 +68,10 @@
         </div>
     </Section>
 
+    <Section Title="DeliveryGrid" Doc="search-reporting.md">
+        <Variant Label="Staff: who saw what, for a race"><DeliveryGrid Report="SampleDelivery" /></Variant>
+    </Section>
+
     <Section Title="OwnerRows" Doc="ownership-model.md">
         <div class="grid gap-4 lg:grid-cols-2">
             <Variant Label="Manager: owners, and two shares to confirm"><OwnerRows Owners="SampleOwners" CanManage /></Variant>
@@ -148,4 +152,17 @@
         new(Guid.NewGuid(), Guid.NewGuid(), "Gus Grady", "gus@example.test", "+61410340321", "Share to confirm", "Friday 23 October", false, null, ToConfirm: true),
         new(Guid.NewGuid(), Guid.NewGuid(), "Nicole & Craig Mackay", "mackay@example.test", null, "Share to confirm", "Friday 23 October", false, null, ToConfirm: true),
     ];
+
+    private static readonly DeliveryReport SampleDelivery = new(Guid.NewGuid(), Guid.NewGuid(), "Bel Esprit", "Caulfield, Race 4",
+    [
+        new(Guid.NewGuid(), "Accepted: barrier 7", "Thursday 22 October, 4:10 pm", "3 of 4 opened"),
+        new(Guid.NewGuid(), "Your tickets for Saturday", "Friday 23 October, 9:00 am", "2 of 4 opened"),
+        new(Guid.NewGuid(), "Second, beaten a nose", "Saturday 24 October, 3:22 pm", "1 of 4 opened"),
+    ],
+    [
+        new(Guid.NewGuid(), "Ann Owner", "ann@example.test", null, true, [new("Opened", "Email"), new("Replied", "Email"), new("Opened", "Email · Text")]),
+        new(Guid.NewGuid(), "Bob Owner", "bob@example.test", null, true, [new("Opened", "Portal"), new("Delivered", "Email"), new("Bounced", "Mailbox full")]),
+        new(Guid.NewGuid(), "Nicole & Craig Mackay", null, "+61410340321", true, [new("Replied", "Text"), new("PortalOnly", null), new("Waiting", "Text")]),
+        new(Guid.NewGuid(), "Gus Grady", "gus@example.test", null, false, [new("NotSent", "No email address"), new("None", null), new("None", null)]),
+    ]);
 }

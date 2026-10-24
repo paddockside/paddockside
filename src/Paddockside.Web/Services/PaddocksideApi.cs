@@ -200,6 +200,21 @@ public sealed record EventOption(Guid Id, string Title, string KeyDate);
 
 public sealed record StaffTenantOption(Guid Id, string Name, string Role, bool Current);
 
+// ---- Reports ---------------------------------------------------------------------------------------------------
+
+public sealed record ReportItem(Guid Id, string Title, string Sent, string Summary);
+
+/// <param name="State">Opened, Replied, Delivered, Sent, Waiting, Bounced, NotSent, PortalOnly, or None (not an owner then).</param>
+public sealed record ReportCell(string State, string? Detail);
+
+public sealed record ReportOwner(Guid PartyId, string Name, string? Email, string? Mobile, bool CurrentOwner, List<ReportCell> Cells);
+
+public sealed record DeliveryReport(Guid EventId, Guid HorseId, string Horse, string Event, List<ReportItem> Items, List<ReportOwner> Owners);
+
+public sealed record UnreachedOwner(Guid PartyId, string Name, string? Email, string? Mobile, string Horses, int Missed, string LastSent, string Why);
+
+public sealed record UnreachedReport(int Last, int Days, int Checked, List<UnreachedOwner> Owners);
+
 // ---- Support sessions and the audit log ------------------------------------------------------------------------
 
 public sealed record SupportView(Guid Id, Guid TenantId, string Tenant, string Operator, string Reason, string Status,
@@ -455,6 +470,10 @@ public sealed class PaddocksideApi(HttpClient http)
     public Task<ApiResult<InboundCounts>> InboundCountsAsync() => GetAsync<InboundCounts>("api/inbound/counts");
 
     public Task<ApiResult<TodayPage>> TodayAsync() => GetAsync<TodayPage>("api/today");
+
+    public Task<ApiResult<DeliveryReport>> DeliveryReportAsync(Guid eventId) => GetAsync<DeliveryReport>($"api/reports/delivery/{eventId}");
+
+    public Task<ApiResult<UnreachedReport>> UnreachedAsync(int last, int days) => GetAsync<UnreachedReport>($"api/reports/unreached?last={last}&days={days}");
 
     public Task<ApiResult<RepliedToSender>> ReplyToSenderAsync(Guid itemId, string body) =>
         PostAsync<RepliedToSender>($"api/items/{itemId}/reply-to-sender", new { body });
