@@ -68,6 +68,13 @@
         </div>
     </Section>
 
+    <Section Title="ListPicker" Doc="search-reporting.md">
+        <div class="grid gap-4 lg:grid-cols-2">
+            <Variant Label="Staff: two lists chosen, type to find more"><ListPicker Lists="SampleLists" Selected="_pickedLists" /></Variant>
+            <Variant Label="Staff: no lists yet"><ListPicker Lists="[]" Selected="[]" /></Variant>
+        </div>
+    </Section>
+
     <Section Title="DeliveryGrid" Doc="search-reporting.md">
         <Variant Label="Staff: who saw what, for a race"><DeliveryGrid Report="SampleDelivery" /></Variant>
     </Section>
@@ -165,4 +172,13 @@
         new(Guid.NewGuid(), "Nicole & Craig Mackay", null, "+61410340321", true, [new("Replied", "Text"), new("PortalOnly", null), new("Waiting", "Text")]),
         new(Guid.NewGuid(), "Gus Grady", "gus@example.test", null, false, [new("NotSent", "No email address"), new("None", null), new("None", null)]),
     ]);
+
+    private readonly HashSet<Guid> _pickedLists = [SampleLists[0].Id, SampleLists[2].Id];
+
+    private static readonly List<ClientListView> SampleLists =
+    [
+        new(Guid.NewGuid(), "2026 prospective", 48), new(Guid.NewGuid(), "Autumn carnival", 19), new(Guid.NewGuid(), "Easter sale buyers", 12),
+        new(Guid.NewGuid(), "Golden Slipper day", 40), new(Guid.NewGuid(), "Wine dinner 2025", 60), new(Guid.NewGuid(), "Winter racing club", 31),
+        new(Guid.NewGuid(), "Winx syndicate", 22), new(Guid.NewGuid(), "Victorian owners", 1), new(Guid.NewGuid(), "Canberra", 7),
+    ];
 }

@@ -14,7 +14,11 @@ public sealed record OutboundEmail(
     IReadOnlyDictionary<string, string> Metadata,
     bool TrackOpens = true,
     bool Broadcast = false,
-    IReadOnlyDictionary<string, string>? Headers = null);
+    IReadOnlyDictionary<string, string>? Headers = null,
+    IReadOnlyList<EmailAttachment>? Attachments = null);
+
+/// <summary>A file sent with an email (a mailout's share offer PDF).</summary>
+public sealed record EmailAttachment(string Name, string ContentType, byte[] Content);
 
 /// <summary>
 /// Who an email says it is from. The tenant sends through Paddockside's domain, so the name says both:

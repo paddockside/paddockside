@@ -140,7 +140,12 @@ public sealed record MailoutRecipientLine(Guid PartyId, string Name, string? Add
 public sealed record MailoutReplyLine(Guid PartyId, string Name, string From, string At, string Body);
 
 public sealed record MailoutDetail(Guid Id, string Subject, string Body, string Audience, string Sent, string SentBy, Guid? HorseId, string? Horse, string Summary,
-    List<MailoutRecipientLine> Recipients, List<MailoutReplyLine> Replies);
+    List<MailoutRecipientLine> Recipients, List<MailoutReplyLine> Replies, string? Signature = null, List<MailoutAttachmentView>? Attachments = null);
+
+/// <param name="Size">"340 KB".</param>
+public sealed record MailoutAttachmentView(Guid Id, string FileName, string Size, long Bytes);
+
+public sealed record SignatureView(string Text);
 
 public sealed record MailoutCreated(Guid Id, int Sending);
 
@@ -431,8 +436,23 @@ public sealed class PaddocksideApi(HttpClient http)
     public Task<ApiResult<MailoutPreview>> PreviewMailoutAsync(IEnumerable<Guid> listIds, IEnumerable<string> statuses, IEnumerable<Guid> clientIds) =>
         PostAsync<MailoutPreview>("api/mailouts/preview", new { listIds, statuses, clientIds });
 
-    public Task<ApiResult<MailoutCreated>> SendMailoutAsync(string subject, string body, IEnumerable<Guid> listIds, IEnumerable<string> statuses, IEnumerable<Guid> clientIds, Guid? horseId) =>
-        PostAsync<MailoutCreated>("api/mailouts", new { subject, body, listIds, statuses, clientIds, horseId });
+    public Task<ApiResult<MailoutCreated>> SendMailoutAsync(string subject, string body, IEnumerable<Guid> listIds, IEnumerable<string> statuses, IEnumerable<Guid> clientIds,
+        Guid? horseId, string? signature, IEnumerable<Guid> attachmentIds) =>
+        PostAsync<MailoutCreated>("api/mailouts", new { subject, body, listIds, statuses, clientIds, horseId, signature, attachmentIds });
+
+    /// <summary>A file for the mailout being written: stored now, sent with it.</summary>
+    public async Task<ApiResult<MailoutAttachmentView>> AttachToMailoutAsync(Microsoft.AspNetCore.Components.Forms.IBrowserFile file, long maxBytes)
+    {
+        using var form = new MultipartFormDataContent();
+        var content = new StreamContent(file.OpenReadStream(maxBytes));
+        content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(string.IsNullOrEmpty(file.ContentType) ? "application/octet-stream" : file.ContentType);
+        form.Add(content, "file", file.Name);
+        return await SendContentAsync<MailoutAttachmentView>(HttpMethod.Post, "api/mailouts/attachments", form);
+    }
+
+    public Task<ApiResult<SignatureView>> SignatureAsync() => GetAsync<SignatureView>("api/mailouts/signature");
+
+    public Task<ApiResult<object>> SaveSignatureAsync(string text) => PutAsync<object>("api/mailouts/signature", new { text });
 
     public Task<ApiResult<object>> TransferShareAsync(Guid horseId, Guid partyId, IEnumerable<ShareRecipient> recipients, string? on, string access) =>
         PostAsync<object>($"api/horses/{horseId}/owners/{partyId}/transfer", new { recipients, on, access });

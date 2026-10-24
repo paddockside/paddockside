@@ -93,6 +93,7 @@ public sealed class EmailDispatcher(
     TenantScopedDb tenants,
     IEmailSender sender,
     OwnerEmailRenderer renderer,
+    IMediaStore files,
     IOptions<EmailOptions> options,
     ClientAccess.ClientSignIn links,
     TimeProvider clock,
@@ -145,6 +146,7 @@ public sealed class EmailDispatcher(
         var mailouts = await db.Mailouts.Where(m => mailoutIds.Contains(m.Id)).ToDictionaryAsync(m => m.Id, cancellationToken);
         var partyIds = queued.Select(r => r.PartyId).ToList();
         var parties = await db.Parties.Where(p => partyIds.Contains(p.Id)).ToDictionaryAsync(p => p.Id, cancellationToken);
+        var attachments = await AttachmentsAsync(db, mailoutIds, cancellationToken);
 
         var accepted = 0;
         foreach (var recipient in queued)
@@ -153,6 +155,7 @@ public sealed class EmailDispatcher(
             var party = parties[recipient.PartyId];
             if (party.UnsubscribedAt is not null) { recipient.Skip("Unsubscribed before it was sent", now); continue; }
             if (party.PrimaryEmail is not { IsDeliverable: true } contact) { recipient.Skip("No working email address", now); continue; }
+            if (attachments[recipient.MailoutId] is not { } files) { recipient.Skip("Not sent: one of its attachments couldn't be found", now); continue; }
 
             var unsubscribe = Unsubscribe.Link(options.Value.PortalBaseUrl!, tenant.Slug, recipient.Token);
             var replyTo = $"m-{recipient.Token}@{tenant.Slug}.{options.Value.InboundDomain}";
@@ -165,7 +168,8 @@ public sealed class EmailDispatcher(
                 {
                     ["List-Unsubscribe"] = $"<{unsubscribe}>",
                     ["List-Unsubscribe-Post"] = "List-Unsubscribe=One-Click",
-                }), cancellationToken);
+                },
+                Attachments: files), cancellationToken);
 
             if (result.Accepted) { recipient.MarkSent(contact.Value, result.ProviderMessageId!, now); accepted++; }
             else if (result.PermanentFailure) { recipient.Skip($"Not sent: {result.Error}", now); party.MarkUndeliverable(contact.Value, now); }
@@ -173,6 +177,32 @@ public sealed class EmailDispatcher(
 
         await db.SaveChangesAsync(cancellationToken);
         return accepted;
+    }
+
+    /// <summary>
+    /// Each mailout's files, read once for the whole batch; null for a mailout with a file missing from storage, which is
+    /// then not sent rather than sent without it.
+    /// </summary>
+    private async Task<Dictionary<Guid, IReadOnlyList<EmailAttachment>?>> AttachmentsAsync(PaddocksideDbContext db, List<Guid> mailoutIds, CancellationToken cancellationToken)
+    {
+        var rows = await db.MailoutAttachments.Where(a => a.MailoutId != null && mailoutIds.Contains(a.MailoutId.Value)).OrderBy(a => a.CreatedAt).ToListAsync(cancellationToken);
+        var result = mailoutIds.ToDictionary(id => id, _ => (IReadOnlyList<EmailAttachment>?)Array.Empty<EmailAttachment>());
+        foreach (var group in rows.GroupBy(a => a.MailoutId!.Value))
+        {
+            var read = new List<EmailAttachment>();
+            foreach (var a in group)
+            {
+                await using var stream = await files.OpenReadAsync(a.BlobName, cancellationToken);
+                if (stream is null) { logger.LogError("Mailout {MailoutId} attachment {BlobName} is missing from storage.", group.Key, a.BlobName); read = null; break; }
+                using var copy = new MemoryStream();
+                await stream.CopyToAsync(copy, cancellationToken);
+                read.Add(new EmailAttachment(a.FileName, a.ContentType, copy.ToArray()));
+            }
+
+            result[group.Key] = read;
+        }
+
+        return result;
     }
 
     private async Task<int> DispatchTenantAsync(Guid tenantId, CancellationToken cancellationToken)

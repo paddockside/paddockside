@@ -80,7 +80,34 @@ internal sealed class MailoutConfiguration : IEntityTypeConfiguration<Mailout>
         b.Property(x => x.Audience).HasMaxLength(500);
         b.Property(x => x.SentBy).HasMaxLength(320);
         b.Property(x => x.CreatedAt);
+        b.Property(x => x.Signature).HasMaxLength(StaffSignature.Length);
         b.HasOne<Horse>().WithMany().HasForeignKey(x => x.HorseId).OnDelete(DeleteBehavior.Restrict);
+    }
+}
+
+internal sealed class MailoutAttachmentConfiguration : IEntityTypeConfiguration<MailoutAttachment>
+{
+    public void Configure(EntityTypeBuilder<MailoutAttachment> b)
+    {
+        b.MapTenantOwned();
+        b.Property(x => x.FileName).HasMaxLength(200);
+        b.Property(x => x.ContentType).HasMaxLength(100);
+        b.Property(x => x.Length);
+        b.Property(x => x.BlobName).HasMaxLength(300);
+        b.Property(x => x.CreatedAt);
+        b.HasIndex(x => x.MailoutId);
+        b.HasOne<Mailout>().WithMany().HasForeignKey(x => x.MailoutId).OnDelete(DeleteBehavior.Restrict);
+    }
+}
+
+internal sealed class StaffSignatureConfiguration : IEntityTypeConfiguration<StaffSignature>
+{
+    public void Configure(EntityTypeBuilder<StaffSignature> b)
+    {
+        b.MapTenantOwned();
+        b.Property(x => x.Text).HasMaxLength(StaffSignature.Length);
+        b.Property(x => x.UpdatedAt);
+        b.HasIndex("TenantId", nameof(StaffSignature.PersonId)).IsUnique();
     }
 }
 

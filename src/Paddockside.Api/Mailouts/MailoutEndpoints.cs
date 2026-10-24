@@ -1,6 +1,8 @@
 using System.Net;
 using System.Security.Claims;
+using Microsoft.AspNetCore.Http.Features;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Net.Http.Headers;
 using Paddockside.Api.Audit;
 using Paddockside.Api.Clients;
 using Paddockside.Api.Formatting;
@@ -31,7 +33,12 @@ public static class MailoutEndpoints
     public sealed record Preview(int Chosen, int Sending, IReadOnlyList<Reason> LeftOut);
 
     public sealed record MailoutRequest(string Subject, string Body, IReadOnlyList<Guid>? ListIds, IReadOnlyList<string>? Statuses, IReadOnlyList<Guid>? ClientIds,
-        Guid? HorseId);
+        Guid? HorseId, string? Signature = null, IReadOnlyList<Guid>? AttachmentIds = null);
+
+    /// <param name="Size">"340 KB".</param>
+    public sealed record AttachmentView(Guid Id, string FileName, string Size, long Bytes);
+
+    public sealed record SignatureView(string Text);
 
     public sealed record MailoutSummary(Guid Id, string Subject, string Audience, string Sent, string SentBy, int Recipients, int Delivered, int Opened, int Replies,
         string? Horse);
@@ -41,7 +48,8 @@ public static class MailoutEndpoints
     public sealed record ReplyLine(Guid PartyId, string Name, string From, string At, string Body);
 
     public sealed record MailoutDetail(Guid Id, string Subject, string Body, string Audience, string Sent, string SentBy, Guid? HorseId, string? Horse,
-        string Summary, IReadOnlyList<RecipientLine> Recipients, IReadOnlyList<ReplyLine> Replies);
+        string Summary, IReadOnlyList<RecipientLine> Recipients, IReadOnlyList<ReplyLine> Replies, string? Signature = null,
+        IReadOnlyList<AttachmentView>? Attachments = null);
 
     public sealed record Created(Guid Id, int Sending);
 
@@ -56,6 +64,12 @@ public static class MailoutEndpoints
         mailouts.MapPost("/preview", PreviewAsync);
         mailouts.MapPost("/", Send);
         mailouts.MapGet("/{id:guid}", Get);
+        mailouts.MapPost("/attachments", Attach)
+            .WithMetadata(new Microsoft.AspNetCore.Mvc.RequestSizeLimitAttribute(MaxUploadBytes))
+            .DisableAntiforgery(); // the API's own request header guards unsafe requests (RequireApiRequestHeader)
+        mailouts.MapGet("/attachments/{id:guid}", Download);
+        mailouts.MapGet("/signature", GetSignature);
+        mailouts.MapPut("/signature", SaveSignature);
 
         // The recipient's own link: no sign-in (most people on a list have no account), the token is the key.
         app.MapGet("/u/{slug}/{token}", UnsubscribePage);
@@ -103,13 +117,22 @@ public static class MailoutEndpoints
         if (chosen.All(p => Excluded(p) is not null)) return Problem("Nobody you chose can be sent it: see who is left out, and why.");
         if (request.HorseId is { } horseId && !await db.Horses.AnyAsync(h => h.Id == horseId, cancellationToken)) return Problem("Choose one of your horses.");
 
+        var attachmentIds = (request.AttachmentIds ?? []).Distinct().ToList();
+        var attachments = await db.MailoutAttachments.Where(a => attachmentIds.Contains(a.Id)).ToListAsync(cancellationToken);
+        if (attachments.Count != attachmentIds.Count) return Problem("One of the attached files has gone: attach it again.");
+        if (attachments.Count > MailoutAttachment.MaxFiles) return Problem($"Attach up to {MailoutAttachment.MaxFiles} files.");
+        if (attachments.Sum(a => a.Length) > MailoutAttachment.MaxTotalBytes)
+            return Problem("The attachments come to more than 7 MB, which email can't carry. Take one off, or send a link instead.");
+        if (attachments.Any(a => a.MailoutId is not null)) return Problem("One of those files was already sent with another mailout: attach it again.");
+
         var tenant = await db.Tenants.SingleAsync(cancellationToken);
         var now = clock.GetUtcNow();
         Mailout mailout;
         try
         {
             mailout = new Mailout(tenant.Id, request.Subject ?? "", request.Body ?? "", await DescribeAsync(db, audience, cancellationToken),
-                user.FindFirstValue(ClaimTypes.Email) ?? "Staff", now, request.HorseId);
+                user.FindFirstValue(ClaimTypes.Email) ?? "Staff", now, request.HorseId, request.Signature);
+            foreach (var a in attachments) a.AttachTo(mailout);
         }
         catch (DomainException ex)
         {
@@ -123,7 +146,9 @@ public static class MailoutEndpoints
         emailSignal.Notify();
 
         var sending = recipients.Count(r => r.Status == MailoutRecipientStatus.Queued);
-        await audit.RecordAsync(tenant.Id, "mailout.sent", $"Sent \"{mailout.Subject}\" to {sending} ({mailout.Audience})", "Mailout", mailout.Id, cancellationToken: cancellationToken);
+        var with = attachments.Count == 0 ? "" : $" with {string.Join(", ", attachments.Select(a => a.FileName))}";
+        await audit.RecordAsync(tenant.Id, "mailout.sent", $"Sent \"{mailout.Subject}\" to {sending} ({mailout.Audience}){with}", "Mailout", mailout.Id,
+            cancellationToken: cancellationToken);
         return Results.Created($"/api/mailouts/{mailout.Id}", new Created(mailout.Id, sending));
     }
 
@@ -136,6 +161,7 @@ public static class MailoutEndpoints
         var partyIds = recipients.Select(r => r.PartyId).ToList();
         var names = await db.Parties.AsNoTracking().Where(p => partyIds.Contains(p.Id)).ToDictionaryAsync(p => p.Id, p => p.DisplayName, cancellationToken);
         var horse = mailout.HorseId is { } h ? (await db.Horses.AsNoTracking().SingleOrDefaultAsync(x => x.Id == h, cancellationToken))?.Name : null;
+        var files = await db.MailoutAttachments.AsNoTracking().Where(a => a.MailoutId == id).OrderBy(a => a.CreatedAt).ToListAsync(cancellationToken);
         var now = clock.GetUtcNow();
 
         int Count(params MailoutRecipientStatus[] statuses) => recipients.Count(r => statuses.Contains(r.Status));
@@ -153,8 +179,82 @@ public static class MailoutEndpoints
             recipients.OrderBy(r => r.Status == MailoutRecipientStatus.Skipped).ThenBy(r => names.GetValueOrDefault(r.PartyId))
                 .Select(r => new RecipientLine(r.PartyId, names.GetValueOrDefault(r.PartyId) ?? "Unknown", r.Address, StatusWords(r.Status), r.Note, Formatting.Words.Recently(r.StatusAt, now)))
                 .ToList(),
-            replies.Select(r => new ReplyLine(r.PartyId, names.GetValueOrDefault(r.PartyId) ?? r.FromAddress, r.FromAddress, Formatting.Words.Recently(r.ReceivedAt, now), r.Body)).ToList()));
+            replies.Select(r => new ReplyLine(r.PartyId, names.GetValueOrDefault(r.PartyId) ?? r.FromAddress, r.FromAddress, Formatting.Words.Recently(r.ReceivedAt, now), r.Body)).ToList(),
+            mailout.Signature, files.Select(ToView).ToList()));
     }
+
+    /// <summary>A file chosen while writing a mailout (multipart, field <c>file</c>): stored now, sent with the mailout it ends up in.</summary>
+    private static async Task<IResult> Attach(HttpRequest request, ClaimsPrincipal user, PaddocksideDbContext db, IMediaStore store, TimeProvider clock, CancellationToken cancellationToken)
+    {
+        if (!CanSend.Contains(user.FindFirstValue(SessionClaims.Role)))
+            return Results.Problem(statusCode: StatusCodes.Status403Forbidden, title: "Your role can read mailouts but not send them.");
+        if (!request.HasFormContentType) return Problem("Choose a file to attach.");
+        var form = await new FormFeature(request, new FormOptions { MultipartBodyLengthLimit = MaxUploadBytes }).ReadFormAsync(cancellationToken);
+        if (form.Files.GetFile("file") is not { } file) return Problem("Choose a file to attach.");
+
+        var tenant = await db.Tenants.SingleAsync(cancellationToken);
+        MailoutAttachment attachment;
+        try
+        {
+            attachment = new MailoutAttachment(tenant.Id, file.FileName, file.Length, clock.GetUtcNow());
+        }
+        catch (DomainException ex)
+        {
+            return Problem(ex.Message);
+        }
+
+        // The file first: a row never points at a file that isn't there.
+        await using (var content = file.OpenReadStream()) await store.SaveAsync(attachment.BlobName, content, attachment.ContentType, cancellationToken);
+        db.MailoutAttachments.Add(attachment);
+        await db.SaveChangesAsync(cancellationToken);
+        return Results.Created($"/api/mailouts/attachments/{attachment.Id}", ToView(attachment));
+    }
+
+    private static async Task<IResult> Download(Guid id, HttpContext http, PaddocksideDbContext db, IMediaStore store, CancellationToken cancellationToken)
+    {
+        var attachment = await db.MailoutAttachments.AsNoTracking().SingleOrDefaultAsync(a => a.Id == id, cancellationToken);
+        if (attachment is null || await store.OpenReadAsync(attachment.BlobName, cancellationToken) is not { } stream) return Results.NotFound();
+        http.Response.Headers[HeaderNames.XContentTypeOptions] = "nosniff";
+        return Results.Stream(stream, attachment.ContentType, attachment.FileName);
+    }
+
+    /// <summary>The signed-in person's own sign-off, empty until they save one.</summary>
+    private static async Task<SignatureView> GetSignature(ClaimsPrincipal user, PaddocksideDbContext db, CancellationToken cancellationToken) =>
+        new(PersonId(user) is { } person
+            ? await db.StaffSignatures.AsNoTracking().Where(s => s.PersonId == person).Select(s => s.Text).SingleOrDefaultAsync(cancellationToken) ?? ""
+            : "");
+
+    private static async Task<IResult> SaveSignature(SignatureView request, ClaimsPrincipal user, PaddocksideDbContext db, TimeProvider clock, CancellationToken cancellationToken)
+    {
+        if (PersonId(user) is not { } person) return Results.Problem(statusCode: StatusCodes.Status403Forbidden, title: "Sign in as yourself to save a signature.");
+        var tenant = await db.Tenants.SingleAsync(cancellationToken);
+        var now = clock.GetUtcNow();
+        try
+        {
+            if (await db.StaffSignatures.SingleOrDefaultAsync(s => s.PersonId == person, cancellationToken) is { } saved) saved.Change(request.Text, now);
+            else db.StaffSignatures.Add(new StaffSignature(tenant.Id, person, request.Text, now));
+        }
+        catch (DomainException ex)
+        {
+            return Problem(ex.Message);
+        }
+
+        await db.SaveChangesAsync(cancellationToken);
+        return Results.NoContent();
+    }
+
+    /// <summary>The person signed in, unless Paddockside support is looking in: a signature is the member's own.</summary>
+    private static Guid? PersonId(ClaimsPrincipal user) =>
+        !user.HasClaim(c => c.Type == SessionClaims.SupportSession) && Guid.TryParse(user.FindFirstValue(ClaimTypes.NameIdentifier), out var id) ? id : null;
+
+    private static AttachmentView ToView(MailoutAttachment a) => new(a.Id, a.FileName, Size(a.Length), a.Length);
+
+    /// <summary>"340 KB", "2.4 MB".</summary>
+    private static string Size(long bytes) =>
+        bytes < 1024 * 1024 ? $"{Math.Max(1, (int)Math.Round(bytes / 1024.0))} KB" : $"{bytes / (1024.0 * 1024):0.#} MB";
+
+    /// <summary>One file at a time, up to the 7 MB total, plus room for the form itself.</summary>
+    private const long MaxUploadBytes = MailoutAttachment.MaxTotalBytes + 1024 * 1024;
 
     /// <summary>The unsubscribe page: who it's for and a button, so a mail scanner opening the link changes nothing.</summary>
     private static async Task<IResult> UnsubscribePage(string slug, string token, TenantScopedDb tenants, CancellationToken cancellationToken)

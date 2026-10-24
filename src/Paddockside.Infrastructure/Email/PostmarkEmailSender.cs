@@ -66,7 +66,10 @@ public sealed class PostmarkEmailSender(HttpClient http, IOptions<PostmarkOption
                 email.Broadcast ? options.Value.BroadcastStream! : options.Value.MessageStream,
                 email.TrackOpens,
                 email.Metadata,
-                email.Headers?.Select(h => new PostmarkHeader(h.Key, h.Value)).ToList())),
+                email.Headers?.Select(h => new PostmarkHeader(h.Key, h.Value)).ToList(),
+                email.Attachments is { Count: > 0 } files
+                    ? files.Select(f => new PostmarkAttachment(f.Name, Convert.ToBase64String(f.Content), f.ContentType)).ToList()
+                    : null)),
         };
         request.Headers.Add("X-Postmark-Server-Token", options.Value.ServerToken);
         request.Headers.Accept.ParseAdd("application/json");
@@ -105,9 +108,12 @@ public sealed class PostmarkEmailSender(HttpClient http, IOptions<PostmarkOption
         string MessageStream,
         bool TrackOpens,
         IReadOnlyDictionary<string, string> Metadata,
-        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<PostmarkHeader>? Headers);
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<PostmarkHeader>? Headers,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<PostmarkAttachment>? Attachments);
 
     private sealed record PostmarkHeader(string Name, string Value);
+
+    private sealed record PostmarkAttachment(string Name, string Content, string ContentType);
 
     private sealed record PostmarkResponse(
         [property: JsonPropertyName("ErrorCode")] int ErrorCode,

@@ -236,9 +236,12 @@ public sealed class OwnerEmailRenderer
         html.Append(Heading(mailout.Subject));
         html.Append(Paragraph($"Hi {recipient.FirstName},"));
         foreach (var paragraph in Paragraphs(mailout.Body)) html.Append(Paragraph(paragraph));
+        // The sender's own sign-off, line breaks kept, above the business's details.
+        foreach (var paragraph in Paragraphs(mailout.Signature ?? "")) html.Append(Paragraph(paragraph));
 
         var text = new StringBuilder().AppendLine(mailout.Subject).AppendLine().AppendLine($"Hi {recipient.FirstName},").AppendLine();
         foreach (var paragraph in Paragraphs(mailout.Body)) text.AppendLine(paragraph).AppendLine();
+        foreach (var paragraph in Paragraphs(mailout.Signature ?? "")) text.AppendLine(paragraph).AppendLine();
 
         return new RenderedEmail(mailout.Subject,
             Frame(tenant.Name, tenant.LogoUrl, tenant.FooterDetails, mailout.Subject, Preview(mailout.Body), html.ToString(), replyLine, whyLine, unsubscribeLink: unsubscribeLink),

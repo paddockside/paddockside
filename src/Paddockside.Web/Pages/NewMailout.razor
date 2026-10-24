@@ -7,9 +7,10 @@
 <PageTitle>New mailout · Paddockside</PageTitle>
 
 @*
-    Writing a mailout: who it goes to (lists, kinds of client, people ticked on the Clients page — any mix, each person
-    once), what it says, and the horse it's about if any. The count of who will get it, and who is left out and why
-    (unsubscribed, no email, bouncing), updates as you choose; sending asks once more with the number.
+    Writing a mailout: who it goes to (lists found by typing, kinds of client, people ticked on the Clients page — any
+    mix, each person once), what it says, the sender's own signature (saved once, changeable here), files to attach,
+    and the horse it's about if any. The count of who will get it, and who is left out and why (unsubscribed, no email,
+    bouncing), updates as you choose; sending asks once more with the number.
 *@
 <div class="grid max-w-3xl gap-6">
     <a href="mailouts" class="btn-link justify-self-start">← Mailouts</a>
@@ -17,20 +18,9 @@
 
     <section class="card grid gap-4" aria-labelledby="who-heading">
         <h2 id="who-heading" class="text-title">Who it goes to</h2>
-        @if (_lists is { Count: > 0 })
+        @if (_lists is not null)
         {
-            <fieldset class="grid gap-2">
-                <legend class="field-label mb-1">Lists</legend>
-                <div class="flex flex-wrap gap-x-5 gap-y-2">
-                    @foreach (var list in _lists)
-                    {
-                        <label class="inline-flex items-center gap-2">
-                            <input type="checkbox" class="size-[18px] accent-action-primary-bg" checked="@_listIds.Contains(list.Id)" @onchange="() => ToggleAsync(_listIds, list.Id)" />
-                            @list.Name <span class="text-small text-text-muted">(@list.Count)</span>
-                        </label>
-                    }
-                </div>
-            </fieldset>
+            <ListPicker Lists="_lists" Selected="_listIds" OnChange="ChangedAsync" />
         }
         <fieldset class="grid gap-2">
             <legend class="field-label mb-1">Everyone who is a</legend>
@@ -85,8 +75,43 @@
         <div class="field">
             <label class="field-label" for="mailout-body">Message</label>
             <textarea id="mailout-body" class="input min-h-[14rem] py-3" @bind="_body" placeholder="Leave a blank line between paragraphs."></textarea>
-            <span class="field-hint">It starts "Hi {first name}," and ends with your business details and an unsubscribe link. Replies come back to this mailout's page.</span>
+            <span class="field-hint">It starts "Hi {first name}," and ends with your signature, @(Session.Current?.TenantName ?? "the business")'s details and an unsubscribe link. Replies come back to this mailout's page.</span>
         </div>
+        <div class="field">
+            <label class="field-label" for="mailout-signature">Your signature</label>
+            <textarea id="mailout-signature" class="input min-h-[6rem] py-3" maxlength="1000" @bind="_signature" @bind:event="oninput"
+                      placeholder="Kind regards,&#10;Kate Wells&#10;0412 345 678"></textarea>
+            <div class="flex flex-wrap items-center gap-3">
+                <button type="button" class="btn-secondary min-h-[36px] px-3" disabled="@(_busy || (_signature ?? "").Trim() == _savedSignature)" @onclick="SaveSignatureAsync">Save as my signature</button>
+                <span class="field-hint" role="status">@SignatureNote</span>
+            </div>
+        </div>
+
+        <fieldset class="grid gap-2">
+            <legend class="field-label mb-1">Attachments</legend>
+            @if (_files.Count > 0)
+            {
+                <ul class="grid gap-2" aria-label="Attached files">
+                    @foreach (var file in _files)
+                    {
+                        <li class="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-control border border-border-subtle px-3 py-2">
+                            <span class="min-w-0 flex-1 truncate font-strong">@file.FileName</span>
+                            <span class="text-small text-text-muted">@file.Size</span>
+                            <button type="button" class="text-small font-strong underline underline-offset-4" aria-label="Take @file.FileName off" @onclick="() => _files.Remove(file)">Remove</button>
+                        </li>
+                    }
+                </ul>
+            }
+            <label class="btn-secondary min-h-[36px] cursor-pointer justify-self-start px-3 focus-within:outline focus-within:outline-2 focus-within:outline-offset-2 @(_uploading ? "opacity-70" : null)">
+                @(_uploading ? "Attaching…" : _files.Count == 0 ? "Attach files" : "Attach another")
+                <InputFile class="sr-only" multiple accept="@Accept" OnChange="AttachAsync" disabled="@_uploading" />
+            </label>
+            <span class="field-hint">PDFs, Word, Excel, PowerPoint or photos, up to 7 MB in all@(_files.Count == 0 ? "" : $" ({Megabytes(_files.Sum(f => f.Bytes))} used)"). Everyone gets them attached.</span>
+            @if (_fileError is not null)
+            {
+                <p class="text-small text-status-danger-fg" role="alert">@_fileError</p>
+            }
+        </fieldset>
         <div class="field max-w-md">
             <label class="field-label" for="mailout-horse">About a horse (optional)</label>
             <select id="mailout-horse" class="input" @bind="_horse">
@@ -129,8 +154,13 @@
     private readonly HashSet<string> _statuses = [];
     private List<(Guid Id, string Name)> _people = [];
     private MailoutPreview? _preview;
-    private string? _subject, _body, _horse, _error;
-    private bool _confirming, _busy;
+    private string? _subject, _body, _horse, _error, _signature, _fileError;
+    private string _savedSignature = "";
+    private bool _confirming, _busy, _uploading, _signatureSaved;
+    private readonly List<MailoutAttachmentView> _files = [];
+
+    private const long MaxTotalBytes = 7L * 1024 * 1024;
+    private const string Accept = ".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.csv,.txt,.jpg,.jpeg,.png,.gif";
 
     protected override async Task OnInitializedAsync()
     {
@@ -143,8 +173,63 @@
         _people = Selection.Take();
         _lists = (await Api.ClientListsAsync()).Value ?? [];
         _horses = (await Api.HorsesAsync()).Value ?? [];
+        _savedSignature = (await Api.SignatureAsync()).Value?.Text ?? "";
+        _signature = _savedSignature;
         await PreviewAsync();
     }
+
+    private async Task ChangedAsync()
+    {
+        _confirming = false;
+        await PreviewAsync();
+    }
+
+    private string? SignatureNote =>
+        _signatureSaved && (_signature ?? "").Trim() == _savedSignature ? "Saved: it'll be filled in on your next mailout."
+        : _savedSignature.Length == 0 ? "Save it once and it's filled in on every mailout you write."
+        : (_signature ?? "").Trim() == _savedSignature ? "Your saved signature. Change it here for this mailout only, or save the change."
+        : null;
+
+    private async Task SaveSignatureAsync()
+    {
+        _busy = true;
+        try
+        {
+            var result = await Api.SaveSignatureAsync(_signature ?? "");
+            if (!result.Succeeded) { _error = result.Error; return; }
+            (_savedSignature, _signatureSaved) = ((_signature ?? "").Trim(), true);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task AttachAsync(InputFileChangeEventArgs e)
+    {
+        (_uploading, _fileError) = (true, null);
+        try
+        {
+            foreach (var file in e.GetMultipleFiles(10))
+            {
+                if (_files.Sum(f => f.Bytes) + file.Size > MaxTotalBytes)
+                {
+                    _fileError = $"{file.Name} would take the attachments over 7 MB, more than email can carry. Send a link to it instead.";
+                    continue;
+                }
+
+                var result = await Api.AttachToMailoutAsync(file, MaxTotalBytes);
+                if (result.Succeeded) _files.Add(result.Value!);
+                else _fileError = result.Error;
+            }
+        }
+        finally
+        {
+            _uploading = false;
+        }
+    }
+
+    private static string Megabytes(long bytes) => bytes < 1024 * 1024 ? $"{Math.Max(1, bytes / 1024)} KB" : $"{bytes / (1024.0 * 1024):0.#} MB";
 
     private async Task ToggleAsync<T>(HashSet<T> set, T value)
     {
@@ -178,7 +263,8 @@
         (_busy, _error) = (true, null);
         try
         {
-            var result = await Api.SendMailoutAsync(_subject ?? "", _body ?? "", _listIds, _statuses, _people.Select(p => p.Id), Guid.TryParse(_horse, out var h) ? h : null);
+            var result = await Api.SendMailoutAsync(_subject ?? "", _body ?? "", _listIds, _statuses, _people.Select(p => p.Id), Guid.TryParse(_horse, out var h) ? h : null,
+                _signature, _files.Select(f => f.Id));
             if (!result.Succeeded) { (_error, _confirming) = (result.Error, false); return; }
             Navigation.NavigateTo($"mailouts/{result.Value!.Id}");
         }

@@ -479,6 +479,10 @@ namespace Paddockside.Infrastructure.Persistence.Migrations
                         .HasMaxLength(320)
                         .HasColumnType("nvarchar(320)");
 
+                    b.Property<string>("Signature")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
                     b.Property<string>("Subject")
                         .IsRequired()
                         .HasMaxLength(150)
@@ -494,6 +498,47 @@ namespace Paddockside.Infrastructure.Persistence.Migrations
                     b.HasIndex("TenantId");
 
                     b.ToTable("Mailouts");
+                });
+
+            modelBuilder.Entity("Paddockside.Domain.MailoutAttachment", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("BlobName")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("nvarchar(300)");
+
+                    b.Property<string>("ContentType")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("FileName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<long>("Length")
+                        .HasColumnType("bigint");
+
+                    b.Property<Guid?>("MailoutId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("MailoutId");
+
+                    b.HasIndex("TenantId");
+
+                    b.ToTable("MailoutAttachments");
                 });
 
             modelBuilder.Entity("Paddockside.Domain.MailoutRecipient", b =>
@@ -1067,6 +1112,35 @@ namespace Paddockside.Infrastructure.Persistence.Migrations
                     b.ToTable("RoutingAddresses");
                 });
 
+            modelBuilder.Entity("Paddockside.Domain.StaffSignature", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("PersonId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Text")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId");
+
+                    b.HasIndex("TenantId", "PersonId")
+                        .IsUnique();
+
+                    b.ToTable("StaffSignatures");
+                });
+
             modelBuilder.Entity("Paddockside.Domain.StreamItem", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1595,6 +1669,20 @@ namespace Paddockside.Infrastructure.Persistence.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("Paddockside.Domain.MailoutAttachment", b =>
+                {
+                    b.HasOne("Paddockside.Domain.Mailout", null)
+                        .WithMany()
+                        .HasForeignKey("MailoutId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Paddockside.Domain.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("Paddockside.Domain.MailoutRecipient", b =>
                 {
                     b.HasOne("Paddockside.Domain.Mailout", null)
@@ -1879,6 +1967,15 @@ namespace Paddockside.Infrastructure.Persistence.Migrations
                         .HasForeignKey("StreamItemId")
                         .OnDelete(DeleteBehavior.Restrict);
 
+                    b.HasOne("Paddockside.Domain.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Paddockside.Domain.StaffSignature", b =>
+                {
                     b.HasOne("Paddockside.Domain.Tenant", null)
                         .WithMany()
                         .HasForeignKey("TenantId")

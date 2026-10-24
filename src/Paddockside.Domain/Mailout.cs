@@ -12,8 +12,9 @@ public sealed class Mailout
     /// <summary>For EF Core materialisation.</summary>
     private Mailout() => (Subject, Body, Audience, SentBy) = (null!, null!, null!, null!);
 
-    public Mailout(Guid tenantId, string subject, string body, string audience, string sentBy, DateTimeOffset at, Guid? horseId = null)
+    public Mailout(Guid tenantId, string subject, string body, string audience, string sentBy, DateTimeOffset at, Guid? horseId = null, string? signature = null)
     {
+        if (signature?.Trim().Length > StaffSignature.Length) throw new DomainException($"Keep the signature under {StaffSignature.Length} characters.");
         if (string.IsNullOrWhiteSpace(subject)) throw new DomainException("Give the email a subject.");
         if (subject.Trim().Length > SubjectLength) throw new DomainException($"Keep the subject under {SubjectLength} characters.");
         if (string.IsNullOrWhiteSpace(body)) throw new DomainException("Write the email first.");
@@ -25,6 +26,7 @@ public sealed class Mailout
         SentBy = sentBy;
         CreatedAt = at;
         HorseId = horseId;
+        Signature = string.IsNullOrWhiteSpace(signature) ? null : signature.Trim();
     }
 
     public const int SubjectLength = 150;
@@ -48,6 +50,9 @@ public sealed class Mailout
 
     /// <summary>The horse it's about, if any (a share offer); it shows there too.</summary>
     public Guid? HorseId { get; }
+
+    /// <summary>How the sender signed it off (their saved signature, or what they wrote this time), above the business's details.</summary>
+    public string? Signature { get; }
 }
 
 public enum MailoutRecipientStatus
@@ -167,4 +172,118 @@ public sealed class MailoutReply
     public string Body { get; }
 
     public DateTimeOffset ReceivedAt { get; }
+}
+
+/// <summary>
+/// A file sent with a mailout: a share offer's PDF, a sale catalogue page, a photo (David, 24 Oct 2026). Uploaded while
+/// the mailout is being written, so it belongs to no mailout until it is sent with one; every recipient gets it attached.
+/// </summary>
+public sealed class MailoutAttachment
+{
+    /// <summary>
+    /// All of a mailout's files together. Postmark takes 10 MB per email in all, and attachments grow by a third on the
+    /// way (base64), so 7 MB leaves room for the message itself.
+    /// </summary>
+    public const long MaxTotalBytes = 7L * 1024 * 1024;
+
+    public const int MaxFiles = 10;
+
+    /// <summary>What can be attached: documents and pictures people open without a second thought. Never anything that runs.</summary>
+    public static readonly IReadOnlyDictionary<string, string> Types = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+    {
+        [".pdf"] = "application/pdf",
+        [".doc"] = "application/msword",
+        [".docx"] = "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        [".xls"] = "application/vnd.ms-excel",
+        [".xlsx"] = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        [".ppt"] = "application/vnd.ms-powerpoint",
+        [".pptx"] = "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        [".csv"] = "text/csv",
+        [".txt"] = "text/plain",
+        [".jpg"] = "image/jpeg",
+        [".jpeg"] = "image/jpeg",
+        [".png"] = "image/png",
+        [".gif"] = "image/gif",
+    };
+
+    /// <summary>For EF Core materialisation.</summary>
+    private MailoutAttachment() => (FileName, ContentType, BlobName) = (null!, null!, null!);
+
+    public MailoutAttachment(Guid tenantId, string fileName, long length, DateTimeOffset at)
+    {
+        var name = Path.GetFileName(fileName?.Trim() ?? "");
+        if (name.Length == 0) throw new DomainException("The file has no name.");
+        if (name.Length > 200) throw new DomainException("That file's name is too long; rename it and try again.");
+        if (!Types.TryGetValue(Path.GetExtension(name), out var type))
+            throw new DomainException($"{name} can't be attached: send PDFs, Word, Excel or PowerPoint files, or photos.");
+        if (length <= 0) throw new DomainException($"{name} is empty.");
+        if (length > MaxTotalBytes) throw new DomainException($"{name} is too big to email: attachments can be up to 7 MB in all.");
+        TenantId = tenantId;
+        FileName = name;
+        ContentType = type;
+        Length = length;
+        CreatedAt = at;
+        BlobName = $"{tenantId}/mailouts/{Id}{Path.GetExtension(name).ToLowerInvariant()}";
+    }
+
+    public Guid Id { get; } = Guid.CreateVersion7();
+
+    public Guid TenantId { get; }
+
+    /// <summary>The mailout it went with; null while it is still being written.</summary>
+    public Guid? MailoutId { get; private set; }
+
+    public string FileName { get; }
+
+    public string ContentType { get; }
+
+    public long Length { get; }
+
+    public string BlobName { get; }
+
+    public DateTimeOffset CreatedAt { get; }
+
+    public void AttachTo(Mailout mailout)
+    {
+        if (mailout.TenantId != TenantId) throw new DomainException("That file belongs to another business.");
+        if (MailoutId is { } other && other != mailout.Id) throw new DomainException($"{FileName} was already sent with another mailout.");
+        MailoutId = mailout.Id;
+    }
+}
+
+/// <summary>
+/// A staff member's own sign-off for mailouts (David, 24 Oct 2026: "each staff member's own"): set once, filled in on
+/// every new mailout they write, changed on the mailout if they want. One per person per business.
+/// </summary>
+public sealed class StaffSignature
+{
+    public const int Length = 1000;
+
+    /// <summary>For EF Core materialisation.</summary>
+    private StaffSignature() => Text = null!;
+
+    public StaffSignature(Guid tenantId, Guid personId, string text, DateTimeOffset at)
+    {
+        TenantId = tenantId;
+        PersonId = personId;
+        Text = null!;
+        Change(text, at);
+    }
+
+    public Guid Id { get; } = Guid.CreateVersion7();
+
+    public Guid TenantId { get; }
+
+    public Guid PersonId { get; }
+
+    public string Text { get; private set; }
+
+    public DateTimeOffset UpdatedAt { get; private set; }
+
+    public void Change(string text, DateTimeOffset at)
+    {
+        var trimmed = text?.Trim() ?? "";
+        if (trimmed.Length > Length) throw new DomainException($"Keep the signature under {Length} characters.");
+        (Text, UpdatedAt) = (trimmed, at);
+    }
 }

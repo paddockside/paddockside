@@ -51,6 +51,10 @@ public sealed class PaddocksideDbContext(DbContextOptions<PaddocksideDbContext> 
 
     public DbSet<MailoutReply> MailoutReplies => Set<MailoutReply>();
 
+    public DbSet<MailoutAttachment> MailoutAttachments => Set<MailoutAttachment>();
+
+    public DbSet<StaffSignature> StaffSignatures => Set<StaffSignature>();
+
     public DbSet<RoutingAddress> RoutingAddresses => Set<RoutingAddress>();
 
     public DbSet<InboundMessage> InboundMessages => Set<InboundMessage>();

@@ -1,0 +1,125 @@
+@*
+    Choosing lists for a mailout when there are dozens of them (David, 24 Oct 2026): the chosen lists as tags you can
+    take off, and a box that finds the rest as you type, with how many people are on each. Arrow keys move through the
+    matches, Enter adds one, Escape closes them. A combobox in the ARIA sense: the box owns the list of matches.
+*@
+<div class="grid gap-2">
+    <label class="field-label" for="@_inputId">Lists</label>
+
+    @if (Chosen.Count > 0)
+    {
+        <ul class="flex flex-wrap gap-2" aria-label="Chosen lists">
+            @foreach (var list in Chosen)
+            {
+                <li class="inline-flex min-h-[36px] items-center gap-2 rounded-pill border border-border-strong bg-surface-sunken pl-3 pr-1 text-small">
+                    @list.Name <span class="text-text-muted">(@list.Count)</span>
+                    <button type="button" class="grid size-[28px] place-items-center rounded-pill hover:bg-surface-raised" aria-label="Take @list.Name off"
+                            @onclick="() => RemoveAsync(list.Id)">✕</button>
+                </li>
+            }
+        </ul>
+    }
+
+    <div class="relative max-w-md">
+        <input id="@_inputId" class="input" type="text" role="combobox" autocomplete="off" placeholder="@(Lists.Count == 0 ? "No lists yet" : "Type to find a list")"
+               disabled="@(Lists.Count == 0)" aria-expanded="@(_open && Matches.Count > 0 ? "true" : "false")" aria-controls="@_listId" aria-autocomplete="list"
+               aria-activedescendant="@(_open && _active >= 0 && _active < Matches.Count ? OptionId(Matches[_active].Id) : null)"
+               value="@_query" @oninput="Typed" @onfocus="() => _open = true" @onblur="CloseSoon" @onkeydown="KeyAsync" />
+        @if (_open && Matches.Count > 0)
+        {
+            <ul id="@_listId" role="listbox" aria-label="Lists to add"
+                class="absolute inset-x-0 top-full z-10 mt-1 grid max-h-[16rem] overflow-y-auto rounded-control border border-border-strong bg-surface-raised py-1 shadow-overlay">
+                @for (var i = 0; i < Matches.Count; i++)
+                {
+                    var list = Matches[i];
+                    var index = i;
+                    <li id="@OptionId(list.Id)" role="option" aria-selected="@(index == _active ? "true" : "false")"
+                        class="flex cursor-pointer items-baseline justify-between gap-3 px-4 py-2 @(index == _active ? "bg-surface-sunken" : null)"
+                        @onmousedown="() => AddAsync(list.Id)" @onmousedown:preventDefault @onmouseover="() => _active = index">
+                        <span>@list.Name</span>
+                        <span class="text-small text-text-muted">@(list.Count == 1 ? "1 person" : $"{list.Count} people")</span>
+                    </li>
+                }
+            </ul>
+        }
+        @if (_open && _query.Length > 0 && Matches.Count == 0)
+        {
+            <p class="mt-1 text-small text-text-muted" role="status">No list matches "@_query".</p>
+        }
+    </div>
+</div>
+
+@code {
+    private readonly string _inputId = $"lists-{Guid.NewGuid():N}";
+    private readonly string _listId = $"lists-{Guid.NewGuid():N}-options";
+    private string _query = "";
+    private bool _open;
+    private int _active;
+
+    [Parameter, EditorRequired] public IReadOnlyList<ClientListView> Lists { get; set; } = [];
+
+    /// <summary>The lists chosen; changed in place, then <see cref="OnChange"/>.</summary>
+    [Parameter, EditorRequired] public HashSet<Guid> Selected { get; set; } = [];
+
+    [Parameter] public EventCallback OnChange { get; set; }
+
+    private List<ClientListView> Chosen => Lists.Where(l => Selected.Contains(l.Id)).OrderBy(l => l.Name).ToList();
+
+    /// <summary>Lists not yet chosen whose name has every word typed, names that start with it first.</summary>
+    private List<ClientListView> Matches
+    {
+        get
+        {
+            var words = _query.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            return Lists.Where(l => !Selected.Contains(l.Id) && words.All(w => l.Name.Contains(w, StringComparison.OrdinalIgnoreCase)))
+                .OrderByDescending(l => _query.Length > 0 && l.Name.StartsWith(_query.Trim(), StringComparison.OrdinalIgnoreCase))
+                .ThenBy(l => l.Name)
+                .Take(50)
+                .ToList();
+        }
+    }
+
+    private string OptionId(Guid id) => $"{_listId}-{id:N}";
+
+    private void Typed(ChangeEventArgs e) => (_query, _open, _active) = (e.Value?.ToString() ?? "", true, 0);
+
+    private async Task KeyAsync(KeyboardEventArgs e)
+    {
+        var matches = Matches;
+        switch (e.Key)
+        {
+            case "ArrowDown":
+                (_open, _active) = (true, matches.Count == 0 ? 0 : Math.Min(_active + 1, matches.Count - 1));
+                break;
+            case "ArrowUp":
+                _active = Math.Max(_active - 1, 0);
+                break;
+            case "Enter" when _open && _active >= 0 && _active < matches.Count:
+                await AddAsync(matches[_active].Id);
+                break;
+            case "Escape":
+                _open = false;
+                break;
+        }
+    }
+
+    private async Task CloseSoon()
+    {
+        // A click on a match lands before the box loses focus (mousedown), so closing here never swallows it.
+        await Task.Yield();
+        _open = false;
+    }
+
+    private async Task AddAsync(Guid id)
+    {
+        Selected.Add(id);
+        (_query, _active) = ("", 0);
+        await OnChange.InvokeAsync();
+    }
+
+    private async Task RemoveAsync(Guid id)
+    {
+        Selected.Remove(id);
+        await OnChange.InvokeAsync();
+    }
+}
