@@ -1,0 +1,57 @@
+@inject PaddocksideApi Api
+
+@*
+    "Who is this?" on an email from someone the horse doesn't know yet (David, 9 Nov 2026): staff say they are its
+    trainer, vet, racing authority or a race club, and from then on their email is recognised. A trainer's lands on
+    the step due, ready to send on to owners. Someone new is kept as a contact, not a client.
+*@
+<form class="flex flex-wrap items-end gap-2" @onsubmit="SaveAsync" @onsubmit:preventDefault aria-label="Who sent this">
+    <div class="field">
+        <label class="field-label" for="@_id">Who is @(Author ?? "this") to @HorseName?</label>
+        <select id="@_id" class="input min-h-[36px] w-auto" @bind="_role">
+            <option value="">Choose…</option>
+            @foreach (var (value, label) in Roles)
+            {
+                <option value="@value">@label</option>
+            }
+        </select>
+    </div>
+    <button type="submit" class="btn-secondary min-h-[36px] px-3" disabled="@(_busy || _role == "")">Save</button>
+    @if (_error is not null)
+    {
+        <p class="basis-full text-small text-status-danger-fg" role="alert">@_error</p>
+    }
+</form>
+
+@code {
+    private readonly string _id = $"sender-{Guid.NewGuid():N}";
+    private string _role = "";
+    private string? _error;
+    private bool _busy;
+
+    private static readonly (string Value, string Label)[] Roles =
+        [("Trainer", "The trainer"), ("Vet", "The vet"), ("Authority", "The racing authority"), ("RaceClub", "A race club")];
+
+    [Parameter, EditorRequired] public Guid ItemId { get; set; }
+
+    [Parameter] public string? Author { get; set; }
+
+    [Parameter] public string? HorseName { get; set; }
+
+    [Parameter] public EventCallback OnTagged { get; set; }
+
+    private async Task SaveAsync()
+    {
+        (_busy, _error) = (true, null);
+        try
+        {
+            var result = await Api.TagSenderAsync(ItemId, _role);
+            if (!result.Succeeded) { _error = result.Error; return; }
+            await OnTagged.InvokeAsync();
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}

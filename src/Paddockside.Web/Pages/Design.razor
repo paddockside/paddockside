@@ -96,6 +96,17 @@
         <Variant Label="Staff: who saw what, for a race"><DeliveryGrid Report="SampleDelivery" /></Variant>
     </Section>
 
+    <Section Title="ItemFiling" Doc="messaging-channels.md">
+        <div class="grid gap-4 lg:grid-cols-2">
+            <Variant Label="Staff: the trainer's email, filed on its step, ready to send on">
+                <ItemFiling Item="SampleTrainerEmail" Steps="SampleSteps" HorseName="Faultless Miss" />
+            </Variant>
+            <Variant Label="Staff: an email from someone the horse doesn't know yet">
+                <ItemFiling Item="SampleUnknownEmail" Steps="SampleSteps" HorseName="Faultless Miss" />
+            </Variant>
+        </div>
+    </Section>
+
     <Section Title="OwnershipChange" Doc="ownership-model.md">
         <Variant Label="Manager: changing the house share (pass on, or correct a mistake)">
             <OwnershipChange HorseId="Guid.Empty" Owner="SampleOwners[0]" HasHouse />
@@ -223,4 +234,12 @@
 
     private static readonly RecipientsView SampleNobody = new("New photos and videos", [],
         [new(Guid.NewGuid(), "Owner Two", "No email address or mobile"), new(Guid.NewGuid(), "Owner Three", "No email address or mobile")], 0);
+
+    private static readonly List<string> SampleSteps = ["Nominated", "Trainer's plan", "Accepted", "Trainer's pre-race", "Pre-race update", "Result"];
+
+    private static readonly ItemView SampleTrainerEmail = new(Guid.NewGuid(), "Message", "Internal", "Friday 13 November, 4:10 pm", "This week", "Worked well, all set.",
+        "Sam Stable", "Trainer's pre-race", null, [], null, null, [], [], Channel: "Email", FromRole: "Trainer", SendOnStep: "Pre-race update");
+
+    private static readonly ItemView SampleUnknownEmail = new(Guid.NewGuid(), "Message", "Internal", "Monday 9 November, 9:02 am", "Faultless Miss", "Hello from the stable.",
+        "stable@example.test", null, null, [], null, null, [], [], Channel: "Email", CanTagSender: true);
 }

@@ -165,6 +165,35 @@
             </section>
         }
 
+        <section class="grid grid-cols-[minmax(0,1fr)] gap-3" aria-labelledby="contacts-heading">
+            <h2 id="contacts-heading">Trainer, vet and clubs</h2>
+            @if (_contacts is { Count: > 0 } contacts)
+            {
+                <ul class="card grid !p-0">
+                    @foreach (var c in contacts)
+                    {
+                        <li class="flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-border-subtle px-4 py-3 last:border-b-0">
+                            <span class="grid min-w-0 flex-[1_1_12rem]">
+                                <span class="font-strong">@c.Name</span>
+                                <span class="truncate text-small text-text-muted">@c.Email</span>
+                            </span>
+                            <span class="badge bg-surface-sunken text-text-muted">@c.Role</span>
+                            <span class="text-small text-text-muted">since @c.Since</span>
+                            @if (CanTag)
+                            {
+                                <button type="button" class="text-small font-strong underline underline-offset-4" disabled="@_busy" aria-label="@c.Name is no longer @(_horse.Name)'s @c.Role.ToLowerInvariant()"
+                                        @onclick="() => EndContactAsync(c)">No longer</button>
+                            }
+                        </li>
+                    }
+                </ul>
+            }
+            else
+            {
+                <p class="text-small text-text-muted">None yet. When the trainer, vet, racing authority or a race club first emails @(_horse.Name)'s address, say who they are on their email, and from then on their mail is recognised.</p>
+            }
+        </section>
+
         @if (_onHorse is { Count: > 0 })
         {
             <section class="grid grid-cols-[minmax(0,1fr)] gap-3" aria-labelledby="on-horse-heading">
@@ -173,7 +202,7 @@
                 @foreach (var item in _onHorse)
                 {
                     <article class="card grid gap-2">
-                        <p class="text-small text-text-muted">@(item.Author ?? "Unknown sender") · @item.At@(item.Channel is null ? null : $" · by {item.Channel.ToLowerInvariant()}")</p>
+                        <p class="text-small text-text-muted">@(item.Author ?? "Unknown sender")@(item.FromRole is null ? null : $" ({item.FromRole.ToLowerInvariant()})") · @item.At@(item.Channel is null ? null : $" · by {item.Channel.ToLowerInvariant()}")</p>
                         @if (item.Title is not null)
                         {
                             <p class="font-strong">@item.Title</p>
@@ -194,6 +223,10 @@
                         @if (item.CanReplyToSender)
                         {
                             <ReplyToSender ItemId="item.Id" Author="@item.Author" OnSent="ReloadOnHorseAsync" />
+                        }
+                        @if (item.CanTagSender && CanTag)
+                        {
+                            <SenderTag ItemId="item.Id" Author="@item.Author" HorseName="@_horse.Name" OnTagged="ReloadContactsAsync" />
                         }
                     </article>
                 }
@@ -352,6 +385,32 @@
     private List<HorseItem>? _onHorse;
 
     private async Task ReloadOnHorseAsync() => _onHorse = (await Api.OnTheHorseAsync(Id)).Value;
+
+    private List<HorseContactView>? _contacts;
+
+    /// <summary>Coordinators and up say who's who (ContactEndpoints).</summary>
+    private bool CanTag => Session.Current?.Role is "Coordinator" or "Manager" or "TenantAdmin";
+
+    private async Task ReloadContactsAsync()
+    {
+        _contacts = (await Api.HorseContactsAsync(Id)).Value;
+        await ReloadOnHorseAsync();
+    }
+
+    private async Task EndContactAsync(HorseContactView contact)
+    {
+        _busy = true;
+        try
+        {
+            var result = await Api.EndHorseContactAsync(Id, contact.Id);
+            if (!result.Succeeded) { _error = result.Error; return; }
+            await ReloadContactsAsync();
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
     private bool _creating;
     private bool _busy;
     private bool _openNow = true;
@@ -405,6 +464,7 @@
         _horse = horse.Value;
 
         _onHorse = (await Api.OnTheHorseAsync(Id)).Value;
+        _contacts = (await Api.HorseContactsAsync(Id)).Value;
         _owners = (await Api.HorseOwnersAsync(Id)).Value;
         var events = await Api.HorseEventsAsync(Id);
         if (events.Succeeded) { _events = events.Value; Rail.Show(StaffRail.From(_horse!, _events!, null)); }

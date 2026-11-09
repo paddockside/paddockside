@@ -185,6 +185,7 @@ else
                                         {
                                             <ReplyToSender ItemId="item.Id" Author="@item.Author" OnSent="Load" />
                                         }
+                                        <ItemFiling Item="item" Steps="_page.StepOptions" HorseName="@_page.HorseName" OnChanged="Load" OnSendOn="SendOn" />
                                         break;
                                 }
                             </text>)
@@ -202,7 +203,7 @@ else
                 {
                     <Error Message="@_error" />
                 }
-                <ComposeBox Steps="_page.StepOptions" StepPrompts="_page.StepPrompts" NamedPartyChoices="Owners" HorseName="@_page.HorseName" Busy="_busy" OnSend="Send" />
+                <ComposeBox @ref="_compose" Steps="_page.StepOptions" StepPrompts="_page.StepPrompts" NamedPartyChoices="Owners" HorseName="@_page.HorseName" Busy="_busy" OnSend="Send" />
                 @if (_confirming is { } who)
                 {
                     <ConfirmSend Recipients="who" HorseName="@_page.HorseName" Photos="_confirmPhotos" OnAnswer="yes => _answer?.TrySetResult(yes)" />
@@ -654,6 +655,17 @@ else
         var sent = await SendNowAsync(draft);
         StateHasChanged();
         return sent;
+    }
+
+    private ComposeBox? _compose;
+
+    /// <summary>"Send to owners" on the trainer's email: their words go into the compose box, on the owners' step, to check and send.</summary>
+    private void SendOn(ItemView item)
+    {
+        var step = item.SendOnStep is { Length: > 0 } s ? s : null;
+        _compose?.StartFrom(item.Body, step);
+        var where = step is null ? "" : ", on " + step;
+        (_error, _saved) = (null, $"The trainer's words are in the message box{where}. Take out anything owners shouldn't see, then send.");
     }
 
     private RecipientsView? _confirming;

@@ -1,0 +1,88 @@
+@inject PaddocksideApi Api
+
+@*
+    Under a message, email or post on an event (David, 9 Nov 2026): who sent it, if staff have said; "Who is this?" if
+    not; the step it's filed under, which staff can change afterwards without sending anything; and for an email from
+    the horse's trainer, "Send to owners", which puts the trainer's words into the compose box on the owners' step.
+*@
+<div class="flex flex-wrap items-center gap-x-4 gap-y-2 text-small">
+    @if (Item.FromRole is not null)
+    {
+        <span class="badge bg-surface-sunken text-text-muted">From the @Item.FromRole.ToLowerInvariant()</span>
+    }
+
+    @if (_changing)
+    {
+        <form class="flex flex-wrap items-end gap-2" @onsubmit="SaveStepAsync" @onsubmit:preventDefault aria-label="Change the step">
+            <label class="sr-only" for="@_id">Step</label>
+            <select id="@_id" class="input min-h-[36px] w-auto" @bind="_step">
+                <option value="">No step</option>
+                @foreach (var step in Steps)
+                {
+                    <option value="@step">@step</option>
+                }
+            </select>
+            <button type="submit" class="btn-secondary min-h-[36px] px-3" disabled="@_busy">Save</button>
+            <button type="button" class="min-h-[36px] underline underline-offset-4" @onclick="() => _changing = false">Cancel</button>
+        </form>
+    }
+    else if (Steps.Count > 0)
+    {
+        <span class="text-text-muted">
+            @(Item.Step is null ? "On no step" : $"Step: {Item.Step}")
+            · <button type="button" class="font-strong text-text-primary underline underline-offset-4" @onclick="StartChanging">Change<span class="sr-only"> the step</span></button>
+        </span>
+    }
+
+    @if (Item.SendOnStep is not null)
+    {
+        <button type="button" class="btn-secondary min-h-[36px] px-3" @onclick="() => OnSendOn.InvokeAsync(Item)">Send to owners</button>
+    }
+
+    @if (_error is not null)
+    {
+        <p class="basis-full text-status-danger-fg" role="alert">@_error</p>
+    }
+</div>
+@if (Item.CanTagSender)
+{
+    <SenderTag ItemId="Item.Id" Author="@Item.Author" HorseName="@HorseName" OnTagged="OnChanged" />
+}
+
+@code {
+    private readonly string _id = $"step-{Guid.NewGuid():N}";
+    private bool _changing, _busy;
+    private string _step = "";
+    private string? _error;
+
+    [Parameter, EditorRequired] public ItemView Item { get; set; } = default!;
+
+    /// <summary>The event's steps, by label.</summary>
+    [Parameter] public IReadOnlyList<string> Steps { get; set; } = [];
+
+    [Parameter] public string? HorseName { get; set; }
+
+    /// <summary>Something changed (a step, who sent it): reload the event.</summary>
+    [Parameter] public EventCallback OnChanged { get; set; }
+
+    /// <summary>"Send to owners" on the trainer's email: the page fills the compose box from it.</summary>
+    [Parameter] public EventCallback<ItemView> OnSendOn { get; set; }
+
+    private void StartChanging() => (_changing, _step, _error) = (true, Item.Step ?? "", null);
+
+    private async Task SaveStepAsync()
+    {
+        (_busy, _error) = (true, null);
+        try
+        {
+            var result = await Api.SetItemStepAsync(Item.Id, _step == "" ? null : _step);
+            if (!result.Succeeded) { _error = result.Error; return; }
+            _changing = false;
+            await OnChanged.InvokeAsync();
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}

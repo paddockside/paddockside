@@ -45,7 +45,10 @@ public sealed record ItemView(
     bool CanReplyToSender = false,
     string? Channel = null,
     List<MediaView>? Media = null,
-    string? Shared = null);
+    string? Shared = null,
+    string? FromRole = null,
+    bool CanTagSender = false,
+    string? SendOnStep = null);
 
 /// <summary>A photo, video or voice note; its file is at api/media/{Id}.</summary>
 public sealed record MediaView(Guid Id, string Kind, string ContentType, string FileName, long Length);
@@ -204,7 +207,10 @@ public sealed record InboundView(
     string Channel = "Email");
 
 public sealed record HorseItem(Guid Id, string Kind, string At, string? Title, string Body, string? Author, string? Channel, bool CanReplyToSender = false,
-    List<HorseReply>? Replies = null, List<MediaView>? Media = null);
+    List<HorseReply>? Replies = null, List<MediaView>? Media = null, string? FromRole = null, bool CanTagSender = false);
+
+/// <param name="Role">"Trainer", "Vet", "Racing authority", "Race club".</param>
+public sealed record HorseContactView(Guid Id, Guid PartyId, string Name, string? Email, string Role, string Since);
 
 public sealed record HorseReply(string Author, string At, string Body);
 
@@ -511,6 +517,16 @@ public sealed class PaddocksideApi(HttpClient http)
     public Task<ApiResult<InboundCounts>> InboundCountsAsync() => GetAsync<InboundCounts>("api/inbound/counts");
 
     public Task<ApiResult<TodayPage>> TodayAsync() => GetAsync<TodayPage>("api/today");
+
+    public Task<ApiResult<List<HorseContactView>>> HorseContactsAsync(Guid horseId) => GetAsync<List<HorseContactView>>($"api/horses/{horseId}/contacts");
+
+    public Task<ApiResult<object>> EndHorseContactAsync(Guid horseId, Guid contactId) => PostAsync<object>($"api/horses/{horseId}/contacts/{contactId}/end", new { });
+
+    /// <summary>Who an email's sender is to its horse: "Trainer", "Vet", "Authority" or "RaceClub".</summary>
+    public Task<ApiResult<object>> TagSenderAsync(Guid itemId, string role) => PostAsync<object>($"api/items/{itemId}/sender", new { role });
+
+    /// <summary>Files an item under a step of its event (or none, with null). Nothing is sent.</summary>
+    public Task<ApiResult<object>> SetItemStepAsync(Guid itemId, string? step) => PostAsync<object>($"api/items/{itemId}/step", new { step });
 
     public Task<ApiResult<DeliveryReport>> DeliveryReportAsync(Guid eventId) => GetAsync<DeliveryReport>($"api/reports/delivery/{eventId}");
 

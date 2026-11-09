@@ -104,7 +104,7 @@
             {
                 <div class="field">
                     <label class="field-label" for="@_id-options">Choices, one per line</label>
-                    <textarea id="@_id-options" class="input min-h-[6rem] py-3" @bind="_options" placeholder="10%&#10;5%&#10;Tell me more"></textarea>
+                    <textarea id="@_id-options" class="input min-h-[6rem] py-3" @bind="_options" placeholder="@ChoicesExample"></textarea>
                 </div>
             }
         </fieldset>
@@ -125,7 +125,7 @@
 
     <div class="flex flex-wrap items-end gap-3">
         <label class="sr-only" for="@_id-body">@(_files.Count > 0 ? "Caption" : _audience == Audience.InternalNote ? "Note" : "Message")</label>
-        <textarea id="@_id-body" class="input min-h-[64px] min-w-0 flex-1 basis-[16rem] rounded-card py-3" rows="2" @bind="_body" @bind:event="oninput"
+        <textarea @ref="_bodyBox" id="@_id-body" class="input min-h-[64px] min-w-0 flex-1 basis-[16rem] rounded-card py-3" rows="2" @bind="_body" @bind:event="oninput"
                   placeholder="@Placeholder" aria-describedby="@(_error is null ? null : $"{_id}-error")"></textarea>
         @if (_audience != Audience.Trainer)
         {
@@ -154,6 +154,9 @@
     private Channel _channel = Channel.Preferred;
     private string _step = "";
     private string _body = "";
+    private ElementReference _bodyBox;
+    private bool _focusBody;
+    private const string ChoicesExample = "10%\n5%\nTell me more";
     private string? _error;
     private bool _asking;
     private string _promptKind = "Count";
@@ -266,6 +269,26 @@
     private void Toggle(string id)
     {
         if (!_named.Remove(id)) _named.Add(id);
+    }
+
+    /// <summary>
+    /// Starts an owner update from someone else's words (the trainer's email, "Send to owners"): staff read it, take out
+    /// anything owners shouldn't see, and send it as usual. The cursor goes to the message.
+    /// </summary>
+    public void StartFrom(string body, string? step)
+    {
+        (_audience, _scope, _channel, _body, _step, _asking, _error) = (Audience.Owners, Scope.Owners, Channel.Preferred, body, step ?? "", false, null);
+        _named.Clear();
+        _files.Clear();
+        _focusBody = true;
+        StateHasChanged();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!_focusBody) return;
+        _focusBody = false;
+        await _bodyBox.FocusAsync();
     }
 
     private async Task Submit()
