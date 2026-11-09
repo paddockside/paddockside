@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using Microsoft.EntityFrameworkCore;
 using Paddockside.Domain;
 
 namespace Paddockside.Isolation.Tests.Api;
@@ -33,6 +34,25 @@ public sealed partial class OwnerSignInTests
         }
 
         return form;
+    }
+
+    [Fact]
+    public async Task A_voice_note_on_a_step_ticks_that_step_off()
+    {
+        // David, 9 Nov 2026: a voice note sent on "Trainer's plan" didn't tick it off; the step was never sent.
+        var seed = await SeedAsync();
+        using var staff = await Api.SignedInAsync(seed.TenantId, MemberRole.Coordinator);
+        var form = Upload("Owners", "The plan from here.", ("plan.m4a", "audio/mp4", [0, 0, 0, 0x20, 0x66, 0x74, 0x79, 0x70]));
+        form.Add(new StringContent("Trainer's plan"), "step");
+        var posted = await staff.PostFormApiAsync($"/api/events/{seed.EventId}/media", form);
+        Assert.Equal(HttpStatusCode.Created, posted.StatusCode);
+        var id = (await posted.Content.ReadFromJsonAsync<UploadedMedia>())!.Id;
+        await using (var context = db.ContextFor(seed.TenantId))
+            Assert.Equal("TRAINER_PLAN", (await context.StreamItems.SingleAsync(i => i.Id == id)).StepCode);
+
+        var wrong = Upload("Owners", "", ("plan.m4a", "audio/mp4", [0, 0, 0, 0x20, 0x66, 0x74, 0x79, 0x70]));
+        wrong.Add(new StringContent("Foaling"), "step");
+        Assert.Equal(HttpStatusCode.BadRequest, (await staff.PostFormApiAsync($"/api/events/{seed.EventId}/media", wrong)).StatusCode);
     }
 
     [Fact]

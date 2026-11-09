@@ -671,7 +671,7 @@ else
             {
                 // Photos, video or a voice note, with the message as their caption (MediaEndpoints).
                 var shared = draft.Audience == Audience.Owners;
-                var upload = await Api.UploadMediaAsync(Id, shared ? "Owners" : "Internal", draft.Body, files, ComposeBox.MaxFileBytes);
+                var upload = await Api.UploadMediaAsync(Id, shared ? "Owners" : "Internal", draft.Body, draft.Step, files, ComposeBox.MaxFileBytes);
                 if (!upload.Succeeded) { _error = upload.Error; return false; }
                 _saved = shared
                     ? $"Added {files.Count} {(files.Count == 1 ? "file" : "files")}. Owners see them on their page{(upload.Value!.Recipients > 0 ? $", and {upload.Value.Recipients} {(upload.Value.Recipients == 1 ? "is" : "are")} being told now" : "")}."

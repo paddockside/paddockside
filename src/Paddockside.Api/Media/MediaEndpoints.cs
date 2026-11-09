@@ -44,7 +44,8 @@ public static class MediaEndpoints
     }
 
     /// <summary>
-    /// A multipart form: <c>files</c>, an optional <c>caption</c>, and <c>scope</c> — "Owners" (shared with the
+    /// A multipart form: <c>files</c>, an optional <c>caption</c>, an optional <c>step</c> (its label or code, so a trainer's
+    /// voice note can tick off "Trainer's plan"), and <c>scope</c> — "Owners" (shared with the
     /// horse's owners, who are told by their "new photos and videos" choice) or "Internal" (staff only).
     /// </summary>
     private static async Task<IResult> Upload(Guid id, HttpRequest request, ClaimsPrincipal user, PaddocksideDbContext db, IMediaStore store,
@@ -77,6 +78,12 @@ public static class MediaEndpoints
         var author = user.FindFirstValue(ClaimTypes.Email) ?? "Staff";
         var caption = form["caption"].ToString();
         if (caption.Length > 4000) return Problem("That caption is too long.");
+        string? stepCode = null;
+        if (form["step"].ToString() is { Length: > 0 } step)
+        {
+            stepCode = EventTypes.Find(e.EventType).Steps.FirstOrDefault(s => s.Label == step || s.Code == step)?.Code;
+            if (stepCode is null) return Problem("That step is not part of this event.");
+        }
 
         string TypeOf(IFormFile file) => MediaAsset.TypeFor(file.ContentType, file.FileName) ?? file.ContentType ?? "";
         var kinds = files.Select(f => MediaAsset.Types.TryGetValue(TypeOf(f), out var t) ? t.Kind : MediaKind.Photo).ToList();
@@ -85,7 +92,7 @@ public static class MediaEndpoints
         var assets = new List<(MediaAsset Asset, IFormFile File)>();
         try
         {
-            item = StreamItem.Media(horse, e, Title(kinds), caption, scope.Value, now, author);
+            item = StreamItem.Media(horse, e, Title(kinds), caption, scope.Value, now, author, stepCode: stepCode);
             // A millisecond apart, so they keep the order they were chosen in.
             foreach (var (file, n) in files.Select((f, n) => (f, n)))
                 assets.Add((new MediaAsset(item, file.FileName, TypeOf(file), file.Length, now.AddMilliseconds(n)), file));

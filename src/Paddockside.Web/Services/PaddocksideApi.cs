@@ -357,10 +357,11 @@ public sealed class PaddocksideApi(HttpClient http)
         PostAsync<CreatedEvent>($"api/horses/{horseId}/events", new { type, title, keyDate, open });
 
     /// <summary>Photos, video or voice notes onto an event: "Owners" to share them, "Internal" for staff only.</summary>
-    public async Task<ApiResult<MediaUploaded>> UploadMediaAsync(Guid eventId, string scope, string caption,
+    public async Task<ApiResult<MediaUploaded>> UploadMediaAsync(Guid eventId, string scope, string caption, string? step,
         IEnumerable<Microsoft.AspNetCore.Components.Forms.IBrowserFile> files, long maxBytes)
     {
         using var form = new MultipartFormDataContent { { new StringContent(scope), "scope" }, { new StringContent(caption), "caption" } };
+        if (step is not null) form.Add(new StringContent(step), "step");
         foreach (var file in files)
         {
             var content = new StreamContent(file.OpenReadStream(maxBytes));
