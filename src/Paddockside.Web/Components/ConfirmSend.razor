@@ -1,0 +1,105 @@
+@*
+    The last look before anything goes to owners (David, 9 Nov 2026: "a warning modal, this is going to these owners"):
+    who it goes to and how, who it won't reach and why (no email, switched that kind of update off), and owners still
+    on "share to confirm". Nothing is sent until Send is pressed; Escape or "Not yet" goes back with the draft intact.
+*@
+<div class="fixed inset-0 z-50 grid place-items-center bg-[rgb(0_0_0/0.45)] px-4 py-6" @onkeydown="Key">
+    <div @ref="_dialog" tabindex="-1" role="alertdialog" aria-modal="true" aria-labelledby="@_titleId" aria-describedby="@_bodyId"
+         class="grid max-h-full w-full max-w-lg grid-rows-[auto_minmax(0,1fr)_auto] gap-4 overflow-hidden rounded-card border border-border-subtle bg-surface-raised p-card shadow-overlay outline-none">
+        <h2 id="@_titleId" class="text-title">@Title</h2>
+
+        <div id="@_bodyId" class="grid content-start gap-4 overflow-y-auto">
+            @if (Recipients.Going.Count > 0)
+            {
+                <section class="grid gap-2" aria-label="Going to">
+                    <ul class="grid gap-1">
+                        @foreach (var owner in Recipients.Going)
+                        {
+                            <li class="flex flex-wrap items-baseline justify-between gap-x-3 border-b border-border-subtle pb-1 last:border-b-0">
+                                <span class="font-strong">@owner.Name</span>
+                                <span class="text-small text-text-muted">@owner.How</span>
+                            </li>
+                        }
+                    </ul>
+                </section>
+            }
+            else
+            {
+                <p class="rounded-control bg-status-warning-bg px-4 py-3 text-status-warning-fg">
+                    It will still show on the owners' pages for them to find.
+                </p>
+            }
+
+            @if (Recipients.LeftOut.Count > 0)
+            {
+                <section class="grid gap-2" aria-labelledby="@_titleId-left">
+                    <h3 id="@_titleId-left" class="font-strong">Won't reach @(Recipients.LeftOut.Count == 1 ? "1 owner" : $"{Recipients.LeftOut.Count} owners")</h3>
+                    <ul class="grid gap-1">
+                        @foreach (var owner in Recipients.LeftOut)
+                        {
+                            <li class="flex flex-wrap items-baseline justify-between gap-x-3">
+                                <span>@owner.Name</span>
+                                <span class="text-small text-status-danger-fg">@owner.Why</span>
+                            </li>
+                        }
+                    </ul>
+                </section>
+            }
+
+            @if (Recipients.ToConfirm > 0)
+            {
+                <p class="text-small text-text-muted">
+                    @(Recipients.ToConfirm == 1 ? "1 owner has" : $"{Recipients.ToConfirm} owners have") a share to confirm, and @(Recipients.ToConfirm == 1 ? "isn't" : "aren't") sent anything until it's set on the horse's page.
+                </p>
+            }
+
+            <p class="text-small text-text-muted">Counts as "@Recipients.Category", which owners can switch off in their choices.</p>
+        </div>
+
+        <div class="flex flex-wrap gap-3">
+            <button type="button" class="btn-primary" @onclick="() => OnAnswer.InvokeAsync(true)">@SendLabel</button>
+            <button type="button" class="btn-secondary" @onclick="() => OnAnswer.InvokeAsync(false)">Not yet</button>
+        </div>
+    </div>
+</div>
+
+@code {
+    private readonly string _titleId = $"confirm-{Guid.NewGuid():N}";
+    private readonly string _bodyId = $"confirm-{Guid.NewGuid():N}-body";
+    private ElementReference _dialog;
+
+    [Parameter, EditorRequired] public RecipientsView Recipients { get; set; } = default!;
+
+    [Parameter] public string? HorseName { get; set; }
+
+    /// <summary>Photos, video or a voice note rather than a message.</summary>
+    [Parameter] public bool Photos { get; set; }
+
+    /// <summary>True to send, false to go back to the draft.</summary>
+    [Parameter] public EventCallback<bool> OnAnswer { get; set; }
+
+    private string What => Photos ? "these photos" : "this";
+
+    private string Title => Recipients.Going.Count switch
+    {
+        0 => $"Nobody will be sent {What}",
+        1 => $"Send {What} to 1 owner{Of}?",
+        var n => $"Send {What} to {n} owners{Of}?",
+    };
+
+    private string Of => HorseName is null ? "" : $" of {HorseName}";
+
+    private string SendLabel => Recipients.Going.Count switch
+    {
+        0 => "Add it without sending",
+        1 => "Send to 1 owner",
+        var n => $"Send to {n} owners",
+    };
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender) await _dialog.FocusAsync();
+    }
+
+    private Task Key(KeyboardEventArgs e) => e.Key == "Escape" ? OnAnswer.InvokeAsync(false) : Task.CompletedTask;
+}

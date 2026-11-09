@@ -68,6 +68,23 @@
         </div>
     </Section>
 
+    <Section Title="ConfirmSend" Doc="messaging-channels.md">
+        <Variant Label="Staff: the last look before anything goes to owners">
+            <div class="flex flex-wrap gap-3">
+                <button type="button" class="btn-secondary" @onclick="() => _sampleSend = SampleSome">Some owners get it</button>
+                <button type="button" class="btn-secondary" @onclick="() => _sampleSend = SampleNobody">Nobody gets it</button>
+                @if (_sampleAnswer is not null)
+                {
+                    <span class="self-center text-small text-text-muted" role="status">Answered: @_sampleAnswer</span>
+                }
+            </div>
+            @if (_sampleSend is { } who)
+            {
+                <ConfirmSend Recipients="who" HorseName="Faultless Miss" OnAnswer="SampleAnswered" />
+            }
+        </Variant>
+    </Section>
+
     <Section Title="ListPicker" Doc="search-reporting.md">
         <div class="grid gap-4 lg:grid-cols-2">
             <Variant Label="Staff: two lists chosen, type to find more"><ListPicker Lists="SampleLists" Selected="_pickedLists" /></Variant>
@@ -101,7 +118,7 @@
     </Section>
 
     <Section Title="ComposeBox" Doc="compose-box.md">
-        <ComposeBox Steps="AutumnRidge.ComposeSteps" NamedPartyChoices="AutumnRidge.Owners" OnSend="d => _lastDraft = d" />
+        <ComposeBox Steps="AutumnRidge.ComposeSteps" NamedPartyChoices="AutumnRidge.Owners" OnSend="ShowDraft" />
         @if (_lastDraft is not null)
         {
             <div class="card grid gap-2" role="status">
@@ -181,4 +198,23 @@
         new(Guid.NewGuid(), "Golden Slipper day", 40), new(Guid.NewGuid(), "Wine dinner 2025", 60), new(Guid.NewGuid(), "Winter racing club", 31),
         new(Guid.NewGuid(), "Winx syndicate", 22), new(Guid.NewGuid(), "Victorian owners", 1), new(Guid.NewGuid(), "Canberra", 7),
     ];
+
+    private Task<bool> ShowDraft(ComposeDraft draft)
+    {
+        _lastDraft = draft;
+        StateHasChanged();
+        return Task.FromResult(true);
+    }
+
+    private RecipientsView? _sampleSend;
+    private string? _sampleAnswer;
+
+    private void SampleAnswered(bool yes) => (_sampleSend, _sampleAnswer) = (null, yes ? "Send" : "Not yet");
+
+    private static readonly RecipientsView SampleSome = new("Nominations and entries",
+        [new(Guid.NewGuid(), "Owner Seven", "Email"), new(Guid.NewGuid(), "Nicole & Craig Mackay", "Email and text")],
+        [new(Guid.NewGuid(), "Owner Two", "No email address or mobile"), new(Guid.NewGuid(), "Bob Owner", "Has switched off \"Nominations and entries\"")], 3);
+
+    private static readonly RecipientsView SampleNobody = new("New photos and videos", [],
+        [new(Guid.NewGuid(), "Owner Two", "No email address or mobile"), new(Guid.NewGuid(), "Owner Three", "No email address or mobile")], 0);
 }

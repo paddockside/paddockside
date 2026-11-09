@@ -203,6 +203,10 @@ else
                     <Error Message="@_error" />
                 }
                 <ComposeBox Steps="_page.StepOptions" StepPrompts="_page.StepPrompts" NamedPartyChoices="Owners" HorseName="@_page.HorseName" Busy="_busy" OnSend="Send" />
+                @if (_confirming is { } who)
+                {
+                    <ConfirmSend Recipients="who" HorseName="@_page.HorseName" Photos="_confirmPhotos" OnAnswer="yes => _answer?.TrySetResult(yes)" />
+                }
             </section>
         </div>
 
@@ -625,7 +629,38 @@ else
         }
     }
 
-    private async Task Send(ComposeDraft draft)
+    /// <summary>
+    /// The compose box's send. Anything for owners first shows who it will go to, and who it won't reach and why
+    /// (David, 9 Nov 2026); nothing goes until staff confirm. True when it was sent, so the box clears; false keeps the draft.
+    /// </summary>
+    private async Task<bool> Send(ComposeDraft draft)
+    {
+        if (draft.Audience == Audience.Owners)
+        {
+            (_error, _saved) = (null, null);
+            var photos = draft.Files is { Count: > 0 };
+            var who = await Api.RecipientsAsync(Id, new RecipientsRequest(draft.Scope.ToString(), draft.Step, draft.Channel.ToString(),
+                draft.NamedParties.Select(Guid.Parse).ToList(), photos));
+            if (!who.Succeeded) { _error = who.Error; StateHasChanged(); return false; }
+
+            (_confirming, _confirmPhotos, _answer) = (who.Value, photos, new TaskCompletionSource<bool>());
+            StateHasChanged();
+            var yes = await _answer.Task;
+            _confirming = null;
+            StateHasChanged();
+            if (!yes) return false;
+        }
+
+        var sent = await SendNowAsync(draft);
+        StateHasChanged();
+        return sent;
+    }
+
+    private RecipientsView? _confirming;
+    private bool _confirmPhotos;
+    private TaskCompletionSource<bool>? _answer;
+
+    private async Task<bool> SendNowAsync(ComposeDraft draft)
     {
         _busy = true;
         _error = null;
@@ -637,12 +672,12 @@ else
                 // Photos, video or a voice note, with the message as their caption (MediaEndpoints).
                 var shared = draft.Audience == Audience.Owners;
                 var upload = await Api.UploadMediaAsync(Id, shared ? "Owners" : "Internal", draft.Body, files, ComposeBox.MaxFileBytes);
-                if (!upload.Succeeded) { _error = upload.Error; return; }
+                if (!upload.Succeeded) { _error = upload.Error; return false; }
                 _saved = shared
-                    ? $"Added {files.Count} {(files.Count == 1 ? "file" : "files")}. Owners see them on their page; those who asked to hear about new photos and videos are told."
+                    ? $"Added {files.Count} {(files.Count == 1 ? "file" : "files")}. Owners see them on their page{(upload.Value!.Recipients > 0 ? $", and {upload.Value.Recipients} {(upload.Value.Recipients == 1 ? "is" : "are")} being told now" : "")}."
                     : $"Added {files.Count} {(files.Count == 1 ? "file" : "files")} for staff only.";
                 await Load();
-                return;
+                return true;
             }
 
             var request = new ComposeRequest(
@@ -654,7 +689,7 @@ else
                 draft.Body,
                 draft.Prompt);
             var result = await Api.PostToEventAsync(Id, request);
-            if (!result.Succeeded) { _error = result.Error; return; }
+            if (!result.Succeeded) { _error = result.Error; return false; }
 
             _saved = draft.Audience switch
             {
@@ -663,16 +698,20 @@ else
                 _ => $"Sending to {result.Value!.Recipients} {(result.Value.Recipients == 1 ? "owner" : "owners")} now. Each gets their own reply address; the delivery line updates as Postmark reports back.",
             };
             await Load();
-            if (draft.Audience == Audience.Owners)
-            {
-                // The background sender picks it up within a few seconds; show the result without a manual refresh.
-                await Task.Delay(TimeSpan.FromSeconds(6));
-                await Load();
-            }
+            if (draft.Audience == Audience.Owners) _ = RefreshSoonAsync();
+            return true;
         }
         finally
         {
             _busy = false;
         }
+    }
+
+    /// <summary>The background sender picks a message up within seconds: show its delivery line without a manual refresh.</summary>
+    private async Task RefreshSoonAsync()
+    {
+        await Task.Delay(TimeSpan.FromSeconds(6));
+        await Load();
+        StateHasChanged();
     }
 }

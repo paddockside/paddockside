@@ -21,20 +21,8 @@ public static class OutboundQueue
         PaddocksideDbContext db, Tenant tenant, Horse horse, Event? @event, StreamItem message, DeliveryChannel? channel, bool smsAvailable, DateTimeOffset now,
         CancellationToken cancellationToken)
     {
-        var category = NotificationCategories.For(message, @event);
-        var audience = AccessRule.CurrentOwnerAudience(tenant, horse, message).ToList();
-        var parties = await db.Parties.Where(p => audience.Contains(p.Id)).ToDictionaryAsync(p => p.Id, cancellationToken);
-        var choices = (await db.NotificationPreferences.Where(p => audience.Contains(p.PartyId) && p.Category == category.Code).ToListAsync(cancellationToken))
-            .ToLookup(p => p.PartyId);
-
-        IReadOnlySet<DeliveryChannel> ChannelsFor(Guid partyId)
-        {
-            if (!parties.TryGetValue(partyId, out var party)) return new HashSet<DeliveryChannel>();
-            var preferred = NotificationCategories.ChannelsFor(category, choices[partyId], party.PrimaryEmail is not null, party.PrimaryMobile is not null, smsAvailable);
-            if (channel is not { } forced) return preferred;
-            var optedOut = !category.Important && NotificationCategories.Chosen(category, choices[partyId]).Count == 0;
-            return optedOut ? new HashSet<DeliveryChannel>() : new HashSet<DeliveryChannel> { forced };
-        }
+        var plan = (await PlanAsync(db, tenant, horse, @event, message, channel, smsAvailable, cancellationToken)).ToDictionary(r => r.Party.Id);
+        IReadOnlySet<DeliveryChannel> ChannelsFor(Guid partyId) => plan.TryGetValue(partyId, out var r) ? r.Channels : new HashSet<DeliveryChannel>();
 
         var deliveries = Delivery.ForOwners(tenant, horse, message, ChannelsFor, now);
         var issued = new HashSet<string>();
@@ -49,6 +37,67 @@ public static class OutboundQueue
 
         db.Deliveries.AddRange(deliveries);
         return deliveries;
+    }
+
+    /// <summary>
+    /// One owner and the channels a message is queued on for them. <see cref="Why"/> is set when it won't reach them: no
+    /// channels at all, or only ones that will be marked not sent (an override to email for someone with no address).
+    /// </summary>
+    public sealed record Recipient(Party Party, IReadOnlySet<DeliveryChannel> Channels, string? Why);
+
+    /// <summary>
+    /// Who <paramref name="message"/> would go to and how, without sending anything: every current owner except the house
+    /// share, including those it won't reach and why ("no email address", "switched off …"), so staff can see it before it
+    /// goes. The send itself uses exactly this.
+    /// </summary>
+    public static async Task<IReadOnlyList<Recipient>> PlanAsync(
+        PaddocksideDbContext db, Tenant tenant, Horse horse, Event? @event, StreamItem message, DeliveryChannel? channel, bool smsAvailable,
+        CancellationToken cancellationToken)
+    {
+        var category = NotificationCategories.For(message, @event);
+        var audience = AccessRule.CurrentOwnerAudience(tenant, horse, message);
+        var current = horse.CurrentManagementPeriod is { } period
+            ? horse.Interests.Where(i => i.ManagementPeriodId == period.Id && i.IsActive && i.PartyId != tenant.HousePartyId).Select(i => i.PartyId).ToHashSet()
+            : [];
+        var ids = current.Union(audience).ToList();
+        var parties = await db.Parties.Where(p => ids.Contains(p.Id)).ToListAsync(cancellationToken);
+        var choices = (await db.NotificationPreferences.Where(p => ids.Contains(p.PartyId) && p.Category == category.Code).ToListAsync(cancellationToken))
+            .ToLookup(p => p.PartyId);
+
+        Recipient Plan(Party party)
+        {
+            var none = new HashSet<DeliveryChannel>();
+            if (!audience.Contains(party.Id))
+                return new(party, none, message.Scope == StreamItemScope.NamedParties ? "Not one of the owners you chose" : "Wasn't an owner on the message's date");
+            var (hasEmail, hasMobile) = (party.PrimaryEmail is not null, party.PrimaryMobile is not null);
+            var mine = choices[party.Id].ToList();
+            if (!category.Important && NotificationCategories.Chosen(category, mine).Count == 0)
+                return new(party, none, $"Has switched off \"{category.Label}\"");
+
+            // Staff's override is queued as chosen; the dispatcher marks it not sent if there's no way to deliver it.
+            IReadOnlySet<DeliveryChannel> how = channel is { } forced
+                ? new HashSet<DeliveryChannel> { forced }
+                : NotificationCategories.ChannelsFor(category, mine, hasEmail, hasMobile, smsAvailable);
+            bool Works(DeliveryChannel c) => c switch
+            {
+                DeliveryChannel.Email => party.PrimaryEmail is { IsDeliverable: true },
+                DeliveryChannel.Sms => hasMobile && smsAvailable,
+                _ => true, // portal only: nothing is sent, and it's on their page
+            };
+            if (how.Any(Works)) return new(party, how, null);
+            return new(party, how, channel switch
+            {
+                DeliveryChannel.Sms when !smsAvailable => "Texts can't be sent yet",
+                DeliveryChannel.Sms => "No mobile number",
+                DeliveryChannel.Email when party.PrimaryEmail is { IsDeliverable: false } => "Their email address bounces",
+                DeliveryChannel.Email => "No email address",
+                _ when party.PrimaryEmail is { IsDeliverable: false } => "Their email address bounces",
+                _ when !hasEmail && !hasMobile => "No email address or mobile",
+                _ => "No email address (texts can't be sent yet)",
+            });
+        }
+
+        return parties.Select(Plan).ToList();
     }
 
     /// <summary>

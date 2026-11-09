@@ -51,7 +51,6 @@ public sealed class NotificationPreference
 /// </summary>
 public static class NotificationCategories
 {
-    private static readonly IReadOnlySet<DeliveryChannel> None = new HashSet<DeliveryChannel>();
     private static readonly IReadOnlySet<DeliveryChannel> Email = new HashSet<DeliveryChannel> { DeliveryChannel.Email };
     private static readonly IReadOnlySet<DeliveryChannel> Text = new HashSet<DeliveryChannel> { DeliveryChannel.Sms };
     private static readonly IReadOnlySet<DeliveryChannel> Both = new HashSet<DeliveryChannel> { DeliveryChannel.Email, DeliveryChannel.Sms };
@@ -75,9 +74,9 @@ public static class NotificationCategories
         new(RaceDayArrangements, "Race-day arrangements", "Owners tickets, dining and transport.", Email, Important: true),
         new(Results, "Results and stewards' reports", "How your horse ran, as soon as it's official.", Both, Important: true),
         new(Ownership, "Ownership and accounts", "Changes to your share, and administrative notices.", Email, Important: true),
-        new(Entries, "Nominations and entries", "When your horse is nominated or entered for a race or trial.", None, Important: false),
+        new(Entries, "Nominations and entries", "When your horse is nominated or entered for a race or trial.", Email, Important: false),
         new(StableUpdates, "Trainer and stable updates", "Notes from the trainer and the team between races.", Email, Important: false),
-        new(Media, "New photos and videos", "When new photos or videos of your horse are added.", None, Important: false),
+        new(Media, "New photos and videos", "When new photos or videos of your horse are added.", Email, Important: false),
         new(SalesBreedingCare, "Sales, breeding and care", "Vet visits, spells, sales and breeding news.", Email, Important: false),
         new(News, "General news", "Newsletters and news that isn't about one horse.", Email, Important: false),
     ];

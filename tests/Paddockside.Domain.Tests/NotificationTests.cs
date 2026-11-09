@@ -46,6 +46,15 @@ public sealed class NotificationTests
         Assert.Empty(NotificationCategories.ChannelsFor(StableUpdates, [Choice(owner, StableUpdates, DeliveryChannel.Email, false)], true, true, true));
     }
 
+    [Fact]
+    public void Every_kind_of_update_is_on_by_default()
+    {
+        // David, 9 Nov 2026: every step on by default for all owners; owners switch off what they don't want.
+        var owner = new Party(Guid.NewGuid(), "Ann");
+        foreach (var category in NotificationCategories.All)
+            Assert.NotEmpty(NotificationCategories.ChannelsFor(category, [], hasEmail: true, hasMobile: false, smsAvailable: false));
+    }
+
     [Theory]
     [InlineData("RaceStart", "ACC_FACT", NotificationCategories.Acceptances)]
     [InlineData("RaceStart", "BARRIER", NotificationCategories.Acceptances)]

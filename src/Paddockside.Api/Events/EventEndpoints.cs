@@ -86,6 +86,18 @@ public static class EventEndpoints
 
     public sealed record Posted(Guid Id, int Recipients);
 
+    /// <param name="Photos">Photos, video or a voice note shared with owners, rather than a message.</param>
+    public sealed record RecipientsRequest(string Scope, string? Step, string Channel, IReadOnlyList<Guid>? NamedParties, bool Photos = false);
+
+    /// <param name="How">"Email", "Email and text", "On their page only".</param>
+    public sealed record Going(Guid PartyId, string Name, string How);
+
+    public sealed record LeftOut(Guid PartyId, string Name, string Why);
+
+    /// <param name="Category">The kind of update it counts as, which owners can switch off: "Nominations and entries".</param>
+    /// <param name="ToConfirm">Owners still on "share to confirm", who are sent nothing until their share is set.</param>
+    public sealed record Recipients(string Category, IReadOnlyList<Going> Going, IReadOnlyList<LeftOut> LeftOut, int ToConfirm);
+
     /// <summary>A race's details for the day, for owners; null for other event types.</summary>
     public sealed record RaceDayView(string? Gate, string? Dining, string? Note);
 
@@ -96,6 +108,7 @@ public static class EventEndpoints
         var events = app.MapGroup("/api/events").RequireAuthorization(StaffPolicy.Name);
         events.MapGet("/{id:guid}", GetEvent);
         events.MapPost("/{id:guid}/items", Post);
+        events.MapPost("/{id:guid}/recipients", RecipientsAsync);
         events.MapPost("/{id:guid}/items/{itemId:guid}/answers", RecordAnswer);
         events.MapGet("/{id:guid}/as-owner/{partyId:guid}", AsOwner);
     }
@@ -207,6 +220,51 @@ public static class EventEndpoints
             e.EventType == EventTypes.RaceStart.Code ? new RaceDayView(e.Gate, e.Dining, e.RaceDayNote) : null,
             FactEndpoints.For(type), FactEndpoints.Sources));
     }
+
+    /// <summary>
+    /// Who a message (or photos) would go to before it is sent, and who it won't reach and why, worked out exactly as the
+    /// send does (OutboundQueue.PlanAsync). Nothing is saved.
+    /// </summary>
+    private static async Task<IResult> RecipientsAsync(Guid id, RecipientsRequest request, PaddocksideDbContext db, TimeProvider clock, ISmsSender texts,
+        CancellationToken cancellationToken)
+    {
+        var e = await db.Events.AsNoTracking().SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
+        if (e is null) return Results.NotFound();
+        if (!Enum.TryParse<StreamItemScope>(request.Scope, out var scope) || scope is not (StreamItemScope.Owners or StreamItemScope.OwnersAtTheTime or StreamItemScope.NamedParties))
+            return Problem("Choose who can see it.");
+        var horse = await db.Horses.AsNoTracking().Include(h => h.ManagementPeriods).Include(h => h.Interests).AsSplitQuery()
+            .SingleAsync(h => h.Id == e.HorseId, cancellationToken);
+        var tenant = await db.Tenants.AsNoTracking().SingleAsync(cancellationToken);
+        var stepCode = string.IsNullOrWhiteSpace(request.Step) ? null
+            : EventTypes.Find(e.EventType).Steps.FirstOrDefault(s => s.Label == request.Step || s.Code == request.Step)?.Code;
+
+        // The message as it would be, never saved: the access rule and the categories need its scope, step and date.
+        var now = clock.GetUtcNow();
+        if (scope == StreamItemScope.NamedParties && request.NamedParties is not { Count: > 0 }) return Problem("Choose at least one owner.");
+        var named = scope == StreamItemScope.NamedParties ? request.NamedParties : null;
+        var draft = request.Photos
+            ? StreamItem.Media(horse, e, null, null, scope, now, "Staff", named)
+            : StreamItem.Message(horse, e, null, "(not sent)", scope, now, "Staff", named, stepCode);
+        var channel = request.Photos ? null : ToChannel(request.Channel);
+        var plan = await OutboundQueue.PlanAsync(db, tenant, horse, e, draft, channel, texts.IsConfigured, cancellationToken);
+
+        var period = horse.CurrentManagementPeriod;
+        var toConfirm = period is null ? 0 : horse.Interests
+            .Where(i => i.ManagementPeriodId == period.Id && i.State == InterestState.Pending && i.PartyId != tenant.HousePartyId).Select(i => i.PartyId).Distinct().Count();
+        return Results.Ok(new Recipients(
+            NotificationCategories.For(draft, e).Label,
+            plan.Where(r => r.Why is null).OrderBy(r => r.Party.DisplayName).Select(r => new Going(r.Party.Id, r.Party.DisplayName, How(r.Channels))).ToList(),
+            plan.Where(r => r.Why is not null).OrderBy(r => r.Party.DisplayName).Select(r => new LeftOut(r.Party.Id, r.Party.DisplayName, r.Why!)).ToList(),
+            toConfirm));
+    }
+
+    private static string How(IReadOnlySet<DeliveryChannel> channels) => channels.Order().ToList() switch
+    {
+        [DeliveryChannel.Email, DeliveryChannel.Sms] => "Email and text",
+        [DeliveryChannel.Email] => "Email",
+        [DeliveryChannel.Sms] => "Text",
+        _ => "On their page only",
+    };
 
     private static async Task<IResult> Post(
         Guid id,

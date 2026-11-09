@@ -117,16 +117,18 @@ Categories are product library items; the tenant enables and labels them and set
 
 | Category | Default channels (client) | Important? | Opt-out allowed? |
 |---|---|---|---|
-| Nomination / entry | Portal, push | No | Yes |
+| Nomination / entry | Email, push | No | Yes |
 | Acceptance, barrier, weight | SMS, push, email | Yes | No |
 | Scratching, jockey change on the day | SMS, push | Yes | No |
 | Raceday logistics (tickets, dining, transport) | Email, push | Yes on the day | No |
 | Result and stewards' report | SMS, push, email | Yes | No |
 | Trainer update (text, voice, video) | Email, push | No | Yes |
-| Media added | Push | No | Yes |
+| Media added | Email, push | No | Yes |
 | Ownership and administrative | Email | Yes | No |
 | Sale, breeding, care events | Email, push | Per event type | Yes |
 | Tenant newsletter / general | Email | No | Yes |
+
+Every category is on by default for every owner (David, 9 Nov 2026: "everyone of the steps should be on by default"); owners switch off what they don't want.
 
 "Important" means: sent regardless of quiet hours and opt-outs, falls back across channels, and is escalated to staff if undelivered on every channel within an hour. A recipient who has opted out of everything optional still gets important messages; that is disclosed at opt-out time.
 

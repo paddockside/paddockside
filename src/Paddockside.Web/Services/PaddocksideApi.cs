@@ -88,6 +88,17 @@ public sealed record EventTypeOption(string Code, string Name, string KeyDateLab
 
 public sealed record CreatedEvent(Guid Id);
 
+public sealed record RecipientsRequest(string Scope, string? Step, string Channel, IReadOnlyList<Guid> NamedParties, bool Photos);
+
+/// <param name="How">"Email", "Email and text", "On their page only".</param>
+public sealed record RecipientGoing(Guid PartyId, string Name, string How);
+
+public sealed record RecipientLeftOut(Guid PartyId, string Name, string Why);
+
+/// <param name="Category">The kind of update it counts as: "Nominations and entries".</param>
+/// <param name="ToConfirm">Owners on "share to confirm", sent nothing until their share is set.</param>
+public sealed record RecipientsView(string Category, List<RecipientGoing> Going, List<RecipientLeftOut> LeftOut, int ToConfirm);
+
 public sealed record ComposeRequest(string Audience, string Scope, string? Step, string Channel, IReadOnlyList<Guid> NamedParties, string Body, PromptRequest? Prompt = null);
 
 public sealed record Posted(Guid Id, int Recipients);
@@ -336,6 +347,9 @@ public sealed class PaddocksideApi(HttpClient http)
     public Task<ApiResult<EventPage>> EventAsync(Guid id) => GetAsync<EventPage>($"api/events/{id}");
 
     public Task<ApiResult<Posted>> PostToEventAsync(Guid id, ComposeRequest request) => PostAsync<Posted>($"api/events/{id}/items", request);
+
+    /// <summary>Who a message or photos would go to, and who they won't reach and why. Sends nothing.</summary>
+    public Task<ApiResult<RecipientsView>> RecipientsAsync(Guid id, RecipientsRequest request) => PostAsync<RecipientsView>($"api/events/{id}/recipients", request);
 
     public Task<ApiResult<List<EventTypeOption>>> EventTypesAsync() => GetAsync<List<EventTypeOption>>("api/event-types");
 

@@ -80,7 +80,7 @@
         <div class="field">
             <label class="field-label" for="mailout-signature">Your signature</label>
             <textarea id="mailout-signature" class="input min-h-[6rem] py-3" maxlength="1000" @bind="_signature" @bind:event="oninput"
-                      placeholder="Kind regards,&#10;Kate Wells&#10;0412 345 678"></textarea>
+                      placeholder="@SignatureExample"></textarea>
             <div class="flex flex-wrap items-center gap-3">
                 <button type="button" class="btn-secondary min-h-[36px] px-3" disabled="@(_busy || (_signature ?? "").Trim() == _savedSignature)" @onclick="SaveSignatureAsync">Save as my signature</button>
                 <span class="field-hint" role="status">@SignatureNote</span>
@@ -160,6 +160,7 @@
     private readonly List<MailoutAttachmentView> _files = [];
 
     private const long MaxTotalBytes = 7L * 1024 * 1024;
+    private const string SignatureExample = "Kind regards,\nKate Wells\n0412 345 678";
     private const string Accept = ".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.csv,.txt,.jpg,.jpeg,.png,.gif";
 
     protected override async Task OnInitializedAsync()

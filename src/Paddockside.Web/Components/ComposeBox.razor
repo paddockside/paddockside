@@ -184,7 +184,8 @@
 
     [Parameter] public bool Busy { get; set; }
 
-    [Parameter] public EventCallback<ComposeDraft> OnSend { get; set; }
+    /// <summary>Sends the draft; true when it went, so the box clears. False (cancelled, or an error) keeps everything as written.</summary>
+    [Parameter] public Func<ComposeDraft, Task<bool>>? OnSend { get; set; }
 
     /// <summary>The mockup's chips: a pill, green when chosen.</summary>
     private static string Chip(bool selected) =>
@@ -280,7 +281,8 @@
             : null;
         if (_error is not null) return;
 
-        await OnSend.InvokeAsync(new ComposeDraft(_audience, _scope, _step == "" ? null : _step, _channel, _named.ToList(), _body.Trim(), Prompt, _files.ToList()));
+        var draft = new ComposeDraft(_audience, _scope, _step == "" ? null : _step, _channel, _named.ToList(), _body.Trim(), Prompt, _files.ToList());
+        if (OnSend is not null && !await OnSend(draft)) return;
         _files.Clear();
         _body = "";
         _named.Clear();
