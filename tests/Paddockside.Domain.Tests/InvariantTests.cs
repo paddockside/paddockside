@@ -67,7 +67,7 @@ public sealed class InvariantTests
     }
 
     [Fact]
-    public void A_closed_event_reopens_when_activity_arrives()
+    public void A_closed_event_reopens_when_staff_post_on_it()
     {
         var s = new Stable();
         var raceStart = new Event(s.Horse, "RaceStart", "Flemington, R4", On(2025, 11, 1));

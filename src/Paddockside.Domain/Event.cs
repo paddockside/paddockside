@@ -99,7 +99,8 @@ public sealed class Event
 
     /// <summary>
     /// A member of staff closes the event now, open or still a draft, whatever is still to come: an old event left open
-    /// stops new mail filing itself on the horse's newest one. Activity later still reopens it (D11).
+    /// stops new mail filing itself on the horse's newest one. Staff posting on it later reopens it (D11); a reply or a
+    /// message that comes in doesn't.
     /// </summary>
     public void Close(DateTimeOffset at, string closedBy, string? reason)
     {
@@ -128,7 +129,11 @@ public sealed class Event
         return day >= keyDay.AddDays(-window.DaysBefore) && day <= keyDay.AddDays(window.DaysAfter);
     }
 
-    /// <summary>A matching item arrived. A closed event reopens rather than rejecting it.</summary>
+    /// <summary>
+    /// Staff worked on the event (posted, shared, recorded a fact): a closed event reopens (D11). Something coming in — a
+    /// reply, an owner writing, an email placed on it — doesn't call this: a closed event stays closed, so it doesn't
+    /// compete with the horse's current one, and Today lists what arrived (David, 10 Nov 2026).
+    /// </summary>
     public void RecordActivity()
     {
         if (Status != EventStatus.Closed) return;

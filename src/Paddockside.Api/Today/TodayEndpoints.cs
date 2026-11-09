@@ -45,7 +45,10 @@ public static class TodayEndpoints
 
     public sealed record TodayPage(string Date, IReadOnlyList<Runner> Today, IReadOnlyList<Runner> Tomorrow, IReadOnlyList<Undelivered> Undelivered,
         QueueState Queue, IReadOnlyList<QuietEvent> Dormant, IReadOnlyList<QuietEvent> Drafts, IReadOnlyList<Health> Health,
-        IReadOnlyList<OverAllocated>? OverAllocated = null, IReadOnlyList<Runner>? ComingUp = null);
+        IReadOnlyList<OverAllocated>? OverAllocated = null, IReadOnlyList<Runner>? ComingUp = null, IReadOnlyList<QuietEvent>? ClosedReplies = null);
+
+    /// <summary>How long a reply on a closed event stays on Today.</summary>
+    public static readonly TimeSpan ClosedReplyShown = TimeSpan.FromDays(14);
 
     private static readonly string[] RunnerTypes = [EventTypes.RaceStart.Code, EventTypes.BarrierTrial.Code];
 
@@ -131,6 +134,22 @@ public static class TodayEndpoints
                 byEvent[x.Event.Id].Any() ? $"Nothing new since {Words.Day(x.Last!.Value, now)}" : $"Opened {Words.Day(x.Last!.Value, now)}, nothing posted"))
             .ToList();
 
+        // Replies and messages that came in on a closed event in the last fortnight: it stays closed, so they'd be missed.
+        var recentlyIn = now - ClosedReplyShown;
+        var closedIn = await db.StreamItems.AsNoTracking()
+            .Where(i => i.Direction == StreamItemDirection.Inbound && i.EventId != null && i.RecordedAt >= recentlyIn)
+            .Join(db.Events.AsNoTracking().Where(e => e.Status == EventStatus.Closed), i => i.EventId, e => e.Id, (i, e) => new { Item = i, Event = e })
+            .Where(x => x.Event.ClosedAt != null && x.Item.RecordedAt > x.Event.ClosedAt)
+            .ToListAsync(cancellationToken);
+        foreach (var h in closedIn.Select(x => x.Event.HorseId).Distinct().Where(id => !horses.ContainsKey(id)).ToList())
+            horses[h] = (await db.Horses.AsNoTracking().SingleAsync(x => x.Id == h, cancellationToken)).Name;
+        var closedReplies = closedIn.GroupBy(x => x.Event.Id)
+            .Select(g => (Event: g.First().Event, Latest: g.OrderByDescending(x => x.Item.RecordedAt).First().Item, Count: g.Count()))
+            .OrderByDescending(x => x.Latest.RecordedAt)
+            .Select(x => new QuietEvent(x.Event.Id, HorseName(x.Event.HorseId), EventTypes.Find(x.Event.EventType).Name, x.Event.Title,
+                $"{(x.Count == 1 ? "1 message" : $"{x.Count} messages")} since it closed; the latest from {x.Latest.AuthorName ?? "someone"}, {Words.Recently(x.Latest.RecordedAt, now)}"))
+            .ToList();
+
         var drafts = events.Where(e => e.Status == EventStatus.Draft)
             .OrderBy(e => e.KeyDate ?? DateTimeOffset.MaxValue)
             .Select(e => new QuietEvent(e.Id, HorseName(e.HorseId), EventTypes.Find(e.EventType).Name, e.Title,
@@ -151,7 +170,8 @@ public static class TodayEndpoints
                 .OrderBy(h => h.Name)
                 .Select(h => new OverAllocated(h.Id, h.Name, Horse.Percent(h.AllocatedUnits)))
                 .ToList(),
-            ComingUp: comingUp.Select(ToDatedRunner).ToList());
+            ComingUp: comingUp.Select(ToDatedRunner).ToList(),
+            ClosedReplies: closedReplies);
     }
 
     private static string Excerpt(string body) => body.Length <= 60 ? body : $"{body[..60].TrimEnd()}…";

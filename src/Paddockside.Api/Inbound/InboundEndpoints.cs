@@ -202,7 +202,7 @@ public static class InboundEndpoints
         var item = StreamItem.Inbound(horse, e, message.Subject, display, sender?.DisplayName ?? message.FromName ?? message.FromAddress, sender?.Id,
             message.Channel == "Sms" ? "SMS" : "Email", message.ReceivedAt);
         db.StreamItems.Add(item);
-        e?.RecordActivity();
+        // a closed event stays closed when something comes in (David, 10 Nov 2026); Today lists it
         await Infrastructure.Inbound.TrainerMail.FileAsync(db, e, item, cancellationToken); // the trainer's: under the step due
 
         var where = e is null ? $"{horse.Name} (on the horse)" : $"{horse.Name}, {e.Title}";

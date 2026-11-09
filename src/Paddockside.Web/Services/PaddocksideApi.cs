@@ -185,7 +185,8 @@ public sealed record TodayHealth(string Label, string State, string Detail);
 public sealed record TodayOverAllocated(Guid HorseId, string Horse, string Allocated);
 
 public sealed record TodayPage(string Date, List<TodayRunner> Today, List<TodayRunner> Tomorrow, List<TodayUndelivered> Undelivered, TodayQueue Queue,
-    List<TodayQuiet> Dormant, List<TodayQuiet> Drafts, List<TodayHealth> Health, List<TodayOverAllocated>? OverAllocated = null, List<TodayRunner>? ComingUp = null);
+    List<TodayQuiet> Dormant, List<TodayQuiet> Drafts, List<TodayHealth> Health, List<TodayOverAllocated>? OverAllocated = null, List<TodayRunner>? ComingUp = null,
+    List<TodayQuiet>? ClosedReplies = null);
 
 public sealed record InboundView(
     Guid Id,

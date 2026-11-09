@@ -50,7 +50,22 @@ public sealed partial class OwnerSignInTests
         // Now the next email files itself on the one open race.
         await InboundEmailAsync(inbox, from, "This week", "All set.");
         Assert.Contains((await admin.GetFromJsonAsync<ClosedPage>($"/api/events/{newer}"))!.Items, i => i.Title == "This week");
-        await using var check = db.ContextFor(seed.TenantId);
-        Assert.Contains(check.AuditEntries, e => e.Action == "event.closed" && e.Summary.Contains("Scratched; not running this prep"));
+        await using (var check = db.ContextFor(seed.TenantId))
+            Assert.Contains(check.AuditEntries, e => e.Action == "event.closed" && e.Summary.Contains("Scratched; not running this prep"));
+
+        // A week later Ann answers a message from the closed race: kept under it, the race stays closed, Today shows it.
+        using var ann = await SignInAsync(seed.AnnEmail);
+        Assert.Equal(HttpStatusCode.Created, (await ann.PostApiAsync($"/api/my/items/{seed.MessageId}/replies", new { body = "Sorry I missed this: two tickets." })).StatusCode);
+        Assert.Equal("Closed", (await admin.GetFromJsonAsync<ClosedPage>($"/api/events/{seed.EventId}"))!.Event.Status);
+        var today = (await admin.GetFromJsonAsync<TodayWithClosed>("/api/today"))!;
+        var line = Assert.Single(today.ClosedReplies!);
+        Assert.Equal(seed.EventId, line.Id);
+        Assert.Contains("the latest from Ann Owner", line.Detail);
+
+        // Mail to the horse still files itself on the one open race.
+        await InboundEmailAsync(inbox, from, "After the reply", "Still all set.");
+        Assert.Contains((await admin.GetFromJsonAsync<ClosedPage>($"/api/events/{newer}"))!.Items, i => i.Title == "After the reply");
     }
+
+    private sealed record TodayWithClosed(List<TodayQuiet>? ClosedReplies);
 }

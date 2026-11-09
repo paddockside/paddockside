@@ -86,6 +86,11 @@
                     }
                 </a>
 
+                @if (_page.ClosedReplies is { Count: > 0 } closedReplies)
+                {
+                    @Quiet("Replies on closed events", closedReplies, "Kept with the message they answer; the event stays closed. Shown for two weeks.")
+                }
+
                 @if (_page.Drafts.Count > 0)
                 {
                     @Quiet("Drafts to open", _page.Drafts, "Owners can't see a draft and nothing can be sent from it.")

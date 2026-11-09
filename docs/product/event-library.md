@@ -21,7 +21,7 @@ Draft ──open──▶ Open ──close──▶ Closed
 
 - **Draft**: created by staff or by a fact (a nomination arrives for a race with no event yet — see §5) but not yet visible to clients. Nothing is sent from a draft. Drafts older than 30 days with no items are deleted by a nudge, not automatically.
 - **Open**: the normal state. Clients with access see the client-scoped items.
-- **Closed**: by a person only (D11). Staff can still post to a closed event (it reopens). Closed events are collapsed on the horse timeline.
+- **Closed**: by a person only (D11); a tenant admin, with a reason if steps are still to come. Staff can still post to a closed event (it reopens). A reply or message that comes in is kept on it and it stays closed; Today lists it. Closed events are collapsed on the horse timeline.
 - **Cancelled**: the thing did not happen — the horse was not nominated after all, the sale entry was withdrawn. Items are kept; the event is shown struck through on the timeline and is a weak match candidate. Cancelled is terminal except by staff "restore to Open".
 - **Reopen on activity**: an inbound item placed on a closed event by tier 1 or 2 reopens it and notifies the coordinator. Tier 3 suggestions on a closed event do not reopen it until confirmed.
 

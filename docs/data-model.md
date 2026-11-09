@@ -85,7 +85,7 @@ A chapter. Opens when there is something to communicate about, and **closes only
 
 Holds: horse, event type, title, status, key date, opened / closed timestamps, closed-by, and a typed context payload.
 
-**Lifecycle (D11).** Status is Draft / Open / Closed / Cancelled. Nothing closes automatically — a race event can run well past the day-after report, and a celebration dinner a week after a win still belongs to that race. A closed event that receives a matching item **reopens itself** rather than rejecting it.
+**Lifecycle (D11).** Status is Draft / Open / Closed / Cancelled. Nothing closes automatically — a race event can run well past the day-after report, and a celebration dinner a week after a win still belongs to that race. A closed event that receives a matching item keeps it, threaded where it belongs, and **stays closed** (changed 10 Nov 2026: an old race reopened by a late reply competed with the horse's current one for new mail); Today lists replies on closed events. Staff posting on a closed event reopens it.
 
 Because open/closed is a human judgement, the matcher cannot lean on it. Two derived values do the work instead:
 

@@ -385,7 +385,7 @@ public static class OwnerEndpoints
         var item = StreamItem.FromOwner(horse, e, viewer.Party, request.Body, now);
         db.StreamItems.Add(item);
         db.ItemReads.Add(new ItemRead(item, viewer.Party.Id, now));
-        e.RecordActivity();
+        // a closed event stays closed when something comes in (David, 10 Nov 2026); Today lists it
         await db.SaveChangesAsync(cancellationToken);
         return Results.Created($"/api/my/events/{id}#item-{item.Id}", new { item.Id });
     }
@@ -404,7 +404,7 @@ public static class OwnerEndpoints
         var now = clock.GetUtcNow();
         var reply = item.Reply(horse, @event, party.DisplayName, party.Id, "Portal", request.Body.Trim(), now);
         db.StreamItems.Add(reply);
-        @event?.RecordActivity();
+        // a closed event stays closed when something comes in (David, 10 Nov 2026); Today lists it
         foreach (var delivery in await db.Deliveries.Where(d => d.StreamItemId == item.Id && d.PartyId == party.Id).ToListAsync(cancellationToken))
             delivery.Record(DeliveryStatus.Replied, now);
         await db.SaveChangesAsync(cancellationToken);
@@ -491,7 +491,7 @@ public static class OwnerEndpoints
         {
             var @event = item.EventId is { } eventId ? await db.Events.SingleAsync(e => e.Id == eventId, cancellationToken) : null;
             db.StreamItems.Add(item.Reply(horse, @event, party.DisplayName, party.Id, "Portal", hadAnswer ? $"Changed my answer to {value}" : $"My answer: {value}", now));
-            @event?.RecordActivity();
+            // a closed event stays closed when something comes in (David, 10 Nov 2026); Today lists it
             foreach (var delivery in await db.Deliveries.Where(d => d.StreamItemId == item.Id && d.PartyId == party.Id).ToListAsync(cancellationToken))
                 delivery.Record(DeliveryStatus.Replied, now);
         }

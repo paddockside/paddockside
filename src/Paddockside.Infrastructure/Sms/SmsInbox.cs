@@ -52,7 +52,7 @@ public sealed class SmsInbox(TenantScopedDb tenants, TimeProvider clock, ILogger
             var reply = message.Reply(horse, @event, party.DisplayName, party.Id, "SMS", body.Trim(), now);
             inbound.Place(3, reply, null, party.Id, body.Trim(), $"Text reply from {party.DisplayName}, the latest text to this number being this message", now);
             delivery.Record(DeliveryStatus.Replied, now);
-            @event?.RecordActivity();
+            // a closed event stays closed when something comes in (David, 10 Nov 2026); Today lists it
             db.AddRange(inbound, reply);
             await PromptAnswering.ReadFromReplyAsync(db, message, party, body, now, cancellationToken);
             await db.SaveChangesAsync(cancellationToken);

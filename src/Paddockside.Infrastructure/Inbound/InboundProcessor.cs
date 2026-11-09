@@ -85,7 +85,7 @@ public sealed partial class InboundProcessor(TenantScopedDb tenants, IOptions<Em
             var reply = original.Reply(horse, @event, party.DisplayName, party.Id, "Email", display, message.ReceivedAt);
             db.StreamItems.Add(reply);
             await PromptAnswering.ReadFromReplyAsync(db, original, party, display, message.ReceivedAt, cancellationToken); // "Two please" counts as 2
-            @event?.RecordActivity(); // a closed event reopens rather than turning the reply away (D11)
+            // a closed event stays closed when something comes in (David, 10 Nov 2026); Today lists it
 
             var delivery = await db.Deliveries.SingleOrDefaultAsync(
                 d => d.StreamItemId == itemId && d.PartyId == partyId && d.Channel == DeliveryChannel.Email, cancellationToken);
