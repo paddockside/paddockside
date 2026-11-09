@@ -301,6 +301,47 @@ namespace Paddockside.Infrastructure.Persistence.Migrations
                     b.ToTable("Horses");
                 });
 
+            modelBuilder.Entity("Paddockside.Domain.HorseContact", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Emails")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<DateTimeOffset>("From")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<Guid>("HorseId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("PartyId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Role")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset?>("To")
+                        .HasColumnType("datetimeoffset");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PartyId");
+
+                    b.HasIndex("TenantId");
+
+                    b.HasIndex("HorseId", "PartyId");
+
+                    b.ToTable("HorseContacts");
+                });
+
             modelBuilder.Entity("Paddockside.Domain.InboundMessage", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1545,6 +1586,27 @@ namespace Paddockside.Infrastructure.Persistence.Migrations
                         });
 
                     b.Navigation("Names");
+                });
+
+            modelBuilder.Entity("Paddockside.Domain.HorseContact", b =>
+                {
+                    b.HasOne("Paddockside.Domain.Horse", null)
+                        .WithMany()
+                        .HasForeignKey("HorseId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Paddockside.Domain.Party", null)
+                        .WithMany()
+                        .HasForeignKey("PartyId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Paddockside.Domain.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("Paddockside.Domain.InboundMessage", b =>

@@ -119,6 +119,7 @@ public sealed partial class InboundProcessor(TenantScopedDb tenants, IOptions<Em
             var item = StreamItem.Inbound(horse, @event, message.Subject, display, sender?.DisplayName ?? message.FromName ?? message.FromAddress, sender?.Id, "Email", message.ReceivedAt);
             db.StreamItems.Add(item);
             @event?.RecordActivity();
+            await TrainerMail.FileAsync(db, @event, item, cancellationToken); // the trainer's: under the step due
 
             var reason = candidates.Count switch
             {

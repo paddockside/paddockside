@@ -356,6 +356,12 @@ public static class ClientEndpoints
         var parties = await db.Parties.AsNoTracking().Where(p => p.Id != tenant.HousePartyId).ToListAsync(cancellationToken);
         var horses = await db.Horses.AsNoTracking().Include(h => h.ManagementPeriods).Include(h => h.Interests).AsSplitQuery().ToListAsync(cancellationToken);
         var lists = await db.ClientLists.AsNoTracking().ToListAsync(cancellationToken);
+
+        // A horse's trainer, vet, authority or club is a contact, not a client, unless they've owned a share or are on a list.
+        var contacts = (await db.HorseContacts.AsNoTracking().Select(c => c.PartyId).Distinct().ToListAsync(cancellationToken)).ToHashSet();
+        var owners = horses.SelectMany(h => h.Interests).Select(i => i.PartyId).ToHashSet();
+        var listed = lists.SelectMany(l => l.Members).Select(m => m.PartyId).ToHashSet();
+        parties = parties.Where(p => !contacts.Contains(p.Id) || owners.Contains(p.Id) || listed.Contains(p.Id)).ToList();
         return new World(parties, horses, lists);
     }
 

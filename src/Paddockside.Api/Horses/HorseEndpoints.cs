@@ -42,8 +42,10 @@ public static class HorseEndpoints
         int Unread = 0);
 
     /// <summary>An item on the horse but not on an event: mail to its inbox with no event to go on, or left there from the queue.</summary>
+    /// <param name="FromRole">Who the sender is to the horse ("Trainer"), once staff have said.</param>
+    /// <param name="CanTagSender">Came in from someone the horse doesn't know yet: staff can say who they are.</param>
     public sealed record HorseItem(Guid Id, string Kind, string At, string? Title, string Body, string? Author, string? Channel, bool CanReplyToSender = false,
-        IReadOnlyList<HorseReply>? Replies = null, IReadOnlyList<Events.EventEndpoints.MediaView>? Media = null);
+        IReadOnlyList<HorseReply>? Replies = null, IReadOnlyList<Events.EventEndpoints.MediaView>? Media = null, string? FromRole = null, bool CanTagSender = false);
 
     public sealed record HorseReply(string Author, string At, string Body);
 
@@ -134,10 +136,15 @@ public static class HorseEndpoints
             .OrderBy(i => i.OccurredAt).ToListAsync(cancellationToken)).ToLookup(i => i.InReplyToId!.Value);
         var media = (await db.MediaAssets.AsNoTracking().Where(a => ids.Contains(a.StreamItemId)).OrderBy(a => a.CreatedAt).ToListAsync(cancellationToken))
             .ToLookup(a => a.StreamItemId);
+        var roles = (await db.HorseContacts.AsNoTracking().Where(c => c.HorseId == id && c.To == null).ToListAsync(cancellationToken))
+            .GroupBy(c => c.PartyId).ToDictionary(g => g.Key, g => HorseContact.Label(g.Select(c => c.Role).Order().First()));
+        string? RoleOf(StreamItem i) => i.AuthorPartyId is { } a ? roles.GetValueOrDefault(a) : null;
         return Results.Ok(items.Select(i => new HorseItem(i.Id, i.Kind.ToString(), Words.DayAndTime(i.OccurredAt, now), i.Title, i.Body, i.AuthorName, i.Channel,
             i is { Kind: StreamItemKind.Message, Direction: StreamItemDirection.Inbound },
             replies[i.Id].Select(r => new HorseReply(r.AuthorName ?? "Unknown", Words.Recently(r.OccurredAt, now), r.Body)).ToList(),
-            media[i.Id].Select(Events.EventEndpoints.ToView).ToList())).ToList());
+            media[i.Id].Select(Events.EventEndpoints.ToView).ToList(),
+            i.Direction == StreamItemDirection.Inbound ? RoleOf(i) : null,
+            i.Direction == StreamItemDirection.Inbound && i.Channel is not null && RoleOf(i) is null)).ToList());
     }
 
     public static EventSummary Summarise(DomainEvent e, IEnumerable<string?> stepCodes, DateTimeOffset? lastActivity, DateTimeOffset now)

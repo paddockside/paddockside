@@ -111,12 +111,33 @@ public sealed class StreamItem
 
     public string Body { get; }
 
-    public Guid? AuthorPartyId { get; }
+    public Guid? AuthorPartyId { get; private set; }
+
+    /// <summary>An email from someone not known when it came in, now known (staff tagged them as the horse's trainer, say).</summary>
+    public void AttributeTo(Party party)
+    {
+        if (party.TenantId != TenantId) throw new DomainException("That person belongs to another business.");
+        if (Direction != StreamItemDirection.Inbound) throw new DomainException("Only something that came in has a sender to fill in.");
+        if (AuthorPartyId is { } known && known != party.Id) throw new DomainException("This already came from someone else.");
+        AuthorPartyId = party.Id;
+    }
 
     public IReadOnlySet<Guid> NamedPartyIds { get; }
 
     /// <summary>The expected step this item satisfies, if any.</summary>
-    public string? StepCode { get; }
+    public string? StepCode { get; private set; }
+
+    /// <summary>
+    /// Files the item under a step of its event afterwards, or under none (David, 9 Nov 2026: "find the correct one from
+    /// the trainer and allocate it to the step, without sending again"). It changes where the item counts; nothing is sent.
+    /// </summary>
+    public void SetStep(Event @event, string? stepCode)
+    {
+        if (EventId != @event.Id) throw new DomainException("That item isn't on this event.");
+        if (stepCode is not null && EventTypes.Find(@event.EventType).Steps.All(s => s.Code != stepCode))
+            throw new DomainException("That step is not part of this event.");
+        StepCode = stepCode;
+    }
 
     /// <summary>A short heading: a fact's label ("Acceptance") or a message's subject.</summary>
     public string? Title { get; private set; }

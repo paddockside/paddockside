@@ -44,7 +44,10 @@ public static class EventEndpoints
         bool CanReplyToSender = false,
         string? Channel = null,
         IReadOnlyList<MediaView>? Media = null,
-        string? Shared = null);
+        string? Shared = null,
+        string? FromRole = null,
+        bool CanTagSender = false,
+        string? SendOnStep = null);
 
     /// <summary>One photo, video or voice note; its file is at /api/media/{Id}.</summary>
     public sealed record MediaView(Guid Id, string Kind, string ContentType, string FileName, long Length);
@@ -154,6 +157,14 @@ public static class EventEndpoints
         var byId = items.ToDictionary(i => i.Id);
         var superseded = items.Where(i => i.SupersedesId is not null).Select(i => i.SupersedesId!.Value).ToHashSet();
         var replies = items.Where(i => i.InReplyToId is not null).ToLookup(i => i.InReplyToId!.Value);
+        // Who the horse's emails come from: its trainer, vet, authority, clubs (ContactEndpoints).
+        var roles = (await db.HorseContacts.AsNoTracking().Where(c => c.HorseId == horse.Id && c.To == null).ToListAsync(cancellationToken))
+            .GroupBy(c => c.PartyId).ToDictionary(g => g.Key, g => g.Select(c => c.Role).Order().First());
+        ContactRole? RoleOf(StreamItem i) => i.AuthorPartyId is { } a && roles.TryGetValue(a, out var r) ? r : null;
+        // A trainer's email goes on to owners on the owners' step of the one it's filed under ("Pre-race update"), or none.
+        string? SendOn(StreamItem i) => RoleOf(i) == ContactRole.Trainer
+            ? (EventTypes.OwnerStepFor(i.StepCode) is { } owners ? StepLabel(owners) : "")
+            : null;
 
         var views = items
             .Where(i => i.InReplyToId is null && !superseded.Contains(i.Id))
@@ -191,7 +202,10 @@ public static class EventEndpoints
                     i.Direction == StreamItemDirection.Inbound ? i.Channel : null,
                     media[i.Id].Select(ToView).ToList(),
                     media[i.Id].Select(a => sharedFrom.TryGetValue(a.Id, out var at) ? at : (DateTimeOffset?)null).Min() is { } shared
-                        ? $"Shared with owners {Words.Recently(shared, now).ToLowerInvariant()}" : null);
+                        ? $"Shared with owners {Words.Recently(shared, now).ToLowerInvariant()}" : null,
+                    i.Direction == StreamItemDirection.Inbound && RoleOf(i) is { } role ? HorseContact.Label(role) : null,
+                    i is { Direction: StreamItemDirection.Inbound, InReplyToId: null } && i.Channel is not null && RoleOf(i) is null,
+                    i is { Direction: StreamItemDirection.Inbound, InReplyToId: null } ? SendOn(i) : null);
             })
             .ToList();
 

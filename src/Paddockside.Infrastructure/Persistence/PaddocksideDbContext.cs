@@ -55,6 +55,8 @@ public sealed class PaddocksideDbContext(DbContextOptions<PaddocksideDbContext> 
 
     public DbSet<StaffSignature> StaffSignatures => Set<StaffSignature>();
 
+    public DbSet<HorseContact> HorseContacts => Set<HorseContact>();
+
     public DbSet<RoutingAddress> RoutingAddresses => Set<RoutingAddress>();
 
     public DbSet<InboundMessage> InboundMessages => Set<InboundMessage>();

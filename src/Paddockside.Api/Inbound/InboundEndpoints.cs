@@ -203,6 +203,7 @@ public static class InboundEndpoints
             message.Channel == "Sms" ? "SMS" : "Email", message.ReceivedAt);
         db.StreamItems.Add(item);
         e?.RecordActivity();
+        await Infrastructure.Inbound.TrainerMail.FileAsync(db, e, item, cancellationToken); // the trainer's: under the step due
 
         var where = e is null ? $"{horse.Name} (on the horse)" : $"{horse.Name}, {e.Title}";
         message.Place(confirmed ? 3 : 4, item, null, sender?.Id, display,

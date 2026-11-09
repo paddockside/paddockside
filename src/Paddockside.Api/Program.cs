@@ -143,6 +143,7 @@ app.MapReplyToSenderEndpoints();
 app.MapInboundEndpoints();
 app.MapTodayEndpoints();
 app.MapReportEndpoints();
+app.MapContactEndpoints();
 app.MapMediaEndpoints();
 app.MapFactEndpoints();
 app.MapClientAuthEndpoints();

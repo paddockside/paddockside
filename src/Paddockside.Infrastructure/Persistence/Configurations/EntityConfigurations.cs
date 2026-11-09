@@ -147,6 +147,22 @@ internal sealed class MailoutReplyConfiguration : IEntityTypeConfiguration<Mailo
     }
 }
 
+internal sealed class HorseContactConfiguration : IEntityTypeConfiguration<HorseContact>
+{
+    public void Configure(EntityTypeBuilder<HorseContact> b)
+    {
+        b.MapTenantOwned();
+        b.Property(x => x.Role).AsString();
+        b.Property(x => x.Emails).AsString();
+        b.Property(x => x.From);
+        b.Property(x => x.To);
+        b.HasIndex(x => new { x.HorseId, x.PartyId });
+        b.HasIndex(x => x.PartyId);
+        b.HasOne<Horse>().WithMany().HasForeignKey(x => x.HorseId).OnDelete(DeleteBehavior.Restrict);
+        b.HasOne<Party>().WithMany().HasForeignKey(x => x.PartyId).OnDelete(DeleteBehavior.Restrict);
+    }
+}
+
 internal sealed class ClientListConfiguration : IEntityTypeConfiguration<ClientList>
 {
     public void Configure(EntityTypeBuilder<ClientList> b)

@@ -113,6 +113,7 @@ public sealed class IsolationDatabase : IAsyncLifetime
         var offer = new MailoutAttachment(tenant.Id, $"{name} offer.pdf", 1234, bought);
         offer.AttachTo(mailout);
         context.AddRange(offer, new StaffSignature(tenant.Id, Guid.NewGuid(), $"Kate, {name}", bought));
+        context.Add(new HorseContact(horse, dee, ContactRole.Trainer, bought));
         context.AddRange(deliveries);
         await context.SaveChangesAsync();
 

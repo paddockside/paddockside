@@ -6,6 +6,28 @@ namespace Paddockside.Domain.Tests;
 public sealed class StreamTests
 {
     [Fact]
+    public void A_trainers_email_is_filed_under_the_trainer_step_due_nearest_when_it_arrived()
+    {
+        var s = new Stable();
+        var race = new Event(s.Horse, EventTypes.RaceStart.Code, "Randwick R6", On(2026, 11, 14));
+
+        // Two weeks out it's the plan; the day before, the pre-race, even with the plan never received.
+        Assert.Equal("TRAINER_PLAN", EventTypes.TrainerStepFor(race, On(2026, 10, 31), [])!.Code);
+        Assert.Equal("TRAINER_PRE", EventTypes.TrainerStepFor(race, On(2026, 11, 13), [])!.Code);
+        Assert.Equal("STAFF_PRE", EventTypes.OwnerStepFor("TRAINER_PRE"));
+        Assert.Null(EventTypes.OwnerStepFor("TRAINER_PLAN")); // the plan has no owner step of its own
+
+        // A general event expects nothing from the trainer; filing it elsewhere afterwards is staff's call.
+        Assert.Null(EventTypes.TrainerStepFor(new Event(s.Horse, EventTypes.General.Code, "Spelling", On(2026, 11, 14)), On(2026, 11, 13), []));
+        var email = StreamItem.Inbound(s.Horse, race, "Update", "All well.", "Trainer", null, "Email", On(2026, 11, 13));
+        email.SetStep(race, "TRAINER_PLAN");
+        Assert.Equal("TRAINER_PLAN", email.StepCode);
+        Assert.Throws<DomainException>(() => email.SetStep(race, "FOALING"));
+        email.SetStep(race, null);
+        Assert.Null(email.StepCode);
+    }
+
+    [Fact]
     public void A_correction_supersedes_the_fact_and_leaves_the_original_untouched()
     {
         var s = new Stable();

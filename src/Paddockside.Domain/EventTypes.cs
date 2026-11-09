@@ -65,6 +65,35 @@ public static class EventTypes
 
     public static EventType Find(string code) => All.FirstOrDefault(t => t.Code == code) ?? General;
 
+    /// <summary>The steps that are the trainer writing in, and the step the owners' version goes out on (null: no owner step of its own).</summary>
+    private static readonly IReadOnlyDictionary<string, string?> TrainerSteps = new Dictionary<string, string?>
+    {
+        ["TRAINER_PLAN"] = null,
+        ["TRAINER_PRE"] = "STAFF_PRE",
+        ["TRAINER_REPORT"] = "TRAINER_REPORT",
+    };
+
+    /// <summary>
+    /// Which trainer step an email from the horse's trainer most likely is, from when it arrived: the one due nearest
+    /// that day; on a tie, one not yet received. Null when the event type expects nothing from the trainer, or it has no
+    /// date to go by.
+    /// </summary>
+    public static ExpectedStep? TrainerStepFor(Event @event, DateTimeOffset receivedAt, IEnumerable<string?> stepCodesSeen)
+    {
+        if (@event.KeyDate is not { } key) return null;
+        var seen = stepCodesSeen.ToHashSet();
+        var day = receivedAt.ToOffset(key.Offset).Date;
+        return Find(@event.EventType).Steps
+            .Where(s => TrainerSteps.ContainsKey(s.Code))
+            .OrderBy(s => Math.Abs((key.Date.AddDays(s.DaysFromKeyDate) - day).TotalDays))
+            .ThenBy(s => seen.Contains(s.Code))
+            .FirstOrDefault();
+    }
+
+    /// <summary>The step the owners' update from a trainer step goes out on: "Trainer's pre-race" becomes "Pre-race update".</summary>
+    public static string? OwnerStepFor(string? trainerStep) =>
+        trainerStep is not null && TrainerSteps.TryGetValue(trainerStep, out var owners) ? owners : null;
+
     /// <summary>
     /// Where an event is up to. A step is done when any item carries its code. An undone step is missing once its
     /// whole due day has passed (a step due Thursday is not late until Friday). The first remaining step is current;
