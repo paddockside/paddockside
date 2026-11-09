@@ -1,3 +1,4 @@
+using Azure.Monitor.OpenTelemetry.AspNetCore;
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Identity;
@@ -29,6 +30,16 @@ var builder = WebApplication.CreateBuilder(args);
 // and locally with the https-azure profile. Secret "Postmark--ServerToken" becomes setting Postmark:ServerToken.
 if (builder.Configuration["KeyVault:Uri"] is { Length: > 0 } vaultUri)
     builder.Configuration.AddAzureKeyVault(new Uri(vaultUri), new Azure.Identity.DefaultAzureCredential());
+
+// Errors, slow requests and our own log lines go to Application Insights in Azure (its connection string comes from Key
+// Vault as APPLICATIONINSIGHTS_CONNECTION_STRING). Locally and in tests there is none, so nothing is sent. The framework's
+// own chatter (a line per database command, per request) is left to warnings, or it would bury ours and add cost.
+if (!string.IsNullOrEmpty(builder.Configuration["APPLICATIONINSIGHTS_CONNECTION_STRING"]))
+{
+    builder.Services.AddOpenTelemetry().UseAzureMonitor();
+    builder.Logging.AddFilter<OpenTelemetry.Logs.OpenTelemetryLoggerProvider>("Microsoft", LogLevel.Warning);
+    builder.Logging.AddFilter<OpenTelemetry.Logs.OpenTelemetryLoggerProvider>("System", LogLevel.Warning);
+}
 
 builder.Services.AddOpenApi();
 builder.Services.AddHttpContextAccessor();
