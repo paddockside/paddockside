@@ -118,6 +118,17 @@ public sealed class ManagedInterest
         (Units, State) = (units, InterestState.Active);
     }
 
+    /// <summary>A correction: the size it should always have been (<see cref="Horse.CorrectShare"/>).</summary>
+    internal void Resize(long units)
+    {
+        if (!IsActive) throw new DomainException($"Only a current share can be corrected (this one is {State}).");
+        if (units <= 0) throw new DomainException("A share must be more than nothing.");
+        Units = units;
+    }
+
+    /// <summary>A correction took this piece to nothing: it ends where it began, so it was never held by anyone.</summary>
+    internal void Withdraw() => End(EffectiveFrom, InterestState.Exited, AccessPolicy.LockedOut);
+
     internal void Activate()
     {
         if (State != InterestState.Pending) throw new DomainException($"Only a pending interest can be activated (this one is {State}).");

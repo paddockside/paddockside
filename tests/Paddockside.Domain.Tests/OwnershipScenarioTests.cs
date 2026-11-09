@@ -20,6 +20,34 @@ public sealed class OwnershipScenarioTests
     }
 
     [Fact]
+    public void A_share_entered_wrongly_is_corrected_without_passing_it_on()
+    {
+        var s = new Stable();
+        var ann = s.Owner("Ann", 500);
+        var ben = s.Owner("Ben", 400);
+
+        // Ben was meant to have 30%: corrected, still his one share, nobody new.
+        s.Horse.CorrectShare(ben.Id, 300);
+        Assert.Equal(300, s.ActiveInterestOf(ben).Units);
+        Assert.Equal(2, s.Horse.Interests.Count);
+
+        // Never past 100% by correction: 20% is all there is for Ann to grow into.
+        var over = Assert.Throws<DomainException>(() => s.Horse.CorrectShare(ann.Id, 800));
+        Assert.Contains("70% is left for them", over.Message);
+        Assert.Throws<DomainException>(() => s.Horse.CorrectShare(ann.Id, 0));
+
+        // A holding in two pieces (a share later topped up): the newest absorbs the cut, and a piece cut to nothing was never held.
+        var topUpDay = On(2025, 6, 1);
+        s.Horse.AddInterest(ann, s.Syndicate, 100, topUpDay);
+        s.Horse.CorrectShare(ann.Id, 450);
+        var pieces = s.Horse.Interests.Where(i => i.PartyId == ann.Id).OrderBy(i => i.EffectiveFrom).ToList();
+        Assert.Equal((450L, InterestState.Active), (pieces[0].Units, pieces[0].State));
+        Assert.Equal(InterestState.Exited, pieces[1].State);
+        Assert.False(pieces[1].WasHeldAt(topUpDay));
+        Assert.Equal(750, s.Horse.AllocatedUnits);
+    }
+
+    [Fact]
     public void Scenario1_exiting_owner_is_locked_out_and_the_remaining_three_absorb_the_share()
     {
         var s = new Stable();

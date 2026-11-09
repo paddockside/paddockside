@@ -156,6 +156,32 @@ public sealed class Horse
         interest.Confirm(units);
     }
 
+    /// <summary>
+    /// A share entered wrongly is put right (David, 9 Nov 2026: "we did just allocate the wrong amount to someone in the
+    /// setup"): the party's holding becomes <paramref name="units"/> as if it had always been, with no transfer and no new
+    /// owner. Bringing the horse down towards 100% is always allowed; going past it never is. When the holding is in more
+    /// than one piece, the newest absorbs the change; a piece taken to nothing is withdrawn as never held.
+    /// </summary>
+    public void CorrectShare(Guid partyId, long units)
+    {
+        var period = CurrentManagementPeriod ?? throw new DomainException($"{Name} isn't under management, so has no shares to correct.");
+        var held = _interests.Where(i => i.PartyId == partyId && i.ManagementPeriodId == period.Id && i.IsActive).OrderBy(i => i.EffectiveFrom).ToList();
+        if (held.Count == 0) throw new DomainException($"They don't hold a share of {Name} to correct.");
+        if (units <= 0) throw new DomainException("A share must be more than nothing. If they've left, record that instead.");
+        var current = held.Sum(i => i.Units);
+        if (units > current && AllocatedUnits - current + units > WholeUnits)
+            throw new DomainException($"That would take {Name} past 100%: {Percent(WholeUnits - AllocatedUnits + current)} is left for them.");
+
+        var change = units - current;
+        for (var n = held.Count - 1; n >= 0 && change != 0; n--)
+        {
+            var piece = held[n];
+            if (change > 0) { piece.Resize(piece.Units + change); change = 0; }
+            else if (-change >= piece.Units) { change += piece.Units; piece.Withdraw(); }
+            else { piece.Resize(piece.Units + change); change = 0; }
+        }
+    }
+
     /// <summary>An owner leaves without a successor (or the successors are recorded separately).</summary>
     public void ExitInterest(Guid interestId, DateTimeOffset on, AccessPolicy policy = AccessPolicy.LockedOut) =>
         FindInterest(interestId).End(on, InterestState.Exited, policy);

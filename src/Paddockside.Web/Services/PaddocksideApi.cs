@@ -424,6 +424,10 @@ public sealed class PaddocksideApi(HttpClient http)
         return form;
     }
 
+    /// <summary>A share entered wrongly, put right: nothing is passed on and nobody is told.</summary>
+    public Task<ApiResult<object>> CorrectShareAsync(Guid horseId, Guid partyId, decimal percent) =>
+        PostAsync<object>($"api/horses/{horseId}/owners/{partyId}/correct", new { percent });
+
     public Task<ApiResult<object>> ConfirmShareAsync(Guid horseId, Guid partyId, decimal percent) =>
         PostAsync<object>($"api/horses/{horseId}/owners/{partyId}/confirm", new { percent });
 

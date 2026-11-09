@@ -96,6 +96,12 @@
         <Variant Label="Staff: who saw what, for a race"><DeliveryGrid Report="SampleDelivery" /></Variant>
     </Section>
 
+    <Section Title="OwnershipChange" Doc="ownership-model.md">
+        <Variant Label="Manager: changing the house share (pass on, or correct a mistake)">
+            <OwnershipChange HorseId="Guid.Empty" Owner="SampleOwners[0]" HasHouse />
+        </Variant>
+    </Section>
+
     <Section Title="OwnerRows" Doc="ownership-model.md">
         <div class="grid gap-4 lg:grid-cols-2">
             <Variant Label="Manager: owners, and two shares to confirm"><OwnerRows Owners="SampleOwners" CanManage /></Variant>

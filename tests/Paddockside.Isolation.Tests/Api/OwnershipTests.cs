@@ -55,6 +55,32 @@ public sealed partial class OwnerSignInTests
     }
 
     [Fact]
+    public async Task A_share_entered_wrongly_is_corrected_and_nobody_is_told()
+    {
+        var seed = await SeedAsync();
+        using var manager = await Api.SignedInAsync(seed.TenantId, MemberRole.Manager);
+        var owners = $"/api/horses/{seed.HorseId}/owners";
+        await DispatchAsync();
+        var emailsBefore = Api.Emails.Sent.Count;
+
+        // Bob was meant to have 40%, not 50%: corrected in place, nothing passed on, nobody emailed.
+        Assert.Equal(HttpStatusCode.NoContent, (await manager.PostApiAsync($"{owners}/{seed.BobId}/correct", new { percent = 40m })).StatusCode);
+        await DispatchAsync();
+        Assert.Equal(emailsBefore, Api.Emails.Sent.Count);
+        var list = (await manager.GetFromJsonAsync<OwnerList>(owners))!;
+        Assert.Equal([("Ann Owner", "50%"), ("Bob Owner", "40%")], list.Owners.Select(o => (o.Name, o.Percent)));
+        Assert.Equal("10% has no owner yet.", list.Warning);
+
+        // Not past 100%; not to nothing (that's leaving); only a manager or admin; and the audit log keeps it.
+        Assert.Equal(HttpStatusCode.BadRequest, (await manager.PostApiAsync($"{owners}/{seed.AnnId}/correct", new { percent = 70m })).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await manager.PostApiAsync($"{owners}/{seed.AnnId}/correct", new { percent = 0m })).StatusCode);
+        using var coordinator = await Api.SignedInAsync(seed.TenantId, MemberRole.Coordinator);
+        Assert.Equal(HttpStatusCode.Forbidden, (await coordinator.PostApiAsync($"{owners}/{seed.AnnId}/correct", new { percent = 45m })).StatusCode);
+        await using var context = db.ContextFor(seed.TenantId);
+        Assert.Contains(context.AuditEntries, e => e.Action == "interest.corrected" && e.Summary.Contains("Bob Owner's share of Bel Esprit from 50% to 40%"));
+    }
+
+    [Fact]
     public async Task An_owner_leaves_and_then_the_horse_leaves_management_and_everyone_stops()
     {
         var seed = await SeedAsync();

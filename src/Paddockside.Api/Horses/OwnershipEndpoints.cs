@@ -33,6 +33,8 @@ public static class OwnershipEndpoints
 
     public sealed record ConfirmRequest(decimal Percent);
 
+    public sealed record CorrectRequest(decimal Percent);
+
     private static readonly string[] CanManage = [nameof(MemberRole.Manager), nameof(MemberRole.TenantAdmin)];
 
     public static void MapOwnershipEndpoints(this IEndpointRouteBuilder app)
@@ -41,6 +43,7 @@ public static class OwnershipEndpoints
         app.MapPost("/api/horses/{id:guid}/owners/{partyId:guid}/exit", Exit).RequireAuthorization(StaffPolicy.Name);
         app.MapPost("/api/horses/{id:guid}/end-management", End).RequireAuthorization(StaffPolicy.Name);
         app.MapPost("/api/horses/{id:guid}/owners/{partyId:guid}/confirm", Confirm).RequireAuthorization(StaffPolicy.Name);
+        app.MapPost("/api/horses/{id:guid}/owners/{partyId:guid}/correct", Correct).RequireAuthorization(StaffPolicy.Name);
     }
 
     /// <summary>
@@ -124,6 +127,38 @@ public static class OwnershipEndpoints
         await db.SaveChangesAsync(cancellationToken); // sends their invitation, as for any first share
         var owner = await db.Parties.SingleAsync(p => p.Id == partyId, cancellationToken);
         await audit.RecordAsync(horse.TenantId, "interest.confirmed", $"{owner.DisplayName}'s share of {horse.Name} confirmed at {Percent(Units(request.Percent))}",
+            "Horse", horse.Id, cancellationToken: cancellationToken);
+        return Results.NoContent();
+    }
+
+    /// <summary>
+    /// A share entered wrongly, put right: it becomes the percentage it should always have been. Nothing is passed on, nobody
+    /// is told, and the horse's history shows no change of hands; the audit log keeps the correction.
+    /// </summary>
+    private static async Task<IResult> Correct(Guid id, Guid partyId, CorrectRequest request, ClaimsPrincipal user, PaddocksideDbContext db, AuditLog audit,
+        CancellationToken cancellationToken)
+    {
+        if (!CanManage.Contains(user.FindFirstValue(SessionClaims.Role)))
+            return Results.Problem(statusCode: StatusCodes.Status403Forbidden, title: "Changing who owns a horse is for managers and admins.");
+        var horse = await db.Horses.Include(h => h.ManagementPeriods).Include(h => h.Interests).AsSplitQuery().SingleOrDefaultAsync(h => h.Id == id, cancellationToken);
+        var owner = await db.Parties.SingleOrDefaultAsync(p => p.Id == partyId, cancellationToken);
+        if (horse is null || owner is null) return Results.NotFound();
+        if (!ValidPercent(request.Percent) || request.Percent <= 0) return Problem("The share is a percentage, to one decimal place, e.g. 2.5.");
+
+        var period = horse.CurrentManagementPeriod;
+        var was = period is null ? 0 : horse.Interests.Where(i => i.PartyId == partyId && i.ManagementPeriodId == period.Id && i.IsActive).Sum(i => i.Units);
+        try
+        {
+            horse.CorrectShare(partyId, Units(request.Percent));
+        }
+        catch (DomainException ex)
+        {
+            return Problem(ex.Message);
+        }
+
+        await db.SaveChangesAsync(cancellationToken);
+        await audit.RecordAsync(horse.TenantId, "interest.corrected",
+            $"Corrected {owner.DisplayName}'s share of {horse.Name} from {Percent(was)} to {Percent(Units(request.Percent))} (entered wrongly; nothing passed on)",
             "Horse", horse.Id, cancellationToken: cancellationToken);
         return Results.NoContent();
     }
