@@ -284,6 +284,8 @@ internal sealed class EventConfiguration : IEntityTypeConfiguration<Event>
         b.Property(x => x.Gate).HasMaxLength(Event.RaceDayDetailLength);
         b.Property(x => x.Dining).HasMaxLength(Event.RaceDayDetailLength);
         b.Property(x => x.RaceDayNote).HasMaxLength(Event.RaceDayDetailLength);
+        b.Property(x => x.ClosedBy).HasMaxLength(320);
+        b.Property(x => x.CloseReason).HasMaxLength(Event.CloseReasonLength);
 
         b.HasOne<Horse>().WithMany().HasForeignKey(x => x.HorseId).OnDelete(DeleteBehavior.Restrict);
         b.HasOne<Party>().WithMany().HasForeignKey(x => x.ClosedByPartyId).OnDelete(DeleteBehavior.Restrict);

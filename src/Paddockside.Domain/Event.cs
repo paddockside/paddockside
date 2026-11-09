@@ -89,6 +89,26 @@ public sealed class Event
         ClosedByPartyId = closedByPartyId;
     }
 
+    /// <summary>Who closed it, by name: staff are people, not parties (for an event closed by a member of staff).</summary>
+    public string? ClosedBy { get; private set; }
+
+    /// <summary>Why it was closed before it was done (David, 10 Nov 2026: admins only, with a reason).</summary>
+    public string? CloseReason { get; private set; }
+
+    public const int CloseReasonLength = 500;
+
+    /// <summary>
+    /// A member of staff closes the event now, open or still a draft, whatever is still to come: an old event left open
+    /// stops new mail filing itself on the horse's newest one. Activity later still reopens it (D11).
+    /// </summary>
+    public void Close(DateTimeOffset at, string closedBy, string? reason)
+    {
+        if (Status is not (EventStatus.Open or EventStatus.Draft)) throw new DomainException($"Only an open or draft event can be closed (this one is {Status}).");
+        var why = string.IsNullOrWhiteSpace(reason) ? null : reason.Trim();
+        if (why?.Length > CloseReasonLength) throw new DomainException($"Keep the reason under {CloseReasonLength} characters.");
+        (Status, ClosedAt, ClosedBy, CloseReason) = (EventStatus.Closed, at, closedBy, why);
+    }
+
     public void Cancel()
     {
         if (Status is EventStatus.Closed or EventStatus.Cancelled)
@@ -115,5 +135,6 @@ public sealed class Event
         Status = EventStatus.Open;
         ClosedAt = null;
         ClosedByPartyId = null;
+        (ClosedBy, CloseReason) = (null, null);
     }
 }

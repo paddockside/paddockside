@@ -45,8 +45,41 @@ else
                         <span class="badge @StatusClasses(ev.Status) py-1">@ev.Status</span>
                         <a href="events/@Id/delivery" class="btn-secondary min-h-[36px] px-4">Who saw what</a>
                         <a href="events/@Id/as-owner" class="btn-secondary min-h-[36px] px-4">View as an owner</a>
+                        @if (Session.Current?.Role == "TenantAdmin" && ev.Status is "Open" or "Draft" && !_closing)
+                        {
+                            <button type="button" class="btn-secondary min-h-[36px] px-4" @onclick="() => (_closing, _closeReason, _closeError) = (true, null, null)">Close event</button>
+                        }
                     </div>
                 </div>
+
+                @if (_closing)
+                {
+                    @* Admins only (David, 10 Nov 2026): closing an event early, with the reason kept on it and in the audit log. *@
+                    <form class="grid gap-3 rounded-card border border-border-subtle bg-surface-raised p-4" @onsubmit="CloseAsync" @onsubmit:preventDefault aria-label="Close this event">
+                        <p class="font-strong">Close @ev.Title?</p>
+                        @if (StepsToCome is { Count: > 0 } toCome)
+                        {
+                            <p class="text-small text-text-muted">It isn't finished: @string.Join(", ", toCome) still to come. Nothing is sent to anyone. If something new arrives on it later, it opens again.</p>
+                        }
+                        else
+                        {
+                            <p class="text-small text-text-muted">Nothing is sent to anyone. If something new arrives on it later, it opens again.</p>
+                        }
+                        <div class="field">
+                            <label class="field-label" for="close-reason">Why it's being closed@(StepsToCome.Count > 0 ? "" : " (optional)")</label>
+                            <textarea id="close-reason" class="input min-h-[64px] py-3" maxlength="500" @bind="_closeReason" @bind:event="oninput"
+                                      placeholder="Scratched on the morning; not running again this prep"></textarea>
+                        </div>
+                        @if (_closeError is not null)
+                        {
+                            <p class="alert-danger" role="alert">@_closeError</p>
+                        }
+                        <div class="flex flex-wrap gap-3">
+                            <button type="submit" class="btn-primary" disabled="@(_busy || (StepsToCome.Count > 0 && string.IsNullOrWhiteSpace(_closeReason)))">Close the event</button>
+                            <button type="button" class="btn-secondary" @onclick="() => _closing = false">Cancel</button>
+                        </div>
+                    </form>
+                }
 
                 @if (ev.Steps.Count > 0)
                 {
@@ -74,6 +107,10 @@ else
             </header>
 
             <div class="grid flex-1 content-start gap-4 px-4 py-6 sm:px-8">
+                @if (_page.Closed is { } closed)
+                {
+                    <p class="rounded-control bg-surface-sunken px-4 py-3" role="status">@closed</p>
+                }
                 @if (ev.Status == "Draft")
                 {
                     <section class="flex flex-wrap items-center gap-3 rounded-control bg-status-warning-bg px-4 py-3 text-status-warning-fg" aria-label="Draft">
@@ -658,6 +695,27 @@ else
     }
 
     private ComposeBox? _compose;
+    private bool _closing;
+    private string? _closeReason, _closeError;
+
+    /// <summary>The steps not done yet, by label: closing then needs a reason.</summary>
+    private List<string> StepsToCome => _page?.Event.Steps.Where(s => s.State != "Done").Select(s => s.Label).ToList() ?? [];
+
+    private async Task CloseAsync()
+    {
+        (_busy, _closeError) = (true, null);
+        try
+        {
+            var result = await Api.CloseEventAsync(Id, _closeReason);
+            if (!result.Succeeded) { _closeError = result.Error; return; }
+            (_closing, _saved) = (false, "Closed. New mail to the horse now files itself on its other open event, if there's just one.");
+            await Load();
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
 
     /// <summary>"Send to owners" on the trainer's email: their words go into the compose box, on the owners' step, to check and send.</summary>
     private void SendOn(ItemView item)

@@ -14,7 +14,8 @@ namespace Paddockside.Api.Events;
 /// <summary>
 /// Staff creating events by hand and opening drafts (event-library.md §2, §5). An event starts Open, or as a Draft
 /// that owners can't see and that sends nothing until someone opens it. One event per type per key date per horse:
-/// a second race start on the same day is refused, not duplicated.
+/// a second race start on the same day is refused, not duplicated. A tenant admin can close an event at any time; one
+/// with steps still to come needs a reason (David, 10 Nov 2026).
 /// </summary>
 public static class EventLifecycleEndpoints
 {
@@ -28,6 +29,8 @@ public static class EventLifecycleEndpoints
 
     /// <summary>A race's details for the day; blank clears one.</summary>
     public sealed record RaceDayRequest(string? Gate, string? Dining, string? Note);
+
+    public sealed record CloseRequest(string? Reason);
 
     private static readonly string[] CanCreate = [nameof(MemberRole.Coordinator), nameof(MemberRole.Manager), nameof(MemberRole.TenantAdmin)];
 
@@ -46,6 +49,7 @@ public static class EventLifecycleEndpoints
         app.MapGet("/api/event-types", () => Results.Ok(Types)).RequireAuthorization(StaffPolicy.Name);
         app.MapPost("/api/horses/{id:guid}/events", Create).RequireAuthorization(StaffPolicy.Name);
         app.MapPost("/api/events/{id:guid}/open", Open).RequireAuthorization(StaffPolicy.Name);
+        app.MapPost("/api/events/{id:guid}/close", Close).RequireAuthorization(StaffPolicy.Name);
         app.MapPut("/api/events/{id:guid}/race-day", SetRaceDay).RequireAuthorization(StaffPolicy.Name);
     }
 
@@ -129,6 +133,41 @@ public static class EventLifecycleEndpoints
         e.Open(clock.GetUtcNow());
         await db.SaveChangesAsync(cancellationToken);
         await audit.RecordAsync(e.TenantId, "event.opened", $"Opened \"{e.Title}\"", "Event", e.Id, cancellationToken: cancellationToken);
+        return Results.NoContent();
+    }
+
+    /// <summary>
+    /// Closes an event now, done or not (an old race left open stops the trainer's mail filing itself on the newest one).
+    /// Tenant admins only; if any step is still to come, the reason is required and kept on the event and in the audit log.
+    /// Nothing is sent. New activity on it later reopens it, as for any closed event (D11).
+    /// </summary>
+    private static async Task<IResult> Close(Guid id, CloseRequest request, ClaimsPrincipal user, PaddocksideDbContext db, AuditLog audit, TimeProvider clock,
+        CancellationToken cancellationToken)
+    {
+        if (user.FindFirstValue(SessionClaims.Role) != nameof(MemberRole.TenantAdmin) || user.HasClaim(c => c.Type == SessionClaims.SupportSession))
+            return Results.Problem(statusCode: StatusCodes.Status403Forbidden, title: "Only an admin can close an event.");
+        var e = await db.Events.SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
+        if (e is null) return Results.NotFound();
+
+        var now = clock.GetUtcNow();
+        var seen = await db.StreamItems.Where(i => i.EventId == id).Select(i => i.StepCode).ToListAsync(cancellationToken);
+        var toCome = EventTypes.Stages(EventTypes.Find(e.EventType), e.KeyDate, seen, now).Where(s => s.State != StageState.Done).Select(s => s.Step.Label).ToList();
+        if (toCome.Count > 0 && string.IsNullOrWhiteSpace(request.Reason))
+            return Problem($"It isn't finished ({string.Join(", ", toCome)} still to come): say why it's being closed.");
+
+        try
+        {
+            e.Close(now, user.FindFirstValue(ClaimTypes.Email) ?? "Staff", request.Reason);
+        }
+        catch (DomainException ex)
+        {
+            return Problem(ex.Message);
+        }
+
+        await db.SaveChangesAsync(cancellationToken);
+        await audit.RecordAsync(e.TenantId, "event.closed",
+            $"Closed \"{e.Title}\"{(toCome.Count > 0 ? $" before {string.Join(", ", toCome)}" : "")}{(e.CloseReason is null ? "" : $": {e.CloseReason}")}",
+            "Event", e.Id, cancellationToken: cancellationToken);
         return Results.NoContent();
     }
 

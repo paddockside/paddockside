@@ -68,7 +68,7 @@ public sealed record OwnerOption(Guid Id, string Name);
 
 public sealed record EventPage(EventSummary Event, Guid HorseId, string HorseName, List<ItemView> Items, List<string> StepOptions, List<OwnerOption> Owners,
     Dictionary<string, PromptRequest> StepPrompts, string? Tickets = null, RaceDayView? RaceDay = null, List<FactTemplate>? FactTemplates = null,
-    List<string>? FactSources = null);
+    List<string>? FactSources = null, string? Closed = null);
 
 /// <summary>A kind of fact staff can record on an event: its step, usual title and usual fields.</summary>
 public sealed record FactTemplate(string? Step, string Label, string Title, List<string> Fields);
@@ -517,6 +517,9 @@ public sealed class PaddocksideApi(HttpClient http)
     public Task<ApiResult<InboundCounts>> InboundCountsAsync() => GetAsync<InboundCounts>("api/inbound/counts");
 
     public Task<ApiResult<TodayPage>> TodayAsync() => GetAsync<TodayPage>("api/today");
+
+    /// <summary>An admin closes an event now; a reason is needed if it isn't finished. Nothing is sent.</summary>
+    public Task<ApiResult<object>> CloseEventAsync(Guid id, string? reason) => PostAsync<object>($"api/events/{id}/close", new { reason });
 
     public Task<ApiResult<List<HorseContactView>>> HorseContactsAsync(Guid horseId) => GetAsync<List<HorseContactView>>($"api/horses/{horseId}/contacts");
 

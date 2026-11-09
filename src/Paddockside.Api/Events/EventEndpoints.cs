@@ -75,7 +75,8 @@ public static class EventEndpoints
         string? Tickets = null,
         RaceDayView? RaceDay = null,
         IReadOnlyList<FactEndpoints.FactTemplate>? FactTemplates = null,
-        IReadOnlyList<string>? FactSources = null);
+        IReadOnlyList<string>? FactSources = null,
+        string? Closed = null);
 
     /// <param name="Kind">Count, YesNo or Choice.</param>
     public sealed record PromptRequest(string Kind, string Question, IReadOnlyList<string>? Options, int? Max);
@@ -232,7 +233,10 @@ public static class EventEndpoints
 
         return Results.Ok(new EventPage(summary, horse.Id, horse.Name, views, type.Steps.Select(s => s.Label).ToList(), owners, stepPrompts, tickets,
             e.EventType == EventTypes.RaceStart.Code ? new RaceDayView(e.Gate, e.Dining, e.RaceDayNote) : null,
-            FactEndpoints.For(type), FactEndpoints.Sources));
+            FactEndpoints.For(type), FactEndpoints.Sources,
+            e is { Status: EventStatus.Closed, ClosedAt: { } closedAt }
+                ? $"Closed {Words.Day(closedAt, now)}{(e.ClosedBy is null ? "" : $" by {e.ClosedBy}")}{(e.CloseReason is null ? "." : $": {e.CloseReason}")}"
+                : null));
     }
 
     /// <summary>
