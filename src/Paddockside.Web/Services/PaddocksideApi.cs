@@ -166,7 +166,9 @@ public sealed record ClientCreated(Guid Id);
 
 public sealed record ListChange(int Count);
 
-public sealed record TodayRunner(Guid EventId, Guid HorseId, string Horse, string Type, string Title, string? Time, string? Stage, List<StepView> Steps, List<string> Attention);
+/// <param name="Day">For the week ahead, the day it's on ("Saturday 14 November").</param>
+public sealed record TodayRunner(Guid EventId, Guid HorseId, string Horse, string Type, string Title, string? Time, string? Stage, List<StepView> Steps, List<string> Attention,
+    string? Day = null);
 
 public sealed record TodayUndelivered(Guid ItemId, Guid? EventId, Guid HorseId, string Horse, string? Event, string Title, string Sent, string Detail);
 
@@ -180,7 +182,7 @@ public sealed record TodayHealth(string Label, string State, string Detail);
 public sealed record TodayOverAllocated(Guid HorseId, string Horse, string Allocated);
 
 public sealed record TodayPage(string Date, List<TodayRunner> Today, List<TodayRunner> Tomorrow, List<TodayUndelivered> Undelivered, TodayQueue Queue,
-    List<TodayQuiet> Dormant, List<TodayQuiet> Drafts, List<TodayHealth> Health, List<TodayOverAllocated>? OverAllocated = null);
+    List<TodayQuiet> Dormant, List<TodayQuiet> Drafts, List<TodayHealth> Health, List<TodayOverAllocated>? OverAllocated = null, List<TodayRunner>? ComingUp = null);
 
 public sealed record InboundView(
     Guid Id,

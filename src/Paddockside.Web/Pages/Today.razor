@@ -34,6 +34,7 @@
             <div class="grid grid-cols-[minmax(0,1fr)] gap-6">
                 @Runners("Racing today", _page.Today, "No runners or trials today.")
                 @Runners("Tomorrow", _page.Tomorrow, "Nothing tomorrow.")
+                @Runners("Coming up this week", _page.ComingUp ?? [], "Nothing else in the next seven days.")
 
                 @if (_page.Undelivered.Count > 0)
                 {
@@ -149,9 +150,9 @@
                 <a href="events/@r.EventId" class="grid gap-3 rounded-card border border-border-subtle bg-surface-raised px-4 py-4 hover:border-border-strong sm:px-[20px]">
                     <span class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
                         <span class="text-title font-heading">@r.Horse</span>
-                        @if (r.Time is not null)
+                        @if (r.Day is not null || r.Time is not null)
                         {
-                            <span class="font-strong tabular-nums">@r.Time</span>
+                            <span class="font-strong tabular-nums">@(r.Day is null ? r.Time : r.Time is null ? r.Day : $"{r.Day}, {r.Time}")</span>
                         }
                     </span>
                     <span class="text-text-muted">@r.Type · @r.Title</span>

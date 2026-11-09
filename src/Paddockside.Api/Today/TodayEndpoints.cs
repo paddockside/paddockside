@@ -26,8 +26,9 @@ public static class TodayEndpoints
     /// <param name="Time">The start time, when the key date carries one ("3:05 pm").</param>
     /// <param name="Stage">The last step done ("Accepted"), or null if none yet.</param>
     /// <param name="Attention">Steps not received, in words ("Trainer's pre-race not received").</param>
+    /// <param name="Day">For the week ahead, the day it's on ("Saturday 14 November"); null today and tomorrow.</param>
     public sealed record Runner(Guid EventId, Guid HorseId, string Horse, string Type, string Title, string? Time, string? Stage,
-        IReadOnlyList<HorseEndpoints.StepView> Steps, IReadOnlyList<string> Attention);
+        IReadOnlyList<HorseEndpoints.StepView> Steps, IReadOnlyList<string> Attention, string? Day = null);
 
     /// <param name="Detail">"2 of 5 not delivered: 1 bounced, 1 waiting to send".</param>
     public sealed record Undelivered(Guid ItemId, Guid? EventId, Guid HorseId, string Horse, string? Event, string Title, string Sent, string Detail);
@@ -44,7 +45,7 @@ public static class TodayEndpoints
 
     public sealed record TodayPage(string Date, IReadOnlyList<Runner> Today, IReadOnlyList<Runner> Tomorrow, IReadOnlyList<Undelivered> Undelivered,
         QueueState Queue, IReadOnlyList<QuietEvent> Dormant, IReadOnlyList<QuietEvent> Drafts, IReadOnlyList<Health> Health,
-        IReadOnlyList<OverAllocated>? OverAllocated = null);
+        IReadOnlyList<OverAllocated>? OverAllocated = null, IReadOnlyList<Runner>? ComingUp = null);
 
     private static readonly string[] RunnerTypes = [EventTypes.RaceStart.Code, EventTypes.BarrierTrial.Code];
 
@@ -56,10 +57,12 @@ public static class TodayEndpoints
         var now = clock.GetUtcNow();
         var today = Words.FromLocal(Words.Local(now).Date);
         var dayAfterTomorrow = today.AddDays(2);
+        // Coming up this week (David, 9 Nov 2026): the runners after tomorrow, up to a week from today.
+        var weekAhead = today.AddDays(8);
 
         var events = await db.Events.AsNoTracking()
             .Where(e => e.Status == EventStatus.Draft || e.Status == EventStatus.Open
-                || (RunnerTypes.Contains(e.EventType) && e.KeyDate >= today && e.KeyDate < dayAfterTomorrow && e.Status != EventStatus.Cancelled))
+                || (RunnerTypes.Contains(e.EventType) && e.KeyDate >= today && e.KeyDate < weekAhead && e.Status != EventStatus.Cancelled))
             .ToListAsync(cancellationToken);
         var eventIds = events.Select(e => e.Id).ToList();
         var activity = await db.StreamItems.AsNoTracking().Where(i => i.EventId != null && eventIds.Contains(i.EventId.Value))
@@ -83,7 +86,11 @@ public static class TodayEndpoints
         var otherEventIds = recent.Where(i => i.EventId is { } id && !eventById.ContainsKey(id)).Select(i => i.EventId!.Value).Distinct().ToList();
         foreach (var e in await db.Events.AsNoTracking().Where(e => otherEventIds.Contains(e.Id)).ToListAsync(cancellationToken)) eventById[e.Id] = e;
 
-        Runner ToRunner(DomainEvent e)
+        Runner ToRunner(DomainEvent e) => ToRunnerOn(e, null);
+
+        Runner ToDatedRunner(DomainEvent e) => ToRunnerOn(e, Words.Day(e.KeyDate!.Value, now));
+
+        Runner ToRunnerOn(DomainEvent e, string? day)
         {
             var mine = byEvent[e.Id].ToList();
             var summary = HorseEndpoints.Summarise(e, mine.Select(a => a.StepCode), mine.Count == 0 ? null : mine.Max(a => a.OccurredAt), now);
@@ -92,10 +99,13 @@ public static class TodayEndpoints
                 local.TimeOfDay == TimeSpan.Zero ? null : Words.Time(e.KeyDate.Value),
                 summary.Steps.LastOrDefault(s => s.State == "Done")?.Label,
                 summary.Steps,
-                summary.Steps.Where(s => s.State == "Missing").Select(s => $"{s.Label} not received").ToList());
+                summary.Steps.Where(s => s.State == "Missing").Select(s => $"{s.Label} not received").ToList(),
+                day);
         }
 
         var runners = events.Where(e => RunnerTypes.Contains(e.EventType) && e.KeyDate >= today && e.KeyDate < dayAfterTomorrow && e.Status != EventStatus.Draft)
+            .OrderBy(e => e.KeyDate).ToList();
+        var comingUp = events.Where(e => RunnerTypes.Contains(e.EventType) && e.KeyDate >= dayAfterTomorrow && e.KeyDate < weekAhead && e.Status != EventStatus.Draft)
             .OrderBy(e => e.KeyDate).ToList();
 
         var undelivered = recent
@@ -140,7 +150,8 @@ public static class TodayEndpoints
                 .Where(h => h.AllocatedUnits > Horse.WholeUnits)
                 .OrderBy(h => h.Name)
                 .Select(h => new OverAllocated(h.Id, h.Name, Horse.Percent(h.AllocatedUnits)))
-                .ToList());
+                .ToList(),
+            ComingUp: comingUp.Select(ToDatedRunner).ToList());
     }
 
     private static string Excerpt(string body) => body.Length <= 60 ? body : $"{body[..60].TrimEnd()}…";

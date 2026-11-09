@@ -12,7 +12,7 @@ namespace Paddockside.Isolation.Tests.Api;
 /// </summary>
 public sealed partial class OwnerSignInTests
 {
-    private sealed record TodayRunner(Guid EventId, string Horse, string Title, string? Time, List<string> Attention);
+    private sealed record TodayRunner(Guid EventId, string Horse, string Title, string? Time, List<string> Attention, string? Day = null);
 
     private sealed record TodayUndelivered(Guid ItemId, string Detail);
 
@@ -23,7 +23,7 @@ public sealed partial class OwnerSignInTests
     private sealed record TodayHealth(string Label, string State, string Detail);
 
     private sealed record TodayView(string Date, List<TodayRunner> Today, List<TodayRunner> Tomorrow, List<TodayUndelivered> Undelivered,
-        TodayQueue Queue, List<TodayQuiet> Dormant, List<TodayQuiet> Drafts, List<TodayHealth> Health);
+        TodayQueue Queue, List<TodayQuiet> Dormant, List<TodayQuiet> Drafts, List<TodayHealth> Health, List<TodayRunner>? ComingUp = null);
 
     [Fact]
     public async Task Today_shows_the_runners_what_has_not_arrived_and_what_is_waiting()
@@ -72,6 +72,9 @@ public sealed partial class OwnerSignInTests
         Assert.Equal((raceToday, "Bel Esprit", "3:05 pm"), (runner.EventId, runner.Horse, runner.Time));
         Assert.Equal(trialTomorrow, Assert.Single(today.Tomorrow).EventId);
         Assert.DoesNotContain(today.Today.Concat(today.Tomorrow), r => r.EventId == seed.EventId); // Caulfield is in five days
+        var caulfield = Assert.Single(today.ComingUp!);                                          // so it is coming up this week, with its day
+        Assert.Equal((seed.EventId, "Bel Esprit"), (caulfield.EventId, caulfield.Horse));
+        Assert.False(string.IsNullOrEmpty(caulfield.Day));
 
         var undelivered = Assert.Single(today.Undelivered);
         Assert.Equal(result.Id, undelivered.ItemId);
