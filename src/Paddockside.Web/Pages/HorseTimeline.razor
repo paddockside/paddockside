@@ -7,7 +7,12 @@
 
 <PageTitle>@(_horse?.Name ?? "Horse") · Paddockside</PageTitle>
 
-@* The horse timeline (search-reporting.md §3): the horse, then every event, newest first. *@
+@*
+    The horse page (David, 16 Nov 2026: "you have to scroll too far to see the current events"): what's happening now
+    first — open and draft events, nearest first, and mail waiting on the horse to be sorted onto one — with owners,
+    trainer, vet and clubs and the horse's email address alongside; past events folded away. On a phone: now, then
+    owners and contacts, then past events.
+*@
 <div class="grid grid-cols-[minmax(0,1fr)] gap-6">
     <a href="horses" class="btn-link justify-self-start">← All horses</a>
 
@@ -21,281 +26,366 @@
     }
     else
     {
-        <h1 class="sr-only">@_horse.Name</h1>
-        <HorseCard Model="_horse.ToCard()" />
-        <p class="text-text-muted">
-            @(_horse.Managed ? $"Managed since {_horse.ManagedSince}" : "No longer managed")
-            · @_horse.CurrentOwners current @(_horse.CurrentOwners == 1 ? "owner" : "owners")
-        </p>
+        <div class="flex flex-wrap items-center justify-between gap-3">
+            <div class="grid min-w-0 gap-1">
+                <h1>@_horse.Name</h1>
+                <p class="text-text-muted">@HeaderLine</p>
+            </div>
+            @if (!_creating)
+            {
+                <button type="button" class="btn-primary" @onclick="StartCreating">New event</button>
+            }
+        </div>
 
-        @if (_horse.InboxAddress is { } inbox)
+        @if (_creating && _types is not null)
         {
-            @* The horse's own inbox (messaging-channels.md §3.1): give it to the trainer, and mail sent to it lands here. *@
-            <section class="card grid gap-2" aria-labelledby="inbox-heading">
-                <h2 id="inbox-heading" class="text-body font-strong">Email address for @_horse.Name</h2>
-                <p class="text-small text-text-muted">Give this to the trainer and anyone else who sends news about this horse. Mail sent to it lands on the horse's open event, or here on the horse if there isn't one.</p>
-                <div class="flex flex-wrap items-center gap-3">
-                    <code class="break-all rounded-control bg-surface-sunken px-3 py-2">@inbox</code>
-                    <button type="button" class="btn-secondary" @onclick="() => Copy(inbox)">@(_copied ? "Copied" : "Copy")</button>
-                    <span class="sr-only" role="status">@(_copied ? "Email address copied" : null)</span>
+            <form class="card grid gap-4" @onsubmit="CreateAsync" @onsubmit:preventDefault aria-labelledby="new-event-heading">
+                <h3 id="new-event-heading" class="font-heading">New event for @_horse.Name</h3>
+                <fieldset class="grid gap-2">
+                    <legend class="field-label mb-2">What kind</legend>
+                    <div class="flex flex-wrap gap-2">
+                        @foreach (var type in _types)
+                        {
+                            var selected = _type?.Code == type.Code;
+                            <label class="inline-flex min-h-control cursor-pointer items-center gap-2 rounded-control border px-4 @(selected ? "border-action-primary-bg bg-action-secondary-bg font-strong" : "border-border-strong")">
+                                <input type="radio" name="event-type" class="size-[18px] accent-action-primary-bg" checked="@selected" @onchange="() => _type = type" />
+                                @type.Name
+                            </label>
+                        }
+                    </div>
+                </fieldset>
+                <div class="grid gap-4 sm:grid-cols-2">
+                    <div class="field">
+                        <label class="field-label" for="event-title">Title</label>
+                        <input id="event-title" class="input" @bind="_title" placeholder="@(_type?.TitleExample)" />
+                    </div>
+                    <div class="field">
+                        <label class="field-label" for="event-date">@(_type?.KeyDateLabel ?? "Date")</label>
+                        <input id="event-date" class="input" type="date" @bind="_date" @bind:format="yyyy-MM-dd" />
+                    </div>
                 </div>
-            </section>
+                <label class="inline-flex min-h-control cursor-pointer items-center gap-2">
+                    <input type="checkbox" class="size-[18px] accent-action-primary-bg" @bind="_openNow" />
+                    Open it now, so owners can see it
+                </label>
+                <p class="field-hint">@(_openNow ? "Owners see it on their timeline straight away; nothing is sent until you write to them." : "Saved as a draft: owners can't see it and nothing can be sent from it until you open it.")</p>
+                @if (_createError is not null)
+                {
+                    <Error Message="@_createError" />
+                }
+                <div class="flex flex-wrap gap-3">
+                    <button type="submit" class="btn-primary" disabled="@_busy">@(_openNow ? "Create and open" : "Save as draft")</button>
+                    <button type="button" class="btn-secondary" @onclick="() => _creating = false">Cancel</button>
+                </div>
+            </form>
         }
 
-        @if (_owners is { } owners)
-        {
-            @* Who owns the horse now (ownership-model.md): staff only. Names here never reach another owner. *@
-            <section id="owners" class="grid grid-cols-[minmax(0,1fr)] gap-3" aria-labelledby="owners-heading">
-                <div class="flex flex-wrap items-baseline justify-between gap-2">
-                    <h2 id="owners-heading">Owners</h2>
-                    <span class="text-small @(owners.Over ? "font-strong text-status-danger-fg" : "text-text-muted")">@owners.Allocated</span>
-                </div>
-                @if (owners.Warning is { } warning)
+        <div class="grid grid-cols-[minmax(0,1fr)] items-start gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
+            <div class="grid grid-cols-[minmax(0,1fr)] gap-4">
+                @if (_managingOwners && _owners is { } owners)
                 {
-                    <p class="@(owners.Over ? "alert-danger" : "rounded-control bg-status-warning-bg px-4 py-3 text-status-warning-fg")" role="@(owners.Over ? "alert" : null)">@warning</p>
-                }
-                @if (owners.Owners.Count == 0)
-                {
-                    <p class="text-text-muted">No owners yet.</p>
-                }
-                else
-                {
-                    <OwnerRows Owners="owners.Owners" CanManage="@(CanManage && _horse.Managed)" Busy="_busy"
-                               OnChange="owner => (_changing, _addingOwner, _ending, _ownerAdded) = (owner.PartyId, false, false, null)" OnConfirm="set => ConfirmAsync(set.Owner, set.Percent)" />
-                }
+                    @* Who owns the horse now (ownership-model.md): staff only. Names here never reach another owner. *@
+                    <section id="owners" class="grid grid-cols-[minmax(0,1fr)] gap-3" aria-labelledby="owners-heading">
+                        <div class="flex flex-wrap items-baseline justify-between gap-2">
+                            <h2 id="owners-heading">Owners</h2>
+                            <span class="text-small @(owners.Over ? "font-strong text-status-danger-fg" : "text-text-muted")">@owners.Allocated</span>
+                            <button type="button" class="text-small font-strong underline underline-offset-4" @onclick="() => _managingOwners = false">Done</button>
+                        </div>
+                        @if (owners.Warning is { } warning)
+                        {
+                            <p class="@(owners.Over ? "alert-danger" : "rounded-control bg-status-warning-bg px-4 py-3 text-status-warning-fg")" role="@(owners.Over ? "alert" : null)">@warning</p>
+                        }
+                        @if (owners.Owners.Count == 0)
+                        {
+                            <p class="text-text-muted">No owners yet.</p>
+                        }
+                        else
+                        {
+                            <OwnerRows Owners="owners.Owners" CanManage="@(CanManage && _horse.Managed)" Busy="_busy"
+                                       OnChange="owner => (_changing, _addingOwner, _ending, _ownerAdded) = (owner.PartyId, false, false, null)" OnConfirm="set => ConfirmAsync(set.Owner, set.Percent)" />
+                        }
 
-                @if (_changing is { } changing && owners.Owners.FirstOrDefault(o => o.PartyId == changing) is { } changed)
-                {
-                    <OwnershipChange HorseId="Id" Owner="changed" HasHouse="@owners.Owners.Any(o => o.IsHouse)" OnDone="OwnershipChangedAsync" OnCancel="() => _changing = null" />
-                }
+                        @if (_changing is { } changing && owners.Owners.FirstOrDefault(o => o.PartyId == changing) is { } changed)
+                        {
+                            <OwnershipChange HorseId="Id" Owner="changed" HasHouse="@owners.Owners.Any(o => o.IsHouse)" OnDone="OwnershipChangedAsync" OnCancel="() => _changing = null" />
+                        }
 
-                @if (CanManage && _horse.Managed)
-                {
-                    @if (!_addingOwner)
-                    {
-                        <button type="button" class="btn-secondary justify-self-start" @onclick="() => (_addingOwner, _ownerError) = (true, null)">Add an owner</button>
-                    }
-                    else
-                    {
-                        <form class="card grid gap-4" @onsubmit="AddOwnerAsync" @onsubmit:preventDefault aria-label="Add an owner">
-                            <div class="grid gap-4 sm:grid-cols-2">
-                                <div class="field sm:col-span-2">
-                                    <label class="field-label" for="owner-name">Name</label>
-                                    <input id="owner-name" class="input" maxlength="200" @bind="_ownerName" />
-                                </div>
-                                <div class="field">
-                                    <label class="field-label" for="owner-email">Email</label>
-                                    <input id="owner-email" class="input" type="email" @bind="_ownerEmail" />
-                                </div>
-                                <div class="field">
-                                    <label class="field-label" for="owner-mobile">Mobile</label>
-                                    <input id="owner-mobile" class="input" type="tel" @bind="_ownerMobile" placeholder="04xx xxx xxx" />
-                                </div>
-                                <div class="field">
-                                    <label class="field-label" for="owner-share">Share (%)</label>
-                                    <input id="owner-share" class="input" type="number" min="0.1" max="100" step="0.1" @bind="_ownerShare" />
-                                    <span class="field-hint">@owners.Unallocated.ToString("0.#")% still unallocated.</span>
-                                </div>
-                                <div class="field">
-                                    <label class="field-label" for="owner-since">Owner since</label>
-                                    <input id="owner-since" class="input" type="date" @bind="_ownerSince" />
-                                </div>
-                            </div>
-                            <p class="field-hint">Someone already known by their email is linked, not added twice. A new owner is sent their invitation to the owners' portal.</p>
-                            @if (_ownerError is not null)
+                        @if (CanManage && _horse.Managed)
+                        {
+                            @if (!_addingOwner)
                             {
-                                <p class="alert-danger" role="alert">@_ownerError</p>
+                                <button type="button" class="btn-secondary justify-self-start" @onclick="() => (_addingOwner, _ownerError) = (true, null)">Add an owner</button>
                             }
-                            <div class="flex flex-wrap gap-3">
-                                <button type="submit" class="btn-primary" disabled="@_busy">Add owner</button>
-                                <button type="button" class="btn-secondary" @onclick="() => _addingOwner = false">Cancel</button>
-                            </div>
-                        </form>
-                    }
-                }
-                @if (_ownerAdded is not null)
-                {
-                    <p class="rounded-control bg-status-success-bg px-4 py-3 text-status-success-fg" role="status">@_ownerAdded</p>
-                }
-                @if (_ownerError is not null && !_addingOwner)
-                {
-                    <p class="alert-danger" role="alert">@_ownerError</p>
+                            else
+                            {
+                                <form class="card grid gap-4" @onsubmit="AddOwnerAsync" @onsubmit:preventDefault aria-label="Add an owner">
+                                    <div class="grid gap-4 sm:grid-cols-2">
+                                        <div class="field sm:col-span-2">
+                                            <label class="field-label" for="owner-name">Name</label>
+                                            <input id="owner-name" class="input" maxlength="200" @bind="_ownerName" />
+                                        </div>
+                                        <div class="field">
+                                            <label class="field-label" for="owner-email">Email</label>
+                                            <input id="owner-email" class="input" type="email" @bind="_ownerEmail" />
+                                        </div>
+                                        <div class="field">
+                                            <label class="field-label" for="owner-mobile">Mobile</label>
+                                            <input id="owner-mobile" class="input" type="tel" @bind="_ownerMobile" placeholder="04xx xxx xxx" />
+                                        </div>
+                                        <div class="field">
+                                            <label class="field-label" for="owner-share">Share (%)</label>
+                                            <input id="owner-share" class="input" type="number" min="0.1" max="100" step="0.1" @bind="_ownerShare" />
+                                            <span class="field-hint">@owners.Unallocated.ToString("0.#")% still unallocated.</span>
+                                        </div>
+                                        <div class="field">
+                                            <label class="field-label" for="owner-since">Owner since</label>
+                                            <input id="owner-since" class="input" type="date" @bind="_ownerSince" />
+                                        </div>
+                                    </div>
+                                    <p class="field-hint">Someone already known by their email is linked, not added twice. A new owner is sent their invitation to the owners' portal.</p>
+                                    @if (_ownerError is not null)
+                                    {
+                                        <p class="alert-danger" role="alert">@_ownerError</p>
+                                    }
+                                    <div class="flex flex-wrap gap-3">
+                                        <button type="submit" class="btn-primary" disabled="@_busy">Add owner</button>
+                                        <button type="button" class="btn-secondary" @onclick="() => _addingOwner = false">Cancel</button>
+                                    </div>
+                                </form>
+                            }
+                        }
+                        @if (_ownerAdded is not null)
+                        {
+                            <p class="rounded-control bg-status-success-bg px-4 py-3 text-status-success-fg" role="status">@_ownerAdded</p>
+                        }
+                        @if (_ownerError is not null && !_addingOwner)
+                        {
+                            <p class="alert-danger" role="alert">@_ownerError</p>
+                        }
+
+                        @if (CanManage && _horse.Managed)
+                        {
+                            @* The horse leaves (sold, retired): every owner stops together; its history stays (scenario 3b). *@
+                            @if (!_ending)
+                            {
+                                <button type="button" class="justify-self-start text-small underline underline-offset-4" @onclick="() => (_ending, _changing, _addingOwner, _endError) = (true, null, false, null)">
+                                    @_horse.Name is leaving management…
+                                </button>
+                            }
+                            else
+                            {
+                                <form class="card grid gap-4 border-status-warning-fg" @onsubmit="EndAsync" @onsubmit:preventDefault aria-label="Leaving management">
+                                    <h3 class="text-title">@_horse.Name leaves management</h3>
+                                    <p>Every owner stops owning on that day. The horse and its history stay, and can be taken on again later.</p>
+                                    <div class="grid gap-4 sm:grid-cols-2">
+                                        <div class="field sm:col-span-2">
+                                            <label class="field-label" for="end-reason">Why</label>
+                                            <input id="end-reason" class="input" maxlength="200" @bind="_endReason" placeholder="Sold to a stud in Victoria" />
+                                        </div>
+                                        <div class="field">
+                                            <label class="field-label" for="end-on">On</label>
+                                            <input id="end-on" class="input" type="date" max="@DateTime.Today.ToString("yyyy-MM-dd")" @bind="_endOn" />
+                                        </div>
+                                        <fieldset class="grid gap-2">
+                                            <legend class="field-label mb-1">Afterwards, the owners</legend>
+                                            <label class="inline-flex items-center gap-2"><input type="radio" name="end-access" class="size-[18px] accent-action-primary-bg" checked="@(!_endReadOnly)" @onchange="() => _endReadOnly = false" /> No longer see the horse</label>
+                                            <label class="inline-flex items-center gap-2"><input type="radio" name="end-access" class="size-[18px] accent-action-primary-bg" checked="@_endReadOnly" @onchange="() => _endReadOnly = true" /> Can still read its history</label>
+                                        </fieldset>
+                                    </div>
+                                    @if (_endError is not null)
+                                    {
+                                        <p class="alert-danger" role="alert">@_endError</p>
+                                    }
+                                    <div class="flex flex-wrap gap-3">
+                                        <button type="submit" class="btn-primary" disabled="@_busy">@_horse.Name leaves management</button>
+                                        <button type="button" class="btn-secondary" @onclick="() => _ending = false">Cancel</button>
+                                    </div>
+                                </form>
+                            }
+                        }
+                    </section>
                 }
 
-                @if (CanManage && _horse.Managed)
-                {
-                    @* The horse leaves (sold, retired): every owner stops together; its history stays (scenario 3b). *@
-                    @if (!_ending)
+                <section class="grid grid-cols-[minmax(0,1fr)] gap-3" aria-labelledby="now-heading">
+                    <h2 id="now-heading">Now and coming up</h2>
+                    @if (CurrentEvents.Count == 0)
                     {
-                        <button type="button" class="justify-self-start text-small underline underline-offset-4" @onclick="() => (_ending, _changing, _addingOwner, _endError) = (true, null, false, null)">
-                            @_horse.Name is leaving management…
+                        <p class="text-text-muted">Nothing open for @_horse.Name. Start one with New event.</p>
+                    }
+                    @foreach (var e in CurrentEvents)
+                    {
+                        <EventCard Model='e.ToCard($"events/{e.Id}")' />
+                    }
+                </section>
+
+                @if (_onHorse is { Count: > 0 } parked)
+                {
+                    <section class="grid grid-cols-[minmax(0,1fr)] gap-3" aria-labelledby="parked-heading">
+                        <h2 id="parked-heading" class="sr-only">Waiting on the horse</h2>
+                        <button type="button" class="flex flex-wrap items-center gap-3 rounded-control bg-status-warning-bg px-4 py-3 text-left text-status-warning-fg"
+                                aria-expanded="@(_sorting ? "true" : "false")" aria-controls="parked-list" @onclick="() => _sorting = !_sorting">
+                            <span class="flex-1">@(parked.Count == 1 ? "1 email is" : $"{parked.Count} emails are") waiting on the horse, not on an event. Staff only.</span>
+                            <span class="font-strong underline underline-offset-4">@(_sorting ? "Hide" : "Sort them")</span>
                         </button>
-                    }
-                    else
-                    {
-                        <form class="card grid gap-4 border-status-warning-fg" @onsubmit="EndAsync" @onsubmit:preventDefault aria-label="Leaving management">
-                            <h3 class="text-title">@_horse.Name leaves management</h3>
-                            <p>Every owner stops owning on that day. The horse and its history stay, and can be taken on again later.</p>
-                            <div class="grid gap-4 sm:grid-cols-2">
-                                <div class="field sm:col-span-2">
-                                    <label class="field-label" for="end-reason">Why</label>
-                                    <input id="end-reason" class="input" maxlength="200" @bind="_endReason" placeholder="Sold to a stud in Victoria" />
-                                </div>
-                                <div class="field">
-                                    <label class="field-label" for="end-on">On</label>
-                                    <input id="end-on" class="input" type="date" max="@DateTime.Today.ToString("yyyy-MM-dd")" @bind="_endOn" />
-                                </div>
-                                <fieldset class="grid gap-2">
-                                    <legend class="field-label mb-1">Afterwards, the owners</legend>
-                                    <label class="inline-flex items-center gap-2"><input type="radio" name="end-access" class="size-[18px] accent-action-primary-bg" checked="@(!_endReadOnly)" @onchange="() => _endReadOnly = false" /> No longer see the horse</label>
-                                    <label class="inline-flex items-center gap-2"><input type="radio" name="end-access" class="size-[18px] accent-action-primary-bg" checked="@_endReadOnly" @onchange="() => _endReadOnly = true" /> Can still read its history</label>
-                                </fieldset>
-                            </div>
-                            @if (_endError is not null)
-                            {
-                                <p class="alert-danger" role="alert">@_endError</p>
-                            }
-                            <div class="flex flex-wrap gap-3">
-                                <button type="submit" class="btn-primary" disabled="@_busy">@_horse.Name leaves management</button>
-                                <button type="button" class="btn-secondary" @onclick="() => _ending = false">Cancel</button>
-                            </div>
-                        </form>
-                    }
-                }
-            </section>
-        }
-
-        <section class="grid grid-cols-[minmax(0,1fr)] gap-3" aria-labelledby="contacts-heading">
-            <h2 id="contacts-heading">Trainer, vet and clubs</h2>
-            @if (_contacts is { Count: > 0 } contacts)
-            {
-                <ul class="card grid !p-0">
-                    @foreach (var c in contacts)
-                    {
-                        <li class="flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-border-subtle px-4 py-3 last:border-b-0">
-                            <span class="grid min-w-0 flex-[1_1_12rem]">
-                                <span class="font-strong">@c.Name</span>
-                                <span class="truncate text-small text-text-muted">@c.Email</span>
-                            </span>
-                            <span class="badge bg-surface-sunken text-text-muted">@c.Role</span>
-                            <span class="text-small text-text-muted">since @c.Since</span>
-                            @if (CanTag)
-                            {
-                                <button type="button" class="text-small font-strong underline underline-offset-4" disabled="@_busy" aria-label="@c.Name is no longer @(_horse.Name)'s @c.Role.ToLowerInvariant()"
-                                        @onclick="() => EndContactAsync(c)">No longer</button>
-                            }
-                        </li>
-                    }
-                </ul>
-            }
-            else
-            {
-                <p class="text-small text-text-muted">None yet. When the trainer, vet, racing authority or a race club first emails @(_horse.Name)'s address, say who they are on their email, and from then on their mail is recognised.</p>
-            }
-        </section>
-
-        @if (_onHorse is { Count: > 0 })
-        {
-            <section class="grid grid-cols-[minmax(0,1fr)] gap-3" aria-labelledby="on-horse-heading">
-                <h2 id="on-horse-heading">On the horse, not on an event</h2>
-                <p class="text-small text-text-muted">Mail to @_horse.Name's address when no event was open, and mail left here from the queue. Staff only.</p>
-                @foreach (var item in _onHorse)
-                {
-                    <article class="card grid gap-2">
-                        <p class="text-small text-text-muted">@(item.Author ?? "Unknown sender")@(item.FromRole is null ? null : $" ({item.FromRole.ToLowerInvariant()})") · @item.At@(item.Channel is null ? null : $" · by {item.Channel.ToLowerInvariant()}")</p>
-                        @if (item.Title is not null)
+                        @if (_sorting)
                         {
-                            <p class="font-strong">@item.Title</p>
-                        }
-                        <p class="line-clamp-2 whitespace-pre-line break-words">@item.Body</p>
-                        @if (item.Media is { Count: > 0 } media)
-                        {
-                            <MediaGallery Media="media" Describe="@(item.Title ?? _horse.Name)" />
-                            <p class="text-small text-text-muted">Staff only. Place it on an event to share @(media.Count == 1 ? "it" : "them") with the owners.</p>
-                        }
-                        @foreach (var reply in item.Replies ?? [])
-                        {
-                            <div class="ml-4 grid gap-1 border-l-2 border-border-subtle pl-3">
-                                <p class="text-small text-text-muted">@reply.Author · @reply.At</p>
-                                <p class="whitespace-pre-line break-words">@reply.Body</p>
+                            <div id="parked-list" class="grid gap-3">
+                                @foreach (var item in parked)
+                                {
+                                    <article class="card grid gap-2">
+                                        <p class="text-small text-text-muted">@(item.Author ?? "Unknown sender")@(item.FromRole is null ? null : $" ({item.FromRole.ToLowerInvariant()})") · @item.At@(item.Channel is null ? null : $" · by {item.Channel.ToLowerInvariant()}")</p>
+                                        @if (item.Title is not null)
+                                        {
+                                            <p class="font-strong">@item.Title</p>
+                                        }
+                                        <p class="line-clamp-2 whitespace-pre-line break-words">@item.Body</p>
+                                        @if (item.Media is { Count: > 0 } media)
+                                        {
+                                            <MediaGallery Media="media" Describe="@(item.Title ?? _horse.Name)" />
+                                            <p class="text-small text-text-muted">Staff only. Place it on an event to share @(media.Count == 1 ? "it" : "them") with the owners.</p>
+                                        }
+                                        @foreach (var reply in item.Replies ?? [])
+                                        {
+                                            <div class="ml-4 grid gap-1 border-l-2 border-border-subtle pl-3">
+                                                <p class="text-small text-text-muted">@reply.Author · @reply.At</p>
+                                                <p class="whitespace-pre-line break-words">@reply.Body</p>
+                                            </div>
+                                        }
+                                        @if (item.CanReplyToSender)
+                                        {
+                                            <ReplyToSender ItemId="item.Id" Author="@item.Author" OnSent="ReloadOnHorseAsync" />
+                                        }
+                                        @if (item.CanTagSender && CanTag)
+                                        {
+                                            <SenderTag ItemId="item.Id" Author="@item.Author" HorseName="@_horse.Name" OnTagged="ReloadContactsAsync" />
+                                        }
+                                        @if (CanTag && PlaceOptions.Count > 0)
+                                        {
+                                            <form class="flex flex-wrap items-end gap-2" @onsubmit="() => PlaceAsync(item)" @onsubmit:preventDefault aria-label="Put it on an event">
+                                                <div class="field">
+                                                    <label class="field-label" for="place-@item.Id">Put it on</label>
+                                                    <select id="place-@item.Id" class="input min-h-[36px] w-auto max-w-full" @bind:get="PlaceChoice(item.Id)" @bind:set="value => SetPlace(item.Id, value)">
+                                                        <option value="">Choose an event…</option>
+                                                        @foreach (var e in PlaceOptions)
+                                                        {
+                                                            <option value="@e.Id">@e.Title (@e.KeyDate)</option>
+                                                        }
+                                                    </select>
+                                                </div>
+                                                <button type="submit" class="btn-secondary min-h-[36px] px-3" disabled="@(_busy || string.IsNullOrEmpty(_placeOn.GetValueOrDefault(item.Id)))">Move</button>
+                                            </form>
+                                        }
+                                    </article>
+                                }
                             </div>
                         }
-                        @if (item.CanReplyToSender)
-                        {
-                            <ReplyToSender ItemId="item.Id" Author="@item.Author" OnSent="ReloadOnHorseAsync" />
-                        }
-                        @if (item.CanTagSender && CanTag)
-                        {
-                            <SenderTag ItemId="item.Id" Author="@item.Author" HorseName="@_horse.Name" OnTagged="ReloadContactsAsync" />
-                        }
-                    </article>
-                }
-            </section>
-        }
-
-        <section class="grid grid-cols-[minmax(0,1fr)] gap-4" aria-labelledby="events-heading">
-            <div class="flex flex-wrap items-center justify-between gap-3">
-                <h2 id="events-heading">Events</h2>
-                @if (!_creating)
-                {
-                    <button type="button" class="btn-primary" @onclick="StartCreating">New event</button>
+                    </section>
                 }
             </div>
 
-            @if (_creating && _types is not null)
-            {
-                <form class="card grid gap-4" @onsubmit="CreateAsync" @onsubmit:preventDefault aria-labelledby="new-event-heading">
-                    <h3 id="new-event-heading" class="font-heading">New event for @_horse.Name</h3>
-                    <fieldset class="grid gap-2">
-                        <legend class="field-label mb-2">What kind</legend>
-                        <div class="flex flex-wrap gap-2">
-                            @foreach (var type in _types)
-                            {
-                                var selected = _type?.Code == type.Code;
-                                <label class="inline-flex min-h-control cursor-pointer items-center gap-2 rounded-control border px-4 @(selected ? "border-action-primary-bg bg-action-secondary-bg font-strong" : "border-border-strong")">
-                                    <input type="radio" name="event-type" class="size-[18px] accent-action-primary-bg" checked="@selected" @onchange="() => _type = type" />
-                                    @type.Name
-                                </label>
-                            }
-                        </div>
-                    </fieldset>
-                    <div class="grid gap-4 sm:grid-cols-2">
-                        <div class="field">
-                            <label class="field-label" for="event-title">Title</label>
-                            <input id="event-title" class="input" @bind="_title" placeholder="@(_type?.TitleExample)" />
-                        </div>
-                        <div class="field">
-                            <label class="field-label" for="event-date">@(_type?.KeyDateLabel ?? "Date")</label>
-                            <input id="event-date" class="input" type="date" @bind="_date" @bind:format="yyyy-MM-dd" />
-                        </div>
-                    </div>
-                    <label class="inline-flex min-h-control cursor-pointer items-center gap-2">
-                        <input type="checkbox" class="size-[18px] accent-action-primary-bg" @bind="_openNow" />
-                        Open it now, so owners can see it
-                    </label>
-                    <p class="field-hint">@(_openNow ? "Owners see it on their timeline straight away; nothing is sent until you write to them." : "Saved as a draft: owners can't see it and nothing can be sent from it until you open it.")</p>
-                    @if (_createError is not null)
-                    {
-                        <Error Message="@_createError" />
-                    }
-                    <div class="flex flex-wrap gap-3">
-                        <button type="submit" class="btn-primary" disabled="@_busy">@(_openNow ? "Create and open" : "Save as draft")</button>
-                        <button type="button" class="btn-secondary" @onclick="() => _creating = false">Cancel</button>
-                    </div>
-                </form>
-            }
-            @if (_events is { Count: 0 })
-            {
-                <div class="card"><p>No events yet for @_horse.Name.</p></div>
-            }
-            else if (_events is not null)
-            {
-                @foreach (var e in _events)
+            <aside class="grid grid-cols-[minmax(0,1fr)] gap-4 lg:row-span-2" aria-label="About @_horse.Name">
+                @if (_owners is { } summary && !_managingOwners)
                 {
-                    <EventCard Model='e.ToCard($"events/{e.Id}")' />
+                    <section class="card grid gap-2" aria-labelledby="owners-summary-heading">
+                        <div class="flex items-baseline justify-between gap-2">
+                            <h2 id="owners-summary-heading" class="text-body font-strong">Owners</h2>
+                            <span class="text-small @(summary.Over ? "font-strong text-status-danger-fg" : summary.Warning is null ? "text-text-muted" : "text-status-warning-fg")">@summary.Allocated</span>
+                        </div>
+                        @if (summary.Warning is { } warning)
+                        {
+                            <p class="text-small @(summary.Over ? "font-strong text-status-danger-fg" : "text-status-warning-fg")">@warning</p>
+                        }
+                        @if (summary.Owners.Count == 0)
+                        {
+                            <p class="text-small text-text-muted">No owners yet.</p>
+                        }
+                        <ul class="grid gap-1 text-small">
+                            @foreach (var o in TopOwners(summary))
+                            {
+                                <li class="flex justify-between gap-3">
+                                    <span class="truncate">@(o.IsHouse ? "House share" : o.Name)</span>
+                                    <span class="tabular-nums @(o.ToConfirm ? "text-status-warning-fg" : null)">@(o.ToConfirm ? "to confirm" : o.Percent)</span>
+                                </li>
+                            }
+                        </ul>
+                        @if (summary.Owners.Count > OwnersShown)
+                        {
+                            <p class="text-small text-text-muted">and @(summary.Owners.Count - OwnersShown) more</p>
+                        }
+                        @if (_ownerAdded is not null)
+                        {
+                            <p class="text-small text-status-success-fg" role="status">@_ownerAdded</p>
+                        }
+                        <button type="button" class="justify-self-start text-small font-strong underline underline-offset-4" @onclick="() => _managingOwners = true">
+                            @(CanManage && _horse.Managed ? "Manage owners" : "See all owners")
+                        </button>
+                    </section>
                 }
-            }
-        </section>
+
+                <section class="card grid gap-2" aria-labelledby="contacts-heading">
+                    <h2 id="contacts-heading" class="text-body font-strong">Trainer, vet and clubs</h2>
+                    @if (_contacts is { Count: > 0 } contacts)
+                    {
+                        <ul class="grid gap-2 text-small">
+                            @foreach (var c in contacts)
+                            {
+                                <li class="grid gap-0.5">
+                                    <span><span class="text-text-muted">@c.Role</span> · <span class="font-strong">@c.Name</span></span>
+                                    <span class="flex flex-wrap items-baseline gap-x-2 text-text-muted">
+                                        <span class="truncate">@c.Email</span>
+                                        @if (CanTag)
+                                        {
+                                            <button type="button" class="underline underline-offset-4" disabled="@_busy" aria-label="@c.Name is no longer @(_horse.Name)'s @c.Role.ToLowerInvariant()"
+                                                    @onclick="() => EndContactAsync(c)">No longer</button>
+                                        }
+                                    </span>
+                                </li>
+                            }
+                        </ul>
+                    }
+                    else
+                    {
+                        <p class="text-small text-text-muted">None yet. When the trainer, vet, racing authority or a race club first emails @(_horse.Name)'s address, say who they are on their email, and from then on their mail is recognised.</p>
+                    }
+                </section>
+
+                @if (_horse.InboxAddress is { } inbox)
+                {
+                    @* The horse's own inbox (messaging-channels.md §3.1): give it to the trainer, and mail sent to it lands here. *@
+                    <section class="card grid gap-2" aria-labelledby="inbox-heading">
+                        <h2 id="inbox-heading" class="text-body font-strong">Email address</h2>
+                        <code class="break-all text-small">@inbox</code>
+                        <div class="flex flex-wrap items-center gap-2">
+                            <button type="button" class="btn-secondary min-h-[36px] px-3" @onclick="() => Copy(inbox)">@(_copied ? "Copied" : "Copy")</button>
+                            <span class="sr-only" role="status">@(_copied ? "Email address copied" : null)</span>
+                        </div>
+                        <p class="text-small text-text-muted">Give it to the trainer and anyone who sends news about @_horse.Name. Mail to it lands on the horse's open event, or waits here if there isn't just one.</p>
+                    </section>
+                }
+            </aside>
+
+            <section class="grid grid-cols-[minmax(0,1fr)] gap-3" aria-labelledby="past-heading">
+                <details class="group" open="@(CurrentEvents.Count == 0 && PastEvents.Count > 0)">
+                    <summary class="cursor-pointer list-none border-t border-border-subtle pt-3 text-text-muted">
+                        <span id="past-heading" class="font-strong text-text-primary">Past events (@PastEvents.Count)</span>
+                        @if (PastEvents.FirstOrDefault() is { } last)
+                        {
+                            <span class="text-small"> · last: @last.Title, @last.KeyDate</span>
+                        }
+                    </summary>
+                    <div class="mt-3 grid gap-3">
+                        @if (PastEvents.Count == 0)
+                        {
+                            <p class="text-small text-text-muted">None yet.</p>
+                        }
+                        @foreach (var e in PastEvents)
+                        {
+                            <EventCard Model='e.ToCard($"events/{e.Id}")' />
+                        }
+                    </div>
+                </details>
+            </section>
+        </div>
     }
 </div>
 
@@ -314,6 +404,56 @@
     private bool CanManage => Session.Current?.Role is "Manager" or "TenantAdmin";
 
     private Guid? _changing;
+
+    /// <summary>The full owners list, with changes, is open in the main column; otherwise a summary sits alongside.</summary>
+    private bool _managingOwners;
+
+    private const int OwnersShown = 4;
+
+    private static IEnumerable<OwnerLine> TopOwners(OwnersView owners) =>
+        owners.Owners.OrderBy(o => o.ToConfirm).ThenByDescending(o => decimal.TryParse(o.Percent.TrimEnd('%'), System.Globalization.NumberStyles.Number,
+            System.Globalization.CultureInfo.InvariantCulture, out var p) ? p : 0).Take(OwnersShown);
+
+    private string HeaderLine => string.Join(" · ", new[]
+    {
+        _horse!.SexAge,
+        _horse.Managed ? $"Managed since {_horse.ManagedSince}" : "No longer managed",
+        _owners is { } o ? $"{_horse.CurrentOwners} {(_horse.CurrentOwners == 1 ? "owner" : "owners")}, {o.Allocated}" : null,
+    }.Where(x => !string.IsNullOrEmpty(x)));
+
+    /// <summary>Open and draft events, nearest date first (the server lists newest first).</summary>
+    private List<EventSummary> CurrentEvents => (_events ?? []).Where(e => e.Status is "Open" or "Draft").Reverse().ToList();
+
+    private List<EventSummary> PastEvents => (_events ?? []).Where(e => e.Status is not ("Open" or "Draft")).ToList();
+
+    /// <summary>Where parked mail can go: the horse's events that aren't cancelled, current ones first.</summary>
+    private List<EventSummary> PlaceOptions => CurrentEvents.Concat(PastEvents.Where(e => e.Status != "Cancelled")).ToList();
+
+    private bool _sorting;
+    private readonly Dictionary<Guid, string> _placeOn = [];
+
+    private string PlaceChoice(Guid itemId) => _placeOn.GetValueOrDefault(itemId) ?? "";
+
+    private void SetPlace(Guid itemId, string? eventId) => _placeOn[itemId] = eventId ?? "";
+
+    private async Task PlaceAsync(HorseItem item)
+    {
+        if (!Guid.TryParse(_placeOn.GetValueOrDefault(item.Id), out var eventId)) return;
+        _busy = true;
+        try
+        {
+            var result = await Api.PlaceItemAsync(item.Id, eventId);
+            if (!result.Succeeded) { _error = result.Error; return; }
+            _placeOn.Remove(item.Id);
+            await ReloadOnHorseAsync();
+            var events = await Api.HorseEventsAsync(Id);
+            if (events.Succeeded) _events = events.Value;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
 
     /// <summary>A share to confirm gets its size: they own it now, see the horse, and are invited.</summary>
     private async Task ConfirmAsync(OwnerLine owner, decimal? typed)

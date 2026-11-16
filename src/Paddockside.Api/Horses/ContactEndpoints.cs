@@ -25,6 +25,8 @@ public static class ContactEndpoints
     /// <param name="Step">A step's label or code on the item's event; null or empty for none.</param>
     public sealed record StepRequest(string? Step);
 
+    public sealed record PlaceRequest(Guid EventId);
+
     private static readonly string[] CanTag = [nameof(MemberRole.Coordinator), nameof(MemberRole.Manager), nameof(MemberRole.TenantAdmin)];
 
     public static void MapContactEndpoints(this IEndpointRouteBuilder app)
@@ -33,6 +35,7 @@ public static class ContactEndpoints
         app.MapPost("/api/horses/{id:guid}/contacts/{contactId:guid}/end", End).RequireAuthorization(StaffPolicy.Name);
         app.MapPost("/api/items/{id:guid}/sender", TagSender).RequireAuthorization(StaffPolicy.Name);
         app.MapPost("/api/items/{id:guid}/step", SetStep).RequireAuthorization(StaffPolicy.Name);
+        app.MapPost("/api/items/{id:guid}/event", Place).RequireAuthorization(StaffPolicy.Name);
     }
 
     private static async Task<IResult> List(Guid id, PaddocksideDbContext db, TimeProvider clock, CancellationToken cancellationToken)
@@ -118,6 +121,29 @@ public static class ContactEndpoints
         item.SetStep(e, step?.Code);
         await db.SaveChangesAsync(cancellationToken);
         await audit.RecordAsync(e.TenantId, "item.step", $"Filed \"{item.Title ?? Excerpt(item.Body)}\" on \"{e.Title}\" under {step?.Label ?? "no step"} (nothing sent)",
+            "StreamItem", item.Id, cancellationToken: cancellationToken);
+        return Results.NoContent();
+    }
+
+    /// <summary>
+    /// Mail parked on the horse goes onto one of its events, with its replies (David, 16 Nov 2026: sorted from the horse
+    /// page). The trainer's lands on the step due. It stays staff only, and nothing is sent.
+    /// </summary>
+    private static async Task<IResult> Place(Guid id, PlaceRequest request, ClaimsPrincipal user, PaddocksideDbContext db, AuditLog audit,
+        CancellationToken cancellationToken)
+    {
+        if (!CanTag.Contains(user.FindFirstValue(SessionClaims.Role))) return Forbidden();
+        var item = await db.StreamItems.SingleOrDefaultAsync(i => i.Id == id, cancellationToken);
+        if (item is null) return Results.NotFound();
+        if (item.EventId is not null || item.InReplyToId is not null) return Problem("This is already on an event.");
+        var e = await db.Events.SingleOrDefaultAsync(x => x.Id == request.EventId && x.HorseId == item.HorseId, cancellationToken);
+        if (e is null) return Problem("Choose one of this horse's events.");
+
+        item.PlaceOn(e);
+        foreach (var reply in await db.StreamItems.Where(i => i.InReplyToId == item.Id).ToListAsync(cancellationToken)) reply.PlaceOn(e);
+        await TrainerMail.FileAsync(db, e, item, cancellationToken);
+        await db.SaveChangesAsync(cancellationToken);
+        await audit.RecordAsync(e.TenantId, "item.placed", $"Put \"{item.Title ?? Excerpt(item.Body)}\" from the horse onto \"{e.Title}\"",
             "StreamItem", item.Id, cancellationToken: cancellationToken);
         return Results.NoContent();
     }

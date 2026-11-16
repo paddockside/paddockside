@@ -96,7 +96,18 @@ public sealed class StreamItem
 
     public Guid HorseId { get; }
 
-    public Guid? EventId { get; }
+    public Guid? EventId { get; private set; }
+
+    /// <summary>
+    /// Mail parked on the horse (no event was open, or more than one) is put on the event it belongs to (David, 16 Nov 2026:
+    /// "sort them on the horse page"). Its replies come with it. Nothing is sent.
+    /// </summary>
+    public void PlaceOn(Event @event)
+    {
+        if (@event.HorseId != HorseId) throw new DomainException("That event is on another horse.");
+        if (EventId is not null) throw new DomainException("This is already on an event.");
+        EventId = @event.Id;
+    }
 
     public StreamItemKind Kind { get; }
 

@@ -65,7 +65,16 @@ public sealed partial class OwnerSignInTests
         // Mail to the horse still files itself on the one open race.
         await InboundEmailAsync(inbox, from, "After the reply", "Still all set.");
         Assert.Contains((await admin.GetFromJsonAsync<ClosedPage>($"/api/events/{newer}"))!.Items, i => i.Title == "After the reply");
+
+        // The email that waited on the horse is sorted onto the new race from the horse page; nothing is sent.
+        var waiting = (await admin.GetFromJsonAsync<List<ParkedLine>>($"/api/horses/{seed.HorseId}/unplaced"))!.Single(i => i.Title == "Which race?");
+        Assert.Equal(HttpStatusCode.NoContent, (await admin.PostApiAsync($"/api/items/{waiting.Id}/event", new { eventId = newer })).StatusCode);
+        Assert.Contains((await admin.GetFromJsonAsync<ClosedPage>($"/api/events/{newer}"))!.Items, i => i.Title == "Which race?");
+        Assert.DoesNotContain((await admin.GetFromJsonAsync<List<ParkedLine>>($"/api/horses/{seed.HorseId}/unplaced"))!, i => i.Title == "Which race?");
+        Assert.Equal(HttpStatusCode.BadRequest, (await admin.PostApiAsync($"/api/items/{waiting.Id}/event", new { eventId = newer })).StatusCode);
     }
+
+    private sealed record ParkedLine(Guid Id, string? Title);
 
     private sealed record TodayWithClosed(List<TodayQuiet>? ClosedReplies);
 }

@@ -532,6 +532,9 @@ public sealed class PaddocksideApi(HttpClient http)
     /// <summary>Files an item under a step of its event (or none, with null). Nothing is sent.</summary>
     public Task<ApiResult<object>> SetItemStepAsync(Guid itemId, string? step) => PostAsync<object>($"api/items/{itemId}/step", new { step });
 
+    /// <summary>Mail parked on the horse goes onto one of its events. Nothing is sent.</summary>
+    public Task<ApiResult<object>> PlaceItemAsync(Guid itemId, Guid eventId) => PostAsync<object>($"api/items/{itemId}/event", new { eventId });
+
     public Task<ApiResult<DeliveryReport>> DeliveryReportAsync(Guid eventId) => GetAsync<DeliveryReport>($"api/reports/delivery/{eventId}");
 
     public Task<ApiResult<UnreachedReport>> UnreachedAsync(int last, int days) => GetAsync<UnreachedReport>($"api/reports/unreached?last={last}&days={days}");
