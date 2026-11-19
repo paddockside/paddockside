@@ -2,21 +2,32 @@
 @inject PaddocksideApi Api
 @inject SessionState Session
 @inject NavigationManager Navigation
+@inject IJSRuntime JS
 
 <PageTitle>Horses · Paddockside</PageTitle>
 
 @*
     The horses (David, 19 Nov 2026: "make it a little more useful"): each with its status, where it is and what's
     next, its next event and where that's up to, and how long since the status changed (amber after four weeks).
-    Filter by status; change one right here. Horses no longer managed are kept to one side.
+    Filter by status; change one right here. Horses no longer managed are kept to one side. Or see them as a calendar:
+    every event on its date and horses due back, with the same filters; the choice of view is remembered.
 *@
 <div class="grid grid-cols-[minmax(0,1fr)] gap-4">
     <div class="flex flex-wrap items-center justify-between gap-3">
         <h1>Horses</h1>
-        @if (Session.Current?.Role is "Manager" or "TenantAdmin")
-        {
-            <a href="horses/new" class="btn-primary">New horse</a>
-        }
+        <div class="flex flex-wrap items-center gap-3">
+            <div class="inline-flex rounded-pill border border-border-strong p-0.5" role="group" aria-label="View">
+                @foreach (var view in Views)
+                {
+                    <button type="button" aria-pressed="@(_view == view ? "true" : "false")" @onclick="() => ShowAsync(view)"
+                            class="min-h-[32px] rounded-pill px-3 text-small @(_view == view ? "bg-action-primary-bg text-action-primary-fg" : null)">@view</button>
+                }
+            </div>
+            @if (Session.Current?.Role is "Manager" or "TenantAdmin")
+            {
+                <a href="horses/new" class="btn-primary">New horse</a>
+            }
+        </div>
     </div>
 
     @if (_error is not null)
@@ -50,7 +61,11 @@
             <p class="rounded-control bg-status-success-bg px-4 py-3 text-status-success-fg" role="status">@_saved</p>
         }
 
-        @if (Shown.Count == 0)
+        @if (_view == "Calendar")
+        {
+            <MonthCalendar Month="_month" Items="CalendarShown" Loading="_calendar is null" Today="_today" Key="CalendarKey" OnMonthChanged="MonthAsync" />
+        }
+        else if (Shown.Count == 0)
         {
             <p class="text-text-muted">None at the moment.</p>
         }
@@ -133,6 +148,48 @@
         }
     }
 
+    private static readonly string[] Views = ["List", "Calendar"];
+    private const string ViewKey = "paddockside.horses.view";
+    private string _view = "List";
+    private DateOnly _today = DateOnly.FromDateTime(DateTime.Today);
+    private DateOnly _month = new(DateTime.Today.Year, DateTime.Today.Month, 1);
+    private List<CalendarEntry>? _calendar;
+
+    private static readonly IReadOnlyList<(string, string)> CalendarKey =
+        [("RaceStart", "Race start"), ("BarrierTrial", "Trial"), ("Veterinary", "Vet"), ("General", "Other"), ("DueBack", "Due back")];
+
+    /// <summary>The calendar's entries for the horses the filter shows ("All": everything).</summary>
+    private List<CalendarEntry> CalendarShown
+    {
+        get
+        {
+            if (_calendar is null) return [];
+            if (_filter == "All") return _calendar;
+            var ids = Shown.Select(h => h.Id).ToHashSet();
+            return _calendar.Where(e => e.HorseId is { } id && ids.Contains(id)).ToList();
+        }
+    }
+
+    private async Task ShowAsync(string view)
+    {
+        _view = view;
+        try { await JS.InvokeVoidAsync("localStorage.setItem", ViewKey, view); } catch (JSException) { } // a convenience only
+        if (view == "Calendar" && _calendar is null) await LoadCalendarAsync();
+    }
+
+    private async Task MonthAsync(DateOnly month)
+    {
+        (_month, _calendar) = (month, null);
+        await LoadCalendarAsync();
+    }
+
+    private async Task LoadCalendarAsync()
+    {
+        var result = await Api.CalendarAsync(MonthCalendar.FirstShown(_month), MonthCalendar.LastShown(_month));
+        if (result.Succeeded) _calendar = result.Value;
+        else _error = result.Error;
+    }
+
     private List<HorseSummary> Shown => _filter switch
     {
         "All" => Managed,
@@ -168,5 +225,9 @@
         if (result.Succeeded) _horses = result.Value;
         else _error = result.Error;
         _options = (await Api.HorseStatusOptionsAsync()).Value;
+
+        string? remembered = null;
+        try { remembered = await JS.InvokeAsync<string?>("localStorage.getItem", ViewKey); } catch (JSException) { }
+        if (remembered == "Calendar") await ShowAsync("Calendar");
     }
 }

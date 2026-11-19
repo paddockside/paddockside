@@ -1,0 +1,170 @@
+@*
+    A month of dated entries (David, 19 Nov 2026): race starts, trials, vet visits, other events and horses due back,
+    and later social events, coloured by kind. Weeks start on Monday; today is shaded. A crowded day shows "+N more";
+    choosing a day lists all of it below. On a phone, where seven columns don't fit, it is an agenda: the days with
+    something on, in order. It only shows what it's given; the page decides which entries.
+*@
+<div class="grid grid-cols-[minmax(0,1fr)] gap-3">
+    <div class="flex items-center justify-between gap-2">
+        <button type="button" class="btn-secondary min-h-[36px] px-3" @onclick="() => MoveAsync(-1)" aria-label="Previous month">← @Month.AddMonths(-1).ToString("MMMM", Culture)</button>
+        <h2 class="text-title" aria-live="polite">@Month.ToString("MMMM yyyy", Culture)</h2>
+        <button type="button" class="btn-secondary min-h-[36px] px-3" @onclick="() => MoveAsync(1)" aria-label="Next month">@Month.AddMonths(1).ToString("MMMM", Culture) →</button>
+    </div>
+
+    <ul class="flex flex-wrap gap-x-4 gap-y-1 text-small text-text-muted" aria-label="Key">
+        @foreach (var (kind, label) in Key)
+        {
+            <li class="inline-flex items-center"><span class="mr-[6px] inline-block size-[10px] rounded-[3px] border @Classes(kind)" aria-hidden="true"></span>@label</li>
+        }
+    </ul>
+
+    @if (Loading)
+    {
+        <p class="text-text-muted" role="status">Loading…</p>
+    }
+
+    @* Wider screens: the month as a grid. *@
+    <div class="card hidden !p-0 sm:block">
+        <div class="grid grid-cols-7 border-b border-border-subtle text-small font-strong text-text-muted">
+            @foreach (var name in DayNames)
+            {
+                <div class="px-2 py-2">@name</div>
+            }
+        </div>
+        <div class="grid grid-cols-7">
+            @foreach (var day in Days)
+            {
+                var mine = On(day);
+                var inMonth = day.Month == Month.Month;
+                <button type="button" @onclick="() => _chosen = day" aria-pressed="@(_chosen == day ? "true" : "false")"
+                        aria-label="@($"{day.ToString("dddd d MMMM", Culture)}: {(mine.Count == 0 ? "nothing on" : mine.Count == 1 ? "1 thing on" : $"{mine.Count} things on")}")"
+                        class="grid min-h-[92px] content-start gap-[4px] border-b border-r border-border-subtle p-[6px] text-left text-small hover:bg-surface-sunken [&:nth-child(7n)]:border-r-0
+                               @(day == Today ? "bg-status-info-bg" : null) @(_chosen == day ? "outline outline-2 -outline-offset-2 outline-action-primary-bg" : null) @(inMonth ? null : "text-text-muted")">
+                    <span class="@(day == Today ? "font-strong text-text-primary" : null)">@day.Day@(day == Today ? " · today" : null)</span>
+                    @foreach (var e in mine.Take(PerDay))
+                    {
+                        <span class="truncate rounded-[4px] border px-[4px] @Classes(e.Kind) @(e.Draft || e.Done ? "opacity-60" : null)" title="@e.Short">@(e.Horse ?? e.Short)</span>
+                    }
+                    @if (mine.Count > PerDay)
+                    {
+                        <span class="text-text-muted">+@(mine.Count - PerDay) more</span>
+                    }
+                </button>
+            }
+        </div>
+    </div>
+
+    @if (_chosen is { } chosen && chosen.Month == Month.Month)
+    {
+        <section class="card hidden gap-2 sm:grid" aria-label="@chosen.ToString("dddd d MMMM", Culture)">
+            <h3 class="font-strong">@chosen.ToString("dddd d MMMM", Culture)</h3>
+            @if (On(chosen).Count == 0)
+            {
+                <p class="text-small text-text-muted">Nothing on.</p>
+            }
+            @Entries(On(chosen))
+        </section>
+    }
+
+    @* Phones: an agenda of the days with something on. *@
+    <div class="grid gap-3 sm:hidden">
+        @if (!Loading && Days.Where(d => d.Month == Month.Month).All(d => On(d).Count == 0))
+        {
+            <p class="text-text-muted">Nothing on in @Month.ToString("MMMM", Culture).</p>
+        }
+        @foreach (var day in Days.Where(d => d.Month == Month.Month && On(d).Count > 0))
+        {
+            <section class="card grid gap-2" aria-label="@day.ToString("dddd d MMMM", Culture)">
+                <h3 class="font-strong">@day.ToString("dddd d MMMM", Culture)@(day == Today ? " · today" : null)</h3>
+                @Entries(On(day))
+            </section>
+        }
+    </div>
+</div>
+
+@code {
+    private static readonly System.Globalization.CultureInfo Culture = System.Globalization.CultureInfo.GetCultureInfo("en-AU");
+    private static readonly string[] DayNames = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+    private const int PerDay = 3;
+    private DateOnly? _chosen;
+
+    /// <summary>The first of the month shown.</summary>
+    [Parameter, EditorRequired] public DateOnly Month { get; set; }
+
+    [Parameter, EditorRequired] public IReadOnlyList<CalendarEntry> Items { get; set; } = [];
+
+    [Parameter] public bool Loading { get; set; }
+
+    [Parameter] public DateOnly Today { get; set; } = DateOnly.FromDateTime(DateTime.Today);
+
+    /// <summary>The month moved: the page loads its entries (<see cref="FirstShown"/> to <see cref="LastShown"/>).</summary>
+    [Parameter] public EventCallback<DateOnly> OnMonthChanged { get; set; }
+
+    /// <summary>The kinds the key lists, in order; other kinds still show, without a key entry.</summary>
+    [Parameter] public IReadOnlyList<(string Kind, string Label)> Key { get; set; } = [];
+
+    /// <summary>The Monday on or before the first of <paramref name="month"/>: the grid's first square.</summary>
+    public static DateOnly FirstShown(DateOnly month) => month.AddDays(-(((int)month.DayOfWeek + 6) % 7));
+
+    /// <summary>The Sunday on or after the last of <paramref name="month"/>: the grid's last square.</summary>
+    public static DateOnly LastShown(DateOnly month)
+    {
+        var last = month.AddMonths(1).AddDays(-1);
+        return last.AddDays((7 - (int)last.DayOfWeek) % 7);
+    }
+
+    private IEnumerable<DateOnly> Days
+    {
+        get
+        {
+            for (var d = FirstShown(Month); d <= LastShown(Month); d = d.AddDays(1)) yield return d;
+        }
+    }
+
+    private List<CalendarEntry> On(DateOnly day)
+    {
+        var key = day.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture);
+        return Items.Where(e => e.Date == key).ToList();
+    }
+
+    private async Task MoveAsync(int months)
+    {
+        _chosen = null;
+        await OnMonthChanged.InvokeAsync(Month.AddMonths(months));
+    }
+
+    public static string Classes(string kind) => kind switch
+    {
+        "RaceStart" => "border-status-success-fg bg-status-success-bg text-status-success-fg",
+        "BarrierTrial" => "border-status-warning-fg bg-status-warning-bg text-status-warning-fg",
+        "Veterinary" => "border-status-danger-fg bg-status-danger-bg text-status-danger-fg",
+        "DueBack" => "border-status-info-fg bg-status-info-bg text-status-info-fg",
+        _ => "border-border-strong bg-surface-sunken text-text-primary",
+    };
+
+    private RenderFragment Entries(List<CalendarEntry> entries) => __builder =>
+    {
+        <ul class="grid gap-2">
+            @foreach (var e in entries)
+            {
+                <li>
+                    <a href="@e.Href" class="grid gap-[2px] rounded-control px-2 py-1 hover:bg-surface-sunken">
+                        <span class="flex flex-wrap items-center gap-2">
+                            <span class="badge border @Classes(e.Kind)">@e.KindLabel</span>
+                            <span class="font-strong">@(e.Horse ?? e.Title)</span>
+                            @if (e.Time is not null)
+                            {
+                                <span class="text-small text-text-muted">@e.Time</span>
+                            }
+                            @if (e.Draft)
+                            {
+                                <span class="badge bg-surface-sunken text-text-muted">Draft</span>
+                            }
+                        </span>
+                        <span class="text-small text-text-muted">@(e.Horse is null ? null : e.Title)@(e.Detail is null ? null : (e.Horse is null ? e.Detail : $" · {e.Detail}"))</span>
+                    </a>
+                </li>
+            }
+        </ul>
+    };
+}

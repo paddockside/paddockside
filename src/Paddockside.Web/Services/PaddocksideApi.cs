@@ -23,6 +23,12 @@ public sealed record HorseSummary(Guid Id, string Name, bool Managed, DateTimeOf
 public sealed record HorseStatusView(string Code, string Label, string? Location, string? Next, string? ExpectedBack, string? ExpectedOn, string Line, string Set,
     string SetBy);
 
+/// <param name="Date">yyyy-MM-dd, Sydney time.</param>
+/// <param name="Kind">RaceStart, BarrierTrial, Veterinary, General, DueBack (social events later).</param>
+/// <param name="Short">For a day square: "Faultless Miss · Randwick, Race 6".</param>
+public sealed record CalendarEntry(string Date, string? Time, string Kind, string KindLabel, Guid? HorseId, string? Horse, string Title, string Short,
+    string? Detail, string Href, bool Draft = false, bool Done = false);
+
 public sealed record HorseStatusPage(HorseStatusView? Current, List<HorseStatusView> History);
 
 public sealed record HorseStatusOption(string Code, string Label);
@@ -539,6 +545,9 @@ public sealed class PaddocksideApi(HttpClient http)
 
     /// <summary>An admin closes an event now; a reason is needed if it isn't finished. Nothing is sent.</summary>
     public Task<ApiResult<object>> CloseEventAsync(Guid id, string? reason) => PostAsync<object>($"api/events/{id}/close", new { reason });
+
+    public Task<ApiResult<List<CalendarEntry>>> CalendarAsync(DateOnly from, DateOnly to) =>
+        GetAsync<List<CalendarEntry>>($"api/calendar?from={from:yyyy-MM-dd}&to={to:yyyy-MM-dd}");
 
     public Task<ApiResult<List<HorseStatusOption>>> HorseStatusOptionsAsync() => GetAsync<List<HorseStatusOption>>("api/horse-statuses");
 

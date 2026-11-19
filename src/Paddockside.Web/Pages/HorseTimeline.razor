@@ -318,7 +318,7 @@
                             <ol class="mt-2 grid gap-2">
                                 @foreach (var h in page.History.Skip(1))
                                 {
-                                    <li class="grid gap-0.5 border-l-2 border-border-subtle pl-3">
+                                    <li class="grid gap-[2px] border-l-2 border-border-subtle pl-3">
                                         <span><span class="font-strong">@h.Label</span> · @h.Set</span>
                                         <span class="text-text-muted">@h.Line</span>
                                     </li>
@@ -373,7 +373,7 @@
                         <ul class="grid gap-2 text-small">
                             @foreach (var c in contacts)
                             {
-                                <li class="grid gap-0.5">
+                                <li class="grid gap-[2px]">
                                     <span><span class="text-text-muted">@c.Role</span> · <span class="font-strong">@c.Name</span></span>
                                     <span class="flex flex-wrap items-baseline gap-x-2 text-text-muted">
                                         <span class="truncate">@c.Email</span>

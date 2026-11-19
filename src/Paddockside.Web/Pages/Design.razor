@@ -68,6 +68,12 @@
         </div>
     </Section>
 
+    <Section Title="MonthCalendar" Doc="search-reporting.md">
+        <Variant Label="Staff: the horses' month, with events and horses due back">
+            <MonthCalendar Month="SampleMonth" Today="SampleMonth.AddDays(18)" Items="SampleCalendar" Key="SampleKey" OnMonthChanged="m => SampleMonth = m" />
+        </Variant>
+    </Section>
+
     <Section Title="ConfirmSend" Doc="messaging-channels.md">
         <Variant Label="Staff: the last look before anything goes to owners">
             <div class="flex flex-wrap gap-3">
@@ -242,4 +248,21 @@
 
     private static readonly ItemView SampleUnknownEmail = new(Guid.NewGuid(), "Message", "Internal", "Monday 9 November, 9:02 am", "Faultless Miss", "Hello from the stable.",
         "stable@example.test", null, null, [], null, null, [], [], Channel: "Email", CanTagSender: true);
+
+    private DateOnly SampleMonth = new(2026, 11, 1);
+
+    private static readonly IReadOnlyList<(string, string)> SampleKey =
+        [("RaceStart", "Race start"), ("BarrierTrial", "Trial"), ("Veterinary", "Vet"), ("General", "Other"), ("DueBack", "Due back")];
+
+    private static readonly List<CalendarEntry> SampleCalendar =
+    [
+        new("2026-11-17", "8:30 am", "BarrierTrial", "Barrier trial", Guid.NewGuid(), "Lot 231", "Rosehill trial, heat 4", "Lot 231 · Rosehill trial", "next: Entered", "events/x"),
+        new("2026-11-21", "3:05 pm", "RaceStart", "Race start", Guid.NewGuid(), "Faultless Miss", "Randwick, Race 6", "Faultless Miss · Randwick, Race 6", "next: Accepted", "events/x"),
+        new("2026-11-21", "1:40 pm", "RaceStart", "Race start", Guid.NewGuid(), "Bel Esprit", "Rosehill, Race 3", "Bel Esprit · Rosehill, Race 3", "next: Barrier", "events/x"),
+        new("2026-11-21", null, "General", "General", Guid.NewGuid(), "Old Mate", "Float to Scone", "Old Mate · Float to Scone", null, "events/x"),
+        new("2026-11-21", null, "Veterinary", "Veterinary", Guid.NewGuid(), "Snitzel filly", "Scope", "Snitzel filly · Scope", null, "events/x"),
+        new("2026-11-24", null, "Veterinary", "Veterinary", Guid.NewGuid(), "Couldn't Refuse", "Scope after trackwork", "Couldn't Refuse · Scope", null, "events/x", Draft: true),
+        new("2026-11-29", null, "DueBack", "Due back", Guid.NewGuid(), "Old Mate", "Old Mate due back", "Old Mate · due back", "Spelling at Riverbank Farm", "horses/x"),
+        new("2026-11-04", null, "RaceStart", "Race start", Guid.NewGuid(), "Faultless Miss", "Flemington, Race 2", "Faultless Miss · Flemington, Race 2", "Closed", "events/x", Done: true),
+    ];
 }
