@@ -1,0 +1,130 @@
+@inject PaddocksideApi Api
+
+@*
+    Changing a horse's status (David, 19 Nov 2026), from the horses list or the horse page: what it's doing, where,
+    what's next in your words, and when it's expected back (loosely, plus a date to sort by if you have one). Ticking
+    "Also tell the owners" shows who it will reach first, as for any message; nothing goes until Send.
+*@
+<form class="grid gap-3 rounded-card border border-border-subtle bg-surface-raised p-4" @onsubmit="SaveAsync" @onsubmit:preventDefault aria-label="@($"{HorseName}'s status")">
+    <div class="grid gap-3 sm:grid-cols-2">
+        <div class="field">
+            <label class="field-label" for="@_id-status">Status</label>
+            <select id="@_id-status" class="input" @bind="_status">
+                @foreach (var option in Options)
+                {
+                    <option value="@option.Code">@option.Label</option>
+                }
+            </select>
+        </div>
+        <div class="field">
+            <label class="field-label" for="@_id-where">Where</label>
+            <input id="@_id-where" class="input" maxlength="120" @bind="_location" placeholder="Riverbank Farm" />
+        </div>
+        <div class="field sm:col-span-2">
+            <label class="field-label" for="@_id-next">What's next</label>
+            <input id="@_id-next" class="input" maxlength="500" @bind="_next" placeholder="Usual 6-week spell, then back to the stable" />
+        </div>
+        <div class="field">
+            <label class="field-label" for="@_id-back">Expected back (optional)</label>
+            <input id="@_id-back" class="input" maxlength="60" @bind="_expectedBack" placeholder="late December" />
+        </div>
+        <div class="field">
+            <label class="field-label" for="@_id-on">As a date (optional, for sorting)</label>
+            <input id="@_id-on" class="input" type="date" @bind="_expectedOn" />
+        </div>
+    </div>
+    <label class="inline-flex items-center gap-2">
+        <input type="checkbox" class="size-[18px] accent-action-primary-bg" @bind="_tell" />
+        Also tell the owners
+    </label>
+    @if (_error is not null)
+    {
+        <p class="alert-danger" role="alert">@_error</p>
+    }
+    <div class="flex flex-wrap gap-3">
+        <button type="submit" class="btn-primary" disabled="@_busy">Save</button>
+        <button type="button" class="btn-secondary" @onclick="OnCancel">Cancel</button>
+    </div>
+</form>
+@if (_confirming is { } who)
+{
+    <ConfirmSend Recipients="who" HorseName="@HorseName" OnAnswer="AnsweredAsync" />
+}
+
+@code {
+    private readonly string _id = $"status-{Guid.NewGuid():N}";
+    private string _status = "InWork";
+    private string? _location, _next, _expectedBack, _error;
+    private DateOnly? _expectedOn;
+    private bool _tell, _busy;
+    private RecipientsView? _confirming;
+
+    [Parameter, EditorRequired] public Guid HorseId { get; set; }
+
+    [Parameter] public string? HorseName { get; set; }
+
+    /// <summary>The status now, to start from; null for a horse with none yet.</summary>
+    [Parameter] public HorseStatusView? Current { get; set; }
+
+    [Parameter, EditorRequired] public IReadOnlyList<HorseStatusOption> Options { get; set; } = [];
+
+    /// <summary>Saved: what to say ("Saved. 3 owners are being told.").</summary>
+    [Parameter] public EventCallback<string> OnSaved { get; set; }
+
+    [Parameter] public EventCallback OnCancel { get; set; }
+
+    protected override void OnInitialized()
+    {
+        if (Current is { } c)
+        {
+            (_status, _location, _next, _expectedBack) = (c.Code, c.Location, c.Next, c.ExpectedBack);
+            _expectedOn = DateOnly.TryParse(c.ExpectedOn, System.Globalization.CultureInfo.InvariantCulture, out var on) ? on : null;
+        }
+    }
+
+    private HorseStatusRequest Request => new(_status, _location, _next, _expectedBack, _expectedOn?.ToString("yyyy-MM-dd"), _tell);
+
+    private async Task SaveAsync()
+    {
+        (_busy, _error) = (true, null);
+        try
+        {
+            if (_tell)
+            {
+                var who = await Api.HorseStatusRecipientsAsync(HorseId, Request);
+                if (!who.Succeeded) { _error = who.Error; return; }
+                _confirming = who.Value; // the box asks; AnsweredAsync saves
+                return;
+            }
+
+            await SetAsync();
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task AnsweredAsync(bool send)
+    {
+        _confirming = null;
+        if (!send) return;
+        _busy = true;
+        try
+        {
+            await SetAsync();
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task SetAsync()
+    {
+        var result = await Api.SetHorseStatusAsync(HorseId, Request);
+        if (!result.Succeeded) { _error = result.Error; return; }
+        var told = result.Value!.Told;
+        await OnSaved.InvokeAsync(_tell ? $"Saved. {(told == 1 ? "1 owner is" : $"{told} owners are")} being told." : "Saved.");
+    }
+}

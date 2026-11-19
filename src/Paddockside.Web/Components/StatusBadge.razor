@@ -1,0 +1,18 @@
+@*
+    A horse's status as a badge: in work and racing green, spelling and its way back blue, breaking in and pre-training
+    amber, injured red, retired grey. "Not set" until staff first give it one.
+*@
+<span class="badge @Classes">@(Status?.Label ?? "Not set")</span>
+
+@code {
+    [Parameter] public HorseStatusView? Status { get; set; }
+
+    private string Classes => Status?.Code switch
+    {
+        "InWork" or "Racing" => "bg-status-success-bg text-status-success-fg",
+        "Spelling" => "bg-status-info-bg text-status-info-fg",
+        "BreakingIn" or "PreTraining" => "bg-status-warning-bg text-status-warning-fg",
+        "Injured" => "bg-status-danger-bg text-status-danger-fg",
+        _ => "bg-surface-sunken text-text-muted",
+    };
+}

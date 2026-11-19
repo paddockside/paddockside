@@ -284,6 +284,50 @@
             </div>
 
             <aside class="grid grid-cols-[minmax(0,1fr)] gap-4 lg:row-span-2" aria-label="About @_horse.Name">
+                <section class="card grid gap-2" aria-labelledby="status-heading">
+                    <div class="flex flex-wrap items-center justify-between gap-2">
+                        <h2 id="status-heading" class="text-body font-strong">Where @_horse.Name is at</h2>
+                        <StatusBadge Status="_status?.Current" />
+                    </div>
+                    @if (_status?.Current is { } now)
+                    {
+                        <p>@now.Line</p>
+                        <p class="text-small text-text-muted">Updated @(now.Set.StartsWith("Today") || now.Set.StartsWith("Yesterday") ? char.ToLowerInvariant(now.Set[0]) + now.Set[1..] : now.Set) by @now.SetBy</p>
+                    }
+                    else
+                    {
+                        <p class="text-small text-text-muted">No status yet. Owners see it on their page once it's set.</p>
+                    }
+                    @if (_statusSaved is not null)
+                    {
+                        <p class="text-small text-status-success-fg" role="status">@_statusSaved</p>
+                    }
+                    @if (_editingStatus && _statusOptions is not null)
+                    {
+                        <StatusEditor HorseId="Id" HorseName="@_horse.Name" Current="_status?.Current" Options="_statusOptions"
+                                      OnSaved="StatusSavedAsync" OnCancel="() => _editingStatus = false" />
+                    }
+                    else if (CanTag && _horse.Managed)
+                    {
+                        <button type="button" class="justify-self-start text-small font-strong underline underline-offset-4" @onclick="StartStatusAsync">Update status</button>
+                    }
+                    @if (_status is { History.Count: > 1 } page)
+                    {
+                        <details class="text-small">
+                            <summary class="cursor-pointer text-text-muted">History (@(page.History.Count - 1) earlier)</summary>
+                            <ol class="mt-2 grid gap-2">
+                                @foreach (var h in page.History.Skip(1))
+                                {
+                                    <li class="grid gap-0.5 border-l-2 border-border-subtle pl-3">
+                                        <span><span class="font-strong">@h.Label</span> · @h.Set</span>
+                                        <span class="text-text-muted">@h.Line</span>
+                                    </li>
+                                }
+                            </ol>
+                        </details>
+                    }
+                </section>
+
                 @if (_owners is { } summary && !_managingOwners)
                 {
                     <section class="card grid gap-2" aria-labelledby="owners-summary-heading">
@@ -528,6 +572,23 @@
 
     private List<HorseContactView>? _contacts;
 
+    private HorseStatusPage? _status;
+    private List<HorseStatusOption>? _statusOptions;
+    private bool _editingStatus;
+    private string? _statusSaved;
+
+    private async Task StartStatusAsync()
+    {
+        _statusOptions ??= (await Api.HorseStatusOptionsAsync()).Value ?? [];
+        (_editingStatus, _statusSaved) = (true, null);
+    }
+
+    private async Task StatusSavedAsync(string message)
+    {
+        (_editingStatus, _statusSaved) = (false, message);
+        _status = (await Api.HorseStatusAsync(Id)).Value;
+    }
+
     /// <summary>Coordinators and up say who's who (ContactEndpoints).</summary>
     private bool CanTag => Session.Current?.Role is "Coordinator" or "Manager" or "TenantAdmin";
 
@@ -605,6 +666,7 @@
 
         _onHorse = (await Api.OnTheHorseAsync(Id)).Value;
         _contacts = (await Api.HorseContactsAsync(Id)).Value;
+        _status = (await Api.HorseStatusAsync(Id)).Value;
         _owners = (await Api.HorseOwnersAsync(Id)).Value;
         var events = await Api.HorseEventsAsync(Id);
         if (events.Succeeded) { _events = events.Value; Rail.Show(StaffRail.From(_horse!, _events!, null)); }

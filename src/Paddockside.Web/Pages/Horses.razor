@@ -5,7 +5,12 @@
 
 <PageTitle>Horses · Paddockside</PageTitle>
 
-<div class="grid gap-4">
+@*
+    The horses (David, 19 Nov 2026: "make it a little more useful"): each with its status, where it is and what's
+    next, its next event and where that's up to, and how long since the status changed (amber after four weeks).
+    Filter by status; change one right here. Horses no longer managed are kept to one side.
+*@
+<div class="grid grid-cols-[minmax(0,1fr)] gap-4">
     <div class="flex flex-wrap items-center justify-between gap-3">
         <h1>Horses</h1>
         @if (Session.Current?.Role is "Manager" or "TenantAdmin")
@@ -30,52 +35,126 @@
     }
     else
     {
-        <div class="card">
-            @* On a phone each row becomes a stacked block, with the column name before each value. *@
-            <table class="w-full border-collapse tabular-nums">
-                <caption class="sr-only">The horses @Session.Current?.TenantName manages or has managed</caption>
-                <thead class="hidden sm:table-header-group">
-                    <tr class="border-b border-border-subtle text-left text-small font-strong text-text-muted">
-                        <th scope="col" class="px-4 py-3">Name</th>
-                        <th scope="col" class="px-4 py-3">Status</th>
-                        <th scope="col" class="px-4 py-3">Managed since</th>
-                        <th scope="col" class="px-4 py-3">Current owners</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @foreach (var horse in _horses)
-                    {
-                        <tr class="grid gap-1 border-b border-border-subtle py-3 last:border-b-0 sm:table-row sm:py-0">
-                            <td class="px-2 font-strong sm:px-4 sm:py-3"><a href="horses/@horse.Id" class="underline underline-offset-4 hover:text-action-primary-bg">@horse.Name</a></td>
-                            <td class="px-2 sm:px-4 sm:py-3">
-                                <span class="text-text-muted sm:hidden">Status: </span>
-                                @if (horse.Managed)
-                                {
-                                    <span class="badge bg-status-success-bg text-status-success-fg">Managed</span>
-                                }
-                                else
-                                {
-                                    <span class="badge bg-action-secondary-bg text-text-muted">No longer managed</span>
-                                }
-                            </td>
-                            <td class="px-2 sm:px-4 sm:py-3">
-                                <span class="text-text-muted sm:hidden">Managed since: </span>@(horse.ManagedSince?.ToString("d MMMM yyyy") ?? "—")
-                            </td>
-                            <td class="px-2 sm:px-4 sm:py-3">
-                                <span class="text-text-muted sm:hidden">Current owners: </span>@horse.CurrentOwners
-                            </td>
-                        </tr>
-                    }
-                </tbody>
-            </table>
+        <div class="flex flex-wrap gap-2" role="group" aria-label="Show">
+            @foreach (var (key, label, count) in Filters)
+            {
+                <button type="button" aria-pressed="@(_filter == key ? "true" : "false")" @onclick="() => _filter = key"
+                        class="min-h-[36px] rounded-pill border px-3 text-small @(_filter == key ? "border-action-primary-bg bg-action-primary-bg text-action-primary-fg" : "border-border-strong")">
+                    @label <span class="tabular-nums">@count</span>
+                </button>
+            }
         </div>
+
+        @if (_saved is not null)
+        {
+            <p class="rounded-control bg-status-success-bg px-4 py-3 text-status-success-fg" role="status">@_saved</p>
+        }
+
+        @if (Shown.Count == 0)
+        {
+            <p class="text-text-muted">None at the moment.</p>
+        }
+        else
+        {
+            <ul class="card grid !p-0" aria-label="Horses">
+                @foreach (var horse in Shown)
+                {
+                    <li class="grid gap-1 border-b border-border-subtle px-4 py-3 last:border-b-0">
+                        <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
+                            <a href="horses/@horse.Id" class="font-strong underline-offset-4 hover:underline">@horse.Name</a>
+                            @if (horse.Managed)
+                            {
+                                <StatusBadge Status="horse.Status" />
+                            }
+                            else
+                            {
+                                <span class="badge bg-surface-sunken text-text-muted">No longer managed</span>
+                            }
+                            <span class="w-full text-small sm:ml-auto sm:w-auto @(horse.Stale ? "font-strong text-status-warning-fg" : "text-text-muted")">
+                                @(horse.Status is { } s ? $"updated {Since(s.Set)}" : horse.Managed ? "no status yet" : null)
+                            </span>
+                        </div>
+                        @if (horse.Status is { } status && (status.Location is not null || status.Next is not null))
+                        {
+                            <p class="text-small text-text-muted">@string.Join(" · ", new[] { status.Location is null ? null : $"At {status.Location}", status.Next }.Where(x => x is not null))</p>
+                        }
+                        @if (horse.Status?.ExpectedBack is { } back)
+                        {
+                            <p class="text-small text-text-muted">Expected back: @back</p>
+                        }
+                        @if (horse.NextEvent is { } next)
+                        {
+                            <a href="events/@horse.NextEventId" class="justify-self-start text-small underline-offset-4 hover:underline">@next</a>
+                        }
+                        @if (_editing == horse.Id && _options is not null)
+                        {
+                            <StatusEditor HorseId="horse.Id" HorseName="@horse.Name" Current="horse.Status" Options="_options"
+                                          OnSaved="message => SavedAsync(horse, message)" OnCancel="() => _editing = null" />
+                        }
+                        else if (CanSet && horse.Managed)
+                        {
+                            <button type="button" class="justify-self-start text-small font-strong underline underline-offset-4" @onclick="() => StartEditing(horse)">
+                                Update status<span class="sr-only"> for @horse.Name</span>
+                            </button>
+                        }
+                    </li>
+                }
+            </ul>
+        }
         <p class="text-text-muted">@_horses.Count(h => h.Managed) managed now, @_horses.Count in all.</p>
     }
 </div>
 
 @code {
     private List<HorseSummary>? _horses;
-    private string? _error;
+    private List<HorseStatusOption>? _options;
+    private string? _error, _saved;
+    private string _filter = "All";
+    private Guid? _editing;
+
+    /// <summary>Coordinators and up set statuses (StatusEndpoints).</summary>
+    private bool CanSet => Session.Current?.Role is "Coordinator" or "Manager" or "TenantAdmin";
+
+    /// <summary>"today, 9:40 am" reads on after "updated"; a day name keeps its capital.</summary>
+    private static string Since(string set) => set.StartsWith("Today") || set.StartsWith("Yesterday") ? char.ToLowerInvariant(set[0]) + set[1..] : set;
+
+    private List<HorseSummary> Managed => _horses?.Where(h => h.Managed).ToList() ?? [];
+
+    /// <summary>All the managed horses, then one per status that has any, then those without one and those no longer managed.</summary>
+    private IEnumerable<(string Key, string Label, int Count)> Filters
+    {
+        get
+        {
+            yield return ("All", "All", Managed.Count);
+            foreach (var group in Managed.Where(h => h.Status is not null).GroupBy(h => h.Status!.Code).OrderBy(g => Order(g.Key)))
+                yield return (group.Key, group.First().Status!.Label, group.Count());
+            if (Managed.Count(h => h.Status is null) is > 0 and var unset) yield return ("None", "No status yet", unset);
+            if (_horses!.Count(h => !h.Managed) is > 0 and var gone) yield return ("Gone", "No longer managed", gone);
+        }
+    }
+
+    private List<HorseSummary> Shown => _filter switch
+    {
+        "All" => Managed,
+        "None" => Managed.Where(h => h.Status is null).ToList(),
+        "Gone" => _horses!.Where(h => !h.Managed).ToList(),
+        var code => Managed.Where(h => h.Status?.Code == code).OrderBy(h => h.Status!.ExpectedOn ?? "9999").ThenBy(h => h.Name).ToList(),
+    };
+
+    /// <summary>The statuses in the order a horse's life goes.</summary>
+    private int Order(string code) => _options?.FindIndex(o => o.Code == code) ?? 0;
+
+    private async Task StartEditing(HorseSummary horse)
+    {
+        _options ??= (await Api.HorseStatusOptionsAsync()).Value ?? [];
+        (_editing, _saved) = (horse.Id, null);
+    }
+
+    private async Task SavedAsync(HorseSummary horse, string message)
+    {
+        (_editing, _saved) = (null, $"{horse.Name}: {message}");
+        _horses = (await Api.HorsesAsync()).Value ?? _horses;
+    }
 
     protected override async Task OnInitializedAsync()
     {
@@ -88,5 +167,6 @@
         var result = await Api.HorsesAsync();
         if (result.Succeeded) _horses = result.Value;
         else _error = result.Error;
+        _options = (await Api.HorseStatusOptionsAsync()).Value;
     }
 }

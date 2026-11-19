@@ -12,7 +12,24 @@ public sealed record RecoveryCodes(IReadOnlyList<string> Codes);
 
 public sealed record SessionInfo(string Email, string TenantName, string Role, bool IsOperator = false, string? SupportUntil = null);
 
-public sealed record HorseSummary(Guid Id, string Name, bool Managed, DateTimeOffset? ManagedSince, int CurrentOwners);
+/// <param name="Status">Where it's up to now; null until staff first set it.</param>
+/// <param name="Stale">Unchanged for four weeks: worth checking.</param>
+/// <param name="NextEvent">"Randwick, Race 6 · Saturday 21 November · next: Accepted".</param>
+public sealed record HorseSummary(Guid Id, string Name, bool Managed, DateTimeOffset? ManagedSince, int CurrentOwners,
+    HorseStatusView? Status = null, bool Stale = false, Guid? NextEventId = null, string? NextEvent = null);
+
+/// <param name="Code">The value to send back ("Spelling"); <c>Label</c> is how it reads ("Injured / rehab").</param>
+/// <param name="Line">What owners read: "Spelling at Riverbank Farm. Usual 6-week spell; back in work late December."</param>
+public sealed record HorseStatusView(string Code, string Label, string? Location, string? Next, string? ExpectedBack, string? ExpectedOn, string Line, string Set,
+    string SetBy);
+
+public sealed record HorseStatusPage(HorseStatusView? Current, List<HorseStatusView> History);
+
+public sealed record HorseStatusOption(string Code, string Label);
+
+public sealed record HorseStatusRequest(string Status, string? Location, string? Next, string? ExpectedBack, string? ExpectedOn, bool TellOwners);
+
+public sealed record HorseStatusSet(int Told);
 
 public sealed record HorseDetail(Guid Id, string Name, string? SexAge, string? Pedigree, bool Managed, string? ManagedSince, int CurrentOwners, string? NextKeyDate, string? InboxAddress);
 
@@ -522,6 +539,16 @@ public sealed class PaddocksideApi(HttpClient http)
 
     /// <summary>An admin closes an event now; a reason is needed if it isn't finished. Nothing is sent.</summary>
     public Task<ApiResult<object>> CloseEventAsync(Guid id, string? reason) => PostAsync<object>($"api/events/{id}/close", new { reason });
+
+    public Task<ApiResult<List<HorseStatusOption>>> HorseStatusOptionsAsync() => GetAsync<List<HorseStatusOption>>("api/horse-statuses");
+
+    public Task<ApiResult<HorseStatusPage>> HorseStatusAsync(Guid horseId) => GetAsync<HorseStatusPage>($"api/horses/{horseId}/status");
+
+    public Task<ApiResult<HorseStatusSet>> SetHorseStatusAsync(Guid horseId, HorseStatusRequest request) => PostAsync<HorseStatusSet>($"api/horses/{horseId}/status", request);
+
+    /// <summary>Who telling the owners about a status would reach. Sends nothing.</summary>
+    public Task<ApiResult<RecipientsView>> HorseStatusRecipientsAsync(Guid horseId, HorseStatusRequest request) =>
+        PostAsync<RecipientsView>($"api/horses/{horseId}/status/recipients", request);
 
     public Task<ApiResult<List<HorseContactView>>> HorseContactsAsync(Guid horseId) => GetAsync<List<HorseContactView>>($"api/horses/{horseId}/contacts");
 
