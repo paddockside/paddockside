@@ -155,6 +155,7 @@ app.MapInboundEndpoints();
 app.MapTodayEndpoints();
 app.MapReportEndpoints();
 app.MapContactEndpoints();
+app.MapStatusEndpoints();
 app.MapMediaEndpoints();
 app.MapFactEndpoints();
 app.MapClientAuthEndpoints();

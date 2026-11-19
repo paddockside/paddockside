@@ -114,6 +114,7 @@ public sealed class IsolationDatabase : IAsyncLifetime
         offer.AttachTo(mailout);
         context.AddRange(offer, new StaffSignature(tenant.Id, Guid.NewGuid(), $"Kate, {name}", bought));
         context.Add(new HorseContact(horse, dee, ContactRole.Trainer, bought));
+        context.Add(new HorseStatusEntry(horse, HorseStatus.Spelling, $"{name} Farm", "Usual spell", "late December", null, "Staff", bought));
         context.AddRange(deliveries);
         await context.SaveChangesAsync();
 

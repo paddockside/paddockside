@@ -16,7 +16,11 @@ namespace Paddockside.Api.Horses;
 /// </summary>
 public static class HorseEndpoints
 {
-    public sealed record HorseSummary(Guid Id, string Name, bool Managed, DateTimeOffset? ManagedSince, int CurrentOwners);
+    /// <param name="Status">Where it's up to now (StatusEndpoints); null until staff first set it.</param>
+    /// <param name="Stale">The status hasn't changed for four weeks: worth checking it's still right.</param>
+    /// <param name="NextEvent">"Randwick, Race 6 · Saturday 21 November · next: Accepted".</param>
+    public sealed record HorseSummary(Guid Id, string Name, bool Managed, DateTimeOffset? ManagedSince, int CurrentOwners,
+        StatusEndpoints.StatusView? Status = null, bool Stale = false, Guid? NextEventId = null, string? NextEvent = null);
 
     public sealed record HorseDetail(
         Guid Id,
@@ -58,12 +62,38 @@ public static class HorseEndpoints
         horses.MapGet("/{id:guid}/unplaced", OnTheHorse);
     }
 
-    private static async Task<IReadOnlyList<HorseSummary>> ListHorses(PaddocksideDbContext db, CancellationToken cancellationToken)
+    /// <summary>
+    /// Every horse, with its status and what's next (David, 19 Nov 2026), and its next event and where that's up to.
+    /// </summary>
+    private static async Task<IReadOnlyList<HorseSummary>> ListHorses(PaddocksideDbContext db, TimeProvider clock, CancellationToken cancellationToken)
     {
         var horses = await LoadHorses(db).ToListAsync(cancellationToken);
+        var now = clock.GetUtcNow();
+
+        // The newest status of each horse.
+        var statuses = (await db.HorseStatuses.AsNoTracking().ToListAsync(cancellationToken))
+            .GroupBy(s => s.HorseId).ToDictionary(g => g.Key, g => g.OrderByDescending(s => s.SetAt).First());
+
+        // Each horse's next open event from today, and where it's up to.
+        var upcoming = (await db.Events.AsNoTracking()
+                .Where(e => e.Status == EventStatus.Open && e.KeyDate != null && e.KeyDate >= now.AddHours(-12)).ToListAsync(cancellationToken))
+            .GroupBy(e => e.HorseId).ToDictionary(g => g.Key, g => g.OrderBy(e => e.KeyDate).First());
+        var eventIds = upcoming.Values.Select(e => e.Id).ToList();
+        var steps = (await db.StreamItems.AsNoTracking().Where(i => i.EventId != null && eventIds.Contains(i.EventId.Value))
+            .Select(i => new { EventId = i.EventId!.Value, i.StepCode, i.OccurredAt }).ToListAsync(cancellationToken)).ToLookup(i => i.EventId);
+        string? Next(DomainEvent e)
+        {
+            var summary = Summarise(e, steps[e.Id].Select(s => s.StepCode), steps[e.Id].Select(s => (DateTimeOffset?)s.OccurredAt).Max(), now);
+            var step = summary.Steps.FirstOrDefault(s => s.State is "Current" or "Missing");
+            return $"{e.Title} · {Words.Day(e.KeyDate!.Value, now)}{(step is null ? "" : $" · next: {step.Label}")}";
+        }
 
         return horses
-            .Select(h => new HorseSummary(h.Id, h.Name, h.CurrentManagementPeriod is not null, h.CurrentManagementPeriod?.From, CurrentOwners(h)))
+            .Select(h => new HorseSummary(h.Id, h.Name, h.CurrentManagementPeriod is not null, h.CurrentManagementPeriod?.From, CurrentOwners(h),
+                statuses.TryGetValue(h.Id, out var status) ? StatusEndpoints.ToView(status, now) : null,
+                status is not null && now - status.SetAt > StatusEndpoints.Stale,
+                upcoming.TryGetValue(h.Id, out var next) ? next.Id : null,
+                next is null ? null : Next(next)))
             .OrderBy(h => h.Name, StringComparer.OrdinalIgnoreCase)
             .ToList();
     }

@@ -2,12 +2,23 @@
 @layout OwnerLayout
 @inherits OwnerPage
 
-@* One horse: its events, newest first, each opening its updates. Only the steps owners follow are shown. *@
+@*
+    One horse: where it's at now (its status, as staff last set it), then its events, newest first, each opening its
+    updates. Only the steps owners follow are shown.
+*@
 <PageTitle>@(_name ?? "Horse")</PageTitle>
 
 <div class="grid grid-cols-[minmax(0,1fr)] gap-4">
     <a href="my/horses" class="btn-link justify-self-start">← My horses</a>
     <h1 class="text-heading font-heading">@_name</h1>
+    @if (_horse?.Status is { } status)
+    {
+        <section class="card grid gap-1" aria-labelledby="where-heading">
+            <h2 id="where-heading" class="text-small font-strong uppercase tracking-wide text-text-muted">Where @_name is at</h2>
+            <p>@status</p>
+            <p class="text-small text-text-muted">Updated @_horse.StatusSet</p>
+        </section>
+    }
     @if (_error is not null)
     {
         <Error Message="@_error" />
@@ -33,6 +44,7 @@
     [Parameter] public Guid Id { get; set; }
 
     private string? _name;
+    private OwnerHorse? _horse;
     private List<EventSummary>? _events;
     private string? _error;
 
@@ -40,7 +52,8 @@
     {
         if (!await EnsureSignedInAsync()) return;
         var horses = await Api.MyHorsesAsync();
-        _name = horses.Value?.FirstOrDefault(h => h.Id == Id)?.Name;
+        _horse = horses.Value?.FirstOrDefault(h => h.Id == Id);
+        _name = _horse?.Name;
         var result = await Api.MyHorseEventsAsync(Id);
         if (result.Succeeded) _events = result.Value;
         else _error = result.Error;

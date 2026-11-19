@@ -17,7 +17,7 @@ namespace Paddockside.Infrastructure.Persistence.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "9.0.20")
+                .HasAnnotation("ProductVersion", "9.0.22")
                 .HasAnnotation("Relational:MaxIdentifierLength", 128);
 
             SqlServerModelBuilderExtensions.UseIdentityColumns(modelBuilder);
@@ -348,6 +348,54 @@ namespace Paddockside.Infrastructure.Persistence.Migrations
                     b.HasIndex("HorseId", "PartyId");
 
                     b.ToTable("HorseContacts");
+                });
+
+            modelBuilder.Entity("Paddockside.Domain.HorseStatusEntry", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("ExpectedBack")
+                        .HasMaxLength(60)
+                        .HasColumnType("nvarchar(60)");
+
+                    b.Property<DateOnly?>("ExpectedOn")
+                        .HasColumnType("date");
+
+                    b.Property<Guid>("HorseId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Location")
+                        .HasMaxLength(120)
+                        .HasColumnType("nvarchar(120)");
+
+                    b.Property<string>("Next")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<DateTimeOffset>("SetAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("SetBy")
+                        .IsRequired()
+                        .HasMaxLength(320)
+                        .HasColumnType("nvarchar(320)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId");
+
+                    b.HasIndex("HorseId", "SetAt");
+
+                    b.ToTable("HorseStatuses");
                 });
 
             modelBuilder.Entity("Paddockside.Domain.InboundMessage", b =>
@@ -1607,6 +1655,21 @@ namespace Paddockside.Infrastructure.Persistence.Migrations
                     b.HasOne("Paddockside.Domain.Party", null)
                         .WithMany()
                         .HasForeignKey("PartyId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Paddockside.Domain.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Paddockside.Domain.HorseStatusEntry", b =>
+                {
+                    b.HasOne("Paddockside.Domain.Horse", null)
+                        .WithMany()
+                        .HasForeignKey("HorseId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 

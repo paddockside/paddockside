@@ -24,7 +24,10 @@ public static class OwnerEndpoints
 
     public sealed record OwnerSession(string Name, string? Email, string? Mobile, string TenantName, string? TenantLogoUrl, IReadOnlyList<TenantOption> Tenants);
 
-    public sealed record OwnerHorse(Guid Id, string Name, string? SexAge, string? Pedigree, string? Next, string LastUpdate, int Unread);
+    /// <param name="Status">Where the horse is at, as staff last set it: "Spelling at Riverbank Farm. Usual 6-week spell; back in work late December."</param>
+    /// <param name="StatusShort">The same in a few words, for the card: "Spelling at Riverbank Farm".</param>
+    public sealed record OwnerHorse(Guid Id, string Name, string? SexAge, string? Pedigree, string? Next, string LastUpdate, int Unread,
+        string? Status = null, string? StatusShort = null, string? StatusSet = null);
 
     public sealed record OwnerUpdate(Guid ItemId, Guid HorseId, string Horse, Guid? EventId, string? Event, string Kind, string? Title, string Summary, string At, bool Unread);
 
@@ -130,6 +133,8 @@ public static class OwnerEndpoints
         var events = await db.Events.AsNoTracking().Where(e => horseIds.Contains(e.HorseId) && e.Status == EventStatus.Open).ToListAsync(cancellationToken);
         var visible = await VisibleAsync(db, viewer, i => horseIds.Contains(i.HorseId), cancellationToken);
         var read = await ReadAsync(db, viewer.Party.Id, cancellationToken);
+        var statuses = (await db.HorseStatuses.AsNoTracking().Where(s => horseIds.Contains(s.HorseId)).ToListAsync(cancellationToken))
+            .GroupBy(s => s.HorseId).ToDictionary(g => g.Key, g => g.OrderByDescending(s => s.SetAt).First());
 
         return Results.Ok(owned
             .Select(h =>
@@ -139,7 +144,10 @@ public static class OwnerEndpoints
                 return new OwnerHorse(h.Id, h.Name, null, h.Sire is not null && h.Dam is not null ? $"{h.Sire} x {h.Dam}" : null,
                     next is null ? null : $"{Words.Day(next.KeyDate!.Value, now)} · {next.Title}",
                     mine.Count > 0 ? $"Last update {Words.Recently(mine.Max(i => i.OccurredAt), now)}" : "No updates yet",
-                    mine.Count(i => IsUnread(i, viewer.Party.Id, read)));
+                    mine.Count(i => IsUnread(i, viewer.Party.Id, read)),
+                    statuses.GetValueOrDefault(h.Id)?.Describe(),
+                    statuses.GetValueOrDefault(h.Id) is { } s ? (s.Location is null ? HorseStatusEntry.Label(s.Status) : $"{HorseStatusEntry.Label(s.Status)} at {s.Location}") : null,
+                    statuses.GetValueOrDefault(h.Id) is { } set ? Words.Day(set.SetAt, now) : null);
             })
             .OrderBy(h => h.Name, StringComparer.OrdinalIgnoreCase)
             .ToList());

@@ -28,7 +28,7 @@
         {
             @foreach (var horse in _horses)
             {
-                <HorseCard Side="Side.Owner" Model="@(new HorseCardModel(horse.Name, horse.Pedigree ?? horse.SexAge ?? "", null, horse.Next, horse.Unread, Subtitle: horse.LastUpdate, Href: $"my/horses/{horse.Id}"))" />
+                <HorseCard Side="Side.Owner" Model="@(new HorseCardModel(horse.Name, horse.Pedigree ?? horse.SexAge ?? "", null, horse.Next, horse.Unread, Subtitle: horse.StatusShort is null ? horse.LastUpdate : $"{horse.StatusShort} · {horse.LastUpdate}", Href: $"my/horses/{horse.Id}"))" />
             }
         }
     </section>
