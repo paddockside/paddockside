@@ -1,0 +1,137 @@
+@page "/social"
+@inject PaddocksideApi Api
+@inject SessionState Session
+@inject NavigationManager Navigation
+
+<PageTitle>Social · Paddockside</PageTitle>
+
+@*
+    Social events (David, 22 Nov 2026): lunches, golf days, stable visits, tours. Coming up first, then past ones; each
+    with its places and replies so far. Or the same as a calendar.
+*@
+<div class="grid grid-cols-[minmax(0,1fr)] gap-4">
+    <div class="flex flex-wrap items-center justify-between gap-3">
+        <h1>Social</h1>
+        <div class="flex flex-wrap items-center gap-3">
+            <div class="inline-flex rounded-pill border border-border-strong p-0.5" role="group" aria-label="View">
+                @foreach (var view in Views)
+                {
+                    <button type="button" aria-pressed="@(_view == view ? "true" : "false")" @onclick="() => ShowAsync(view)"
+                            class="min-h-[32px] rounded-pill px-3 text-small @(_view == view ? "bg-action-primary-bg text-action-primary-fg" : null)">@view</button>
+                }
+            </div>
+            @if (CanEdit && !_creating)
+            {
+                <button type="button" class="btn-primary" @onclick="() => _creating = true">New social event</button>
+            }
+        </div>
+    </div>
+
+    @if (_creating)
+    {
+        <SocialForm OnSaved="Open" OnCancel="() => _creating = false" />
+    }
+
+    @if (_error is not null)
+    {
+        <Error Message="@_error" />
+    }
+    else if (_view == "Calendar")
+    {
+        <MonthCalendar Month="_month" Items="_calendar ?? []" Loading="_calendar is null" Key="Key" OnMonthChanged="MonthAsync" />
+    }
+    else if (_events is null)
+    {
+        <p class="text-text-muted" role="status">Loading…</p>
+    }
+    else if (_events.Count == 0)
+    {
+        <div class="card"><p>No social events yet. Create one, then invite a list or people you pick.</p></div>
+    }
+    else
+    {
+        @foreach (var (heading, events) in new[] { ("Coming up", _events.Where(e => !e.Past).ToList()), ("Past", _events.Where(e => e.Past).ToList()) })
+        {
+            @if (events.Count > 0)
+            {
+                <section class="grid gap-2" aria-label="@heading">
+                    <h2 class="text-small font-strong uppercase tracking-wide text-text-muted">@heading</h2>
+                    <ul class="card grid !p-0">
+                        @foreach (var e in events)
+                        {
+                            <li class="border-b border-border-subtle last:border-b-0">
+                                <a href="social/@e.Id" class="grid gap-1 px-4 py-3 hover:bg-surface-sunken">
+                                    <span class="flex flex-wrap items-center gap-x-3 gap-y-1">
+                                        <span class="font-strong">@e.Title</span>
+                                        <span class="badge border border-scope-named-parties-fg bg-scope-named-parties-bg text-scope-named-parties-fg">@e.KindLabel</span>
+                                        @if (e.Status != "Open")
+                                        {
+                                            <span class="badge bg-surface-sunken text-text-muted">@e.Status</span>
+                                        }
+                                    </span>
+                                    <span class="text-small text-text-muted">@e.When@(e.Venue is null ? null : $" · {e.Venue}")</span>
+                                    <span class="text-small">@Count(e)</span>
+                                </a>
+                            </li>
+                        }
+                    </ul>
+                </section>
+            }
+        }
+    }
+</div>
+
+@code {
+    private static readonly string[] Views = ["List", "Calendar"];
+    private static readonly IReadOnlyList<(string, string)> Key = [("Social", "Social event")];
+    private List<SocialSummary>? _events;
+    private List<CalendarEntry>? _calendar;
+    private DateOnly _month = new(DateTime.Today.Year, DateTime.Today.Month, 1);
+    private string _view = "List";
+    private string? _error;
+    private bool _creating;
+
+    private bool CanEdit => Session.Current?.Role is "Coordinator" or "Manager" or "TenantAdmin";
+
+    private void Open(Guid id) => Navigation.NavigateTo($"social/{id}");
+
+    /// <summary>"12 of 60 places · 30 waiting to hear · 4 on the waiting list".</summary>
+    private static string Count(SocialSummary e) => string.Join(" · ", new[]
+    {
+        e.Places is { } places ? $"{e.Coming} of {places} places" : $"{e.Coming} coming",
+        e.Invited > 0 ? $"{e.Invited} waiting to hear" : null,
+        e.Waiting > 0 ? $"{e.Waiting} on the waiting list" : null,
+    }.Where(x => x is not null));
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (Session.Current is null && await Session.RefreshAsync() is null)
+        {
+            Navigation.NavigateTo("sign-in");
+            return;
+        }
+
+        var result = await Api.SocialEventsAsync();
+        if (result.Succeeded) _events = result.Value;
+        else _error = result.Error;
+    }
+
+    private async Task ShowAsync(string view)
+    {
+        _view = view;
+        if (view == "Calendar" && _calendar is null) await LoadCalendarAsync();
+    }
+
+    private async Task MonthAsync(DateOnly month)
+    {
+        (_month, _calendar) = (month, null);
+        await LoadCalendarAsync();
+    }
+
+    private async Task LoadCalendarAsync()
+    {
+        var result = await Api.CalendarAsync(MonthCalendar.FirstShown(_month), MonthCalendar.LastShown(_month));
+        if (result.Succeeded) _calendar = result.Value!.Where(e => e.Kind == "Social").ToList();
+        else _error = result.Error;
+    }
+}

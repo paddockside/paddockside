@@ -29,6 +29,25 @@ public sealed record HorseStatusView(string Code, string Label, string? Location
 public sealed record CalendarEntry(string Date, string? Time, string Kind, string KindLabel, Guid? HorseId, string? Horse, string Title, string Short,
     string? Detail, string Href, bool Draft = false, bool Done = false);
 
+public sealed record SocialKindOption(string Code, string Label);
+
+/// <param name="Coming">Places taken by people coming.</param>
+public sealed record SocialSummary(Guid Id, string Title, string Kind, string KindLabel, string When, string Date, string? Venue, int? Places, int Coming,
+    int Invited, int Waiting, string Status, bool Past);
+
+/// <param name="Status">Invited, Coming, Maybe, NotComing or Waiting.</param>
+public sealed record SocialAttendeeLine(Guid PartyId, string Name, string? Email, string Status, string StatusLabel, int Places, string? Note, string? AnsweredBy,
+    string Updated);
+
+public sealed record SocialInvitationLine(Guid MailoutId, string Subject, string Sent, int Recipients);
+
+public sealed record SocialDetail(SocialSummary Event, string? Time, string? EndDate, string? Notes, List<SocialAttendeeLine> Attendees,
+    List<SocialInvitationLine> Invitations, int Maybe, int NotComing);
+
+public sealed record SocialRequest(string Title, string Kind, string Date, string? Time, string? EndDate, string? Venue, int? Places, string? Notes);
+
+public sealed record SocialCreated(Guid Id);
+
 public sealed record HorseStatusPage(HorseStatusView? Current, List<HorseStatusView> History);
 
 public sealed record HorseStatusOption(string Code, string Label);
@@ -545,6 +564,32 @@ public sealed class PaddocksideApi(HttpClient http)
 
     /// <summary>An admin closes an event now; a reason is needed if it isn't finished. Nothing is sent.</summary>
     public Task<ApiResult<object>> CloseEventAsync(Guid id, string? reason) => PostAsync<object>($"api/events/{id}/close", new { reason });
+
+    public Task<ApiResult<List<SocialKindOption>>> SocialKindsAsync() => GetAsync<List<SocialKindOption>>("api/social/kinds");
+
+    public Task<ApiResult<List<SocialSummary>>> SocialEventsAsync() => GetAsync<List<SocialSummary>>("api/social");
+
+    public Task<ApiResult<SocialDetail>> SocialEventAsync(Guid id) => GetAsync<SocialDetail>($"api/social/{id}");
+
+    public Task<ApiResult<SocialCreated>> CreateSocialEventAsync(SocialRequest request) => PostAsync<SocialCreated>("api/social", request);
+
+    public Task<ApiResult<object>> UpdateSocialEventAsync(Guid id, SocialRequest request) => PutAsync<object>($"api/social/{id}", request);
+
+    public Task<ApiResult<object>> SetSocialStatusAsync(Guid id, string status) => PostAsync<object>($"api/social/{id}/status", new { status });
+
+    public Task<ApiResult<object>> AddSocialAttendeesAsync(Guid id, IEnumerable<Guid> clientIds) => PostAsync<object>($"api/social/{id}/attendees", new { clientIds });
+
+    public Task<ApiResult<object>> SetSocialAttendeeAsync(Guid id, Guid partyId, string status, int places, string? note) =>
+        PutAsync<object>($"api/social/{id}/attendees/{partyId}", new { status, places, note });
+
+    public Task<ApiResult<object>> RemoveSocialAttendeeAsync(Guid id, Guid partyId) => PostAsync<object>($"api/social/{id}/attendees/{partyId}/remove", new { });
+
+    public Task<ApiResult<MailoutPreview>> PreviewInvitationAsync(Guid id, IEnumerable<Guid> listIds, IEnumerable<string> statuses, IEnumerable<Guid> clientIds) =>
+        PostAsync<MailoutPreview>($"api/social/{id}/invite/preview", new { listIds, statuses, clientIds });
+
+    public Task<ApiResult<MailoutCreated>> SendInvitationAsync(Guid id, string subject, string body, IEnumerable<Guid> listIds, IEnumerable<string> statuses,
+        IEnumerable<Guid> clientIds, string? signature, IEnumerable<Guid> attachmentIds) =>
+        PostAsync<MailoutCreated>($"api/social/{id}/invite", new { subject, body, listIds, statuses, clientIds, horseId = (Guid?)null, signature, attachmentIds });
 
     public Task<ApiResult<List<CalendarEntry>>> CalendarAsync(DateOnly from, DateOnly to) =>
         GetAsync<List<CalendarEntry>>($"api/calendar?from={from:yyyy-MM-dd}&to={to:yyyy-MM-dd}");

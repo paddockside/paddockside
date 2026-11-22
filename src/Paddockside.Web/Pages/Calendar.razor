@@ -1,0 +1,52 @@
+@page "/calendar"
+@inject PaddocksideApi Api
+@inject SessionState Session
+@inject NavigationManager Navigation
+
+<PageTitle>Calendar · Paddockside</PageTitle>
+
+@*
+    Everything with a date in one place (David, 19 and 22 Nov 2026): every horse's events, horses due back, and social
+    events. The Horses and Social pages show their own part of the same calendar.
+*@
+<div class="grid grid-cols-[minmax(0,1fr)] gap-4">
+    <h1>Calendar</h1>
+    @if (_error is not null)
+    {
+        <Error Message="@_error" />
+    }
+    <MonthCalendar Month="_month" Items="_entries ?? []" Loading="_entries is null" Key="Key" OnMonthChanged="MonthAsync" />
+</div>
+
+@code {
+    private DateOnly _month = new(DateTime.Today.Year, DateTime.Today.Month, 1);
+    private List<CalendarEntry>? _entries;
+    private string? _error;
+
+    private static readonly IReadOnlyList<(string, string)> Key =
+        [("RaceStart", "Race start"), ("BarrierTrial", "Trial"), ("Veterinary", "Vet"), ("General", "Other horse event"), ("DueBack", "Due back"), ("Social", "Social")];
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (Session.Current is null && await Session.RefreshAsync() is null)
+        {
+            Navigation.NavigateTo("sign-in");
+            return;
+        }
+
+        await LoadAsync();
+    }
+
+    private async Task MonthAsync(DateOnly month)
+    {
+        (_month, _entries) = (month, null);
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        var result = await Api.CalendarAsync(MonthCalendar.FirstShown(_month), MonthCalendar.LastShown(_month));
+        if (result.Succeeded) _entries = result.Value;
+        else _error = result.Error;
+    }
+}

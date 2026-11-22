@@ -164,7 +164,7 @@
         get
         {
             if (_calendar is null) return [];
-            if (_filter == "All") return _calendar;
+            if (_filter == "All") return _calendar.Where(e => e.HorseId is not null).ToList(); // horses only: social events have their own page
             var ids = Shown.Select(h => h.Id).ToHashSet();
             return _calendar.Where(e => e.HorseId is { } id && ids.Contains(id)).ToList();
         }

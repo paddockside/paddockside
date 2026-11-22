@@ -1,0 +1,112 @@
+@inject PaddocksideApi Api
+
+@*
+    A social event's details (David, 22 Nov 2026): what it's called, what kind, when (with an end date for a tour), where,
+    how many places (empty for no limit) and notes for staff. Creating one and changing it use the same form.
+*@
+<form class="card grid gap-4" @onsubmit="SaveAsync" @onsubmit:preventDefault aria-label="@(Editing is null ? "New social event" : "Change the event")">
+    <div class="grid gap-4 sm:grid-cols-2">
+        <div class="field sm:col-span-2">
+            <label class="field-label" for="@_id-title">Name</label>
+            <input id="@_id-title" class="input" maxlength="200" @bind="_title" placeholder="Christmas Lunch" />
+        </div>
+        <div class="field">
+            <label class="field-label" for="@_id-kind">Kind</label>
+            <select id="@_id-kind" class="input" @bind="_kind">
+                @foreach (var k in _kinds)
+                {
+                    <option value="@k.Code">@k.Label</option>
+                }
+            </select>
+        </div>
+        <div class="field">
+            <label class="field-label" for="@_id-venue">Where</label>
+            <input id="@_id-venue" class="input" maxlength="300" @bind="_venue" placeholder="The Sydney Club" />
+        </div>
+        <div class="field">
+            <label class="field-label" for="@_id-date">Date</label>
+            <input id="@_id-date" class="input" type="date" @bind="_date" />
+        </div>
+        <div class="field">
+            <label class="field-label" for="@_id-time">Time (optional)</label>
+            <input id="@_id-time" class="input" type="time" @bind="_time" />
+        </div>
+        <div class="field">
+            <label class="field-label" for="@_id-end">Last day (for a tour; optional)</label>
+            <input id="@_id-end" class="input" type="date" @bind="_end" />
+        </div>
+        <div class="field">
+            <label class="field-label" for="@_id-places">Places (empty for no limit)</label>
+            <input id="@_id-places" class="input" type="number" min="1" @bind="_places" />
+        </div>
+        <div class="field sm:col-span-2">
+            <label class="field-label" for="@_id-notes">Notes for staff (optional)</label>
+            <textarea id="@_id-notes" class="input min-h-[64px] py-3" maxlength="4000" @bind="_notes"></textarea>
+        </div>
+    </div>
+    @if (_error is not null)
+    {
+        <p class="alert-danger" role="alert">@_error</p>
+    }
+    <div class="flex flex-wrap gap-3">
+        <button type="submit" class="btn-primary" disabled="@_busy">@(Editing is null ? "Create" : "Save")</button>
+        <button type="button" class="btn-secondary" @onclick="OnCancel">Cancel</button>
+    </div>
+</form>
+
+@code {
+    private readonly string _id = $"social-{Guid.NewGuid():N}";
+    private List<SocialKindOption> _kinds = [];
+    private string? _title, _venue, _notes, _error;
+    private string _kind = "Lunch";
+    private DateOnly? _date, _end;
+    private TimeOnly? _time;
+    private int? _places;
+    private bool _busy;
+
+    /// <summary>The event being changed; null for a new one.</summary>
+    [Parameter] public SocialDetail? Editing { get; set; }
+
+    /// <summary>Saved: the event's id.</summary>
+    [Parameter] public EventCallback<Guid> OnSaved { get; set; }
+
+    [Parameter] public EventCallback OnCancel { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        _kinds = (await Api.SocialKindsAsync()).Value ?? [];
+        if (Editing is { } d)
+        {
+            (_title, _kind, _venue, _notes, _places) = (d.Event.Title, d.Event.Kind, d.Event.Venue, d.Notes, d.Event.Places);
+            _date = DateOnly.Parse(d.Event.Date, System.Globalization.CultureInfo.InvariantCulture);
+            _time = d.Time is { } t ? TimeOnly.Parse(t, System.Globalization.CultureInfo.InvariantCulture) : null;
+            _end = d.EndDate is { } e ? DateOnly.Parse(e, System.Globalization.CultureInfo.InvariantCulture) : null;
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        if (_date is null) { _error = "Choose the date."; return; }
+        (_busy, _error) = (true, null);
+        try
+        {
+            var request = new SocialRequest(_title ?? "", _kind, _date.Value.ToString("yyyy-MM-dd"), _time?.ToString("HH:mm"), _end?.ToString("yyyy-MM-dd"), _venue, _places, _notes);
+            if (Editing is { } d)
+            {
+                var result = await Api.UpdateSocialEventAsync(d.Event.Id, request);
+                if (!result.Succeeded) { _error = result.Error; return; }
+                await OnSaved.InvokeAsync(d.Event.Id);
+            }
+            else
+            {
+                var result = await Api.CreateSocialEventAsync(request);
+                if (!result.Succeeded) { _error = result.Error; return; }
+                await OnSaved.InvokeAsync(result.Value!.Id);
+            }
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}
