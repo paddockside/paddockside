@@ -115,6 +115,9 @@ public sealed class IsolationDatabase : IAsyncLifetime
         context.AddRange(offer, new StaffSignature(tenant.Id, Guid.NewGuid(), $"Kate, {name}", bought));
         context.Add(new HorseContact(horse, dee, ContactRole.Trainer, bought));
         context.Add(new HorseStatusEntry(horse, HorseStatus.Spelling, $"{name} Farm", "Usual spell", "late December", null, "Staff", bought));
+        var lunch = new SocialEvent(tenant.Id, $"{name} Christmas Lunch", SocialKind.Lunch, bought.AddMonths(6), null, "The Sydney Club", 60, null, bought);
+        mailout.Invites(lunch);
+        context.AddRange(lunch, new SocialAttendee(lunch, ann, bought, mailout.Id));
         context.AddRange(deliveries);
         await context.SaveChangesAsync();
 

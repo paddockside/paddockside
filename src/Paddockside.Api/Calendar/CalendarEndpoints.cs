@@ -18,7 +18,7 @@ public static class CalendarEndpoints
 {
     /// <param name="Date">yyyy-MM-dd, Sydney time.</param>
     /// <param name="Time">"3:05 pm" when the key date has a time.</param>
-    /// <param name="Kind">RaceStart, BarrierTrial, Veterinary, General, or DueBack.</param>
+    /// <param name="Kind">RaceStart, BarrierTrial, Veterinary, General, DueBack, or Social.</param>
     /// <param name="Short">For a crowded day square: "Faultless Miss · Randwick, Race 6".</param>
     /// <param name="Detail">Where it's up to: "next: Accepted", "Spelling at Riverbank Farm".</param>
     /// <param name="Href">What it opens.</param>
@@ -51,6 +51,14 @@ public static class CalendarEndpoints
             .Where(s => s.ExpectedOn is { } on && on >= first && on <= last && s.Status is not (HorseStatus.InWork or HorseStatus.Racing or HorseStatus.Retired))
             .ToList();
 
+        // Social events: on every day they run (a tour shows on each), cancelled ones left off.
+        var socials = await db.SocialEvents.AsNoTracking()
+            .Where(s => s.Status != SocialStatus.Cancelled && s.StartsAt < end && (s.EndsAt ?? s.StartsAt) >= start)
+            .ToListAsync(cancellationToken);
+        var socialIds = socials.Select(s => s.Id).ToList();
+        var coming = (await db.SocialAttendees.AsNoTracking().Where(a => socialIds.Contains(a.SocialEventId) && a.Status == AttendeeStatus.Coming)
+            .GroupBy(a => a.SocialEventId).Select(g => new { g.Key, Places = g.Sum(a => a.Places) }).ToListAsync(cancellationToken)).ToDictionary(x => x.Key, x => x.Places);
+
         var horseIds = events.Select(e => e.HorseId).Concat(statuses.Select(s => s.HorseId)).Distinct().ToList();
         var horses = await db.Horses.AsNoTracking().Where(h => horseIds.Contains(h.Id)).ToDictionaryAsync(h => h.Id, h => h.Name, cancellationToken);
         var eventIds = events.Select(e => e.Id).ToList();
@@ -74,6 +82,18 @@ public static class CalendarEndpoints
             return new CalendarEntry(s.ExpectedOn!.Value.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture), null, "DueBack", "Due back", s.HorseId, horse,
                 $"{horse} due back", $"{horse} · due back", s.Location is null ? HorseStatusEntry.Label(s.Status) : $"{HorseStatusEntry.Label(s.Status)} at {s.Location}",
                 $"horses/{s.HorseId}");
+        })).Concat(socials.SelectMany(s =>
+        {
+            var local = Words.Local(s.StartsAt);
+            var firstDay = DateOnly.FromDateTime(local.Date);
+            var lastDay = DateOnly.FromDateTime(Words.Local(s.EndsAt ?? s.StartsAt).Date);
+            var count = coming.GetValueOrDefault(s.Id);
+            var detail = s.Places is { } places ? $"{count} of {places} places" : $"{count} coming";
+            return Enumerable.Range(0, lastDay.DayNumber - firstDay.DayNumber + 1).Select(n => firstDay.AddDays(n)).Where(d => d >= first && d <= last)
+                .Select(d => new CalendarEntry(d.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+                    d == firstDay && local.TimeOfDay != TimeSpan.Zero ? Words.Time(s.StartsAt) : null,
+                    "Social", SocialEvent.Label(s.Kind), null, null, s.Title, s.Title,
+                    s.Venue is null ? detail : $"{s.Venue} · {detail}", $"social/{s.Id}", Done: s.Status == SocialStatus.Closed));
         }));
 
         // In the day: timed entries in time order, then the rest by horse.

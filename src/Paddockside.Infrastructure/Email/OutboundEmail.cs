@@ -196,6 +196,8 @@ public sealed class EmailDispatcher(
         var partyIds = queued.Select(r => r.PartyId).ToList();
         var parties = await db.Parties.Where(p => partyIds.Contains(p.Id)).ToDictionaryAsync(p => p.Id, cancellationToken);
         var attachments = await AttachmentsAsync(db, mailoutIds, cancellationToken);
+        var socialIds = mailouts.Values.Where(m => m.SocialEventId != null).Select(m => m.SocialEventId!.Value).Distinct().ToList();
+        var socials = await db.SocialEvents.Where(e => socialIds.Contains(e.Id)).ToDictionaryAsync(e => e.Id, cancellationToken);
 
         var accepted = 0;
         foreach (var recipient in queued)
@@ -208,7 +210,11 @@ public sealed class EmailDispatcher(
 
             var unsubscribe = Unsubscribe.Link(options.Value.PortalBaseUrl!, tenant.Slug, recipient.Token);
             var replyTo = $"m-{recipient.Token}@{tenant.Slug}.{options.Value.InboundDomain}";
-            var rendered = renderer.RenderMailout(tenant, mailouts[recipient.MailoutId], party, unsubscribe);
+            var mailout = mailouts[recipient.MailoutId];
+            var rsvp = mailout.SocialEventId is { } socialId && socials.TryGetValue(socialId, out var social)
+                ? Invitation(social, options.Value.PortalBaseUrl!, tenant.Slug, recipient.Token)
+                : null;
+            var rendered = renderer.RenderMailout(tenant, mailout, party, unsubscribe, rsvp);
             var result = await sender.SendAsync(new OutboundEmail(options.Value.FromAddress, Senders.For(tenant.Name), contact.Value, party.DisplayName, replyTo,
                 rendered.Subject, rendered.Html, rendered.Text,
                 new Dictionary<string, string> { ["tenantId"] = tenant.Id.ToString(), ["mailoutRecipientId"] = recipient.Id.ToString() },
@@ -226,6 +232,19 @@ public sealed class EmailDispatcher(
 
         await db.SaveChangesAsync(cancellationToken);
         return accepted;
+    }
+
+    /// <summary>A social event invitation's details and this recipient's own reply links (Rsvp.Link).</summary>
+    private static RsvpBlock Invitation(SocialEvent social, string baseUrl, string slug, string token)
+    {
+        var zone = TimeZoneInfo.FindSystemTimeZoneById("Australia/Sydney");
+        var culture = System.Globalization.CultureInfo.GetCultureInfo("en-AU");
+        string Day(DateTimeOffset at) => TimeZoneInfo.ConvertTime(at, zone).ToString("dddd d MMMM yyyy", culture);
+        var start = TimeZoneInfo.ConvertTime(social.StartsAt, zone);
+        var when = Day(social.StartsAt) + (start.TimeOfDay == TimeSpan.Zero ? "" : $", {start.ToString("h:mm tt", culture).ToLowerInvariant()}")
+                   + (social.EndsAt is { } end && Day(end) != Day(social.StartsAt) ? $" to {Day(end)}" : "");
+        return new RsvpBlock(social.Title, when, social.Venue,
+            Rsvp.Link(baseUrl, slug, token, "Coming"), Rsvp.Link(baseUrl, slug, token, "Maybe"), Rsvp.Link(baseUrl, slug, token, "NotComing"));
     }
 
     /// <summary>

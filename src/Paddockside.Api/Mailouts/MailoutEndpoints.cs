@@ -95,15 +95,30 @@ public static class MailoutEndpoints
     }
 
     /// <summary>Who the choice comes to, before anything is sent: how many will get it, and who is left out and why.</summary>
-    private static async Task<IResult> PreviewAsync(AudienceRequest request, PaddocksideDbContext db, CancellationToken cancellationToken)
+    private static async Task<IResult> PreviewAsync(AudienceRequest request, PaddocksideDbContext db, CancellationToken cancellationToken) =>
+        Results.Ok(await PreviewForAsync(request, db, null, cancellationToken));
+
+    /// <summary>Who a mailout would reach; for an invitation, people already on the event's list are left out, and counted.</summary>
+    internal static async Task<Preview> PreviewForAsync(AudienceRequest request, PaddocksideDbContext db, ISet<Guid>? alreadyInvited, CancellationToken cancellationToken)
     {
         var chosen = await ChooseAsync(db, request, cancellationToken);
-        var leftOut = chosen.Select(Excluded).OfType<string>().GroupBy(w => w).Select(g => new Reason(g.Key, g.Count())).OrderByDescending(r => r.Count).ToList();
-        return Results.Ok(new Preview(chosen.Count, chosen.Count - leftOut.Sum(r => r.Count), leftOut));
+        var already = alreadyInvited is null ? 0 : chosen.Count(p => alreadyInvited.Contains(p.Id));
+        var leftOut = chosen.Where(p => alreadyInvited?.Contains(p.Id) != true).Select(Excluded).OfType<string>()
+            .Concat(Enumerable.Repeat("Already invited", already))
+            .GroupBy(w => w).Select(g => new Reason(g.Key, g.Count())).OrderByDescending(r => r.Count).ToList();
+        return new Preview(chosen.Count, chosen.Count - leftOut.Sum(r => r.Count), leftOut);
     }
 
-    private static async Task<IResult> Send(MailoutRequest request, ClaimsPrincipal user, PaddocksideDbContext db, IEmailSender email, AuditLog audit, TimeProvider clock,
-        EmailDispatchSignal emailSignal, CancellationToken cancellationToken)
+    private static Task<IResult> Send(MailoutRequest request, ClaimsPrincipal user, PaddocksideDbContext db, IEmailSender email, AuditLog audit, TimeProvider clock,
+        EmailDispatchSignal emailSignal, CancellationToken cancellationToken) =>
+        SendAsync(request, user, db, email, audit, clock, emailSignal, null, cancellationToken);
+
+    /// <summary>
+    /// A mailout, or the invitation to a social event (David, 22 Nov 2026): then anyone already on its list is skipped,
+    /// so a second round to another group never invites someone twice, and everyone it goes to joins the list as invited.
+    /// </summary>
+    internal static async Task<IResult> SendAsync(MailoutRequest request, ClaimsPrincipal user, PaddocksideDbContext db, IEmailSender email, AuditLog audit,
+        TimeProvider clock, EmailDispatchSignal emailSignal, SocialEvent? social, CancellationToken cancellationToken)
     {
         if (!CanSend.Contains(user.FindFirstValue(SessionClaims.Role)))
             return Results.Problem(statusCode: StatusCodes.Status403Forbidden, title: "Your role can read mailouts but not send them.");
@@ -114,6 +129,12 @@ public static class MailoutEndpoints
         var audience = new AudienceRequest(request.ListIds, request.Statuses, request.ClientIds);
         var chosen = await ChooseAsync(db, audience, cancellationToken);
         if (chosen.Count == 0) return Problem("Choose who it goes to: a list, a kind of client, or people.");
+        if (social is not null)
+        {
+            var already = await AlreadyInvitedAsync(db, social.Id, cancellationToken);
+            chosen = chosen.Where(p => !already.Contains(p.Id)).ToList();
+            if (chosen.Count == 0) return Problem("Everyone you chose is already on this event's list.");
+        }
         if (chosen.All(p => Excluded(p) is not null)) return Problem("Nobody you chose can be sent it: see who is left out, and why.");
         if (request.HorseId is { } horseId && !await db.Horses.AnyAsync(h => h.Id == horseId, cancellationToken)) return Problem("Choose one of your horses.");
 
@@ -132,6 +153,7 @@ public static class MailoutEndpoints
         {
             mailout = new Mailout(tenant.Id, request.Subject ?? "", request.Body ?? "", await DescribeAsync(db, audience, cancellationToken),
                 user.FindFirstValue(ClaimTypes.Email) ?? "Staff", now, request.HorseId, request.Signature);
+            if (social is not null) mailout.Invites(social);
             foreach (var a in attachments) a.AttachTo(mailout);
         }
         catch (DomainException ex)
@@ -142,15 +164,25 @@ public static class MailoutEndpoints
         db.Mailouts.Add(mailout);
         var recipients = chosen.Select(p => new MailoutRecipient(mailout, p, RoutingToken.New(), now)).ToList();
         db.MailoutRecipients.AddRange(recipients);
+        if (social is not null)
+        {
+            var sentTo = recipients.Where(r => r.Status == MailoutRecipientStatus.Queued).Select(r => r.PartyId).ToHashSet();
+            db.SocialAttendees.AddRange(chosen.Where(p => sentTo.Contains(p.Id)).Select(p => new SocialAttendee(social, p, now, mailout.Id)));
+        }
+
         await db.SaveChangesAsync(cancellationToken);
         emailSignal.Notify();
 
         var sending = recipients.Count(r => r.Status == MailoutRecipientStatus.Queued);
         var with = attachments.Count == 0 ? "" : $" with {string.Join(", ", attachments.Select(a => a.FileName))}";
-        await audit.RecordAsync(tenant.Id, "mailout.sent", $"Sent \"{mailout.Subject}\" to {sending} ({mailout.Audience}){with}", "Mailout", mailout.Id,
+        var what = social is null ? "" : $" inviting them to {social.Title}";
+        await audit.RecordAsync(tenant.Id, "mailout.sent", $"Sent \"{mailout.Subject}\" to {sending} ({mailout.Audience}){with}{what}", "Mailout", mailout.Id,
             cancellationToken: cancellationToken);
         return Results.Created($"/api/mailouts/{mailout.Id}", new Created(mailout.Id, sending));
     }
+
+    internal static async Task<HashSet<Guid>> AlreadyInvitedAsync(PaddocksideDbContext db, Guid socialEventId, CancellationToken cancellationToken) =>
+        (await db.SocialAttendees.AsNoTracking().Where(a => a.SocialEventId == socialEventId).Select(a => a.PartyId).ToListAsync(cancellationToken)).ToHashSet();
 
     private static async Task<IResult> Get(Guid id, PaddocksideDbContext db, TimeProvider clock, CancellationToken cancellationToken)
     {
@@ -300,7 +332,7 @@ public static class MailoutEndpoints
         $"<p class=\"note\">If you own part of a horse with {E(tenant.Name)}, you'll still hear about it: this only stops mailouts.</p>";
 
     /// <summary>A plain page: no app, no scripts, just the words and the button, in the business's colours.</summary>
-    private static IResult Page(string title, string body) => Results.Content($$"""
+    internal static IResult Page(string title, string body) => Results.Content($$"""
         <!DOCTYPE html>
         <html lang="en-AU"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
         <meta name="robots" content="noindex"><title>{{E(title)}}</title>
@@ -314,7 +346,7 @@ public static class MailoutEndpoints
         <body><main><h1>{{E(title)}}</h1>{{body}}</main></body></html>
         """, "text/html; charset=utf-8");
 
-    private static string E(string text) => WebUtility.HtmlEncode(text);
+    internal static string E(string text) => WebUtility.HtmlEncode(text);
 
     private static Task<List<Party>> ChooseAsync(PaddocksideDbContext db, AudienceRequest request, CancellationToken cancellationToken) =>
         ClientEndpoints.ChooseAsync(db, request.ListIds ?? [], (request.Statuses ?? []).Where(Kinds.Contains).ToList(), request.ClientIds ?? [], cancellationToken);

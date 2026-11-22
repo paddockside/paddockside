@@ -220,6 +220,19 @@ public sealed class OwnerEmailRenderer
             : "";
 
     /// <summary>A 48 px button: a link styled as one, which every mail client renders.</summary>
+    /// <summary>The event, and three replies: the first a solid button, the others outlined.</summary>
+    private static string RsvpHtml(RsvpBlock rsvp)
+    {
+        string Link(string href, string label, bool solid) =>
+            $"<a href=\"{E(href)}\" style=\"display:inline-block;margin:0 {T.Space2} {T.Space2} 0;padding:{T.Space3} {T.Space6};border-radius:{T.RadiusControl};text-decoration:none;font-weight:700;" +
+            (solid ? $"background:{T.ColorActionPrimaryBg};color:{T.ColorActionPrimaryFg};" : $"border:1px solid {T.ColorActionPrimaryBg};color:{T.ColorActionPrimaryBg};") + $"\">{E(label)}</a>";
+        return $"<div style=\"margin:{T.Space4} 0 {T.Space6};padding:{T.Space4};background:{T.ColorSurfaceSunken};border-radius:{T.RadiusCard};\">" +
+               $"<p style=\"margin:0 0 {T.Space1};font-weight:700;\">{E(rsvp.What)}</p>" +
+               $"<p style=\"margin:0 0 {T.Space1};\">{E(rsvp.When)}</p>" +
+               (rsvp.Where is { } where ? $"<p style=\"margin:0 0 {T.Space3};\">{E(where)}</p>" : "") +
+               $"<p style=\"margin:{T.Space3} 0 0;\">{Link(rsvp.ComingLink, "I'll come", true)}{Link(rsvp.MaybeLink, "Maybe", false)}{Link(rsvp.NotComingLink, "Can't make it", false)}</p></div>";
+    }
+
     private static string Button(string href, string label) =>
         $"<p style=\"margin:{T.Space2} 0 {T.Space6};\"><a href=\"{E(href)}\" style=\"display:inline-block;padding:{T.Space3} {T.Space6};min-height:24px;" +
         $"background:{T.ColorActionPrimaryBg};color:{T.ColorActionPrimaryFg};border-radius:{T.RadiusControl};text-decoration:none;font-weight:700;\">{E(label)}</a></p>";
@@ -228,7 +241,7 @@ public sealed class OwnerEmailRenderer
     /// A mailout to one client: the business's own email, with a reply that comes back to the mailout and an
     /// unsubscribe link in the footer (messaging-channels.md §7). No portal link: most people on a list have none.
     /// </summary>
-    public RenderedEmail RenderMailout(Tenant tenant, Mailout mailout, Party recipient, string unsubscribeLink)
+    public RenderedEmail RenderMailout(Tenant tenant, Mailout mailout, Party recipient, string unsubscribeLink, RsvpBlock? rsvp = null)
     {
         var replyLine = $"Reply to this email and it goes to {tenant.Name}.";
         var whyLine = $"You are receiving this because you are on {tenant.Name}'s mailing list.";
@@ -236,11 +249,15 @@ public sealed class OwnerEmailRenderer
         html.Append(Heading(mailout.Subject));
         html.Append(Paragraph($"Hi {recipient.FirstName},"));
         foreach (var paragraph in Paragraphs(mailout.Body)) html.Append(Paragraph(paragraph));
+        if (rsvp is not null) html.Append(RsvpHtml(rsvp));
         // The sender's own sign-off, line breaks kept, above the business's details.
         foreach (var paragraph in Paragraphs(mailout.Signature ?? "")) html.Append(Paragraph(paragraph));
 
         var text = new StringBuilder().AppendLine(mailout.Subject).AppendLine().AppendLine($"Hi {recipient.FirstName},").AppendLine();
         foreach (var paragraph in Paragraphs(mailout.Body)) text.AppendLine(paragraph).AppendLine();
+        if (rsvp is not null)
+            text.AppendLine($"{rsvp.What}").AppendLine(rsvp.When).AppendLine(rsvp.Where ?? "").AppendLine()
+                .AppendLine($"I'll come: {rsvp.ComingLink}").AppendLine($"Maybe: {rsvp.MaybeLink}").AppendLine($"Can't make it: {rsvp.NotComingLink}").AppendLine();
         foreach (var paragraph in Paragraphs(mailout.Signature ?? "")) text.AppendLine(paragraph).AppendLine();
 
         return new RenderedEmail(mailout.Subject,

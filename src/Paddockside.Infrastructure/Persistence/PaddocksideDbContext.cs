@@ -59,6 +59,10 @@ public sealed class PaddocksideDbContext(DbContextOptions<PaddocksideDbContext> 
 
     public DbSet<HorseStatusEntry> HorseStatuses => Set<HorseStatusEntry>();
 
+    public DbSet<SocialEvent> SocialEvents => Set<SocialEvent>();
+
+    public DbSet<SocialAttendee> SocialAttendees => Set<SocialAttendee>();
+
     public DbSet<RoutingAddress> RoutingAddresses => Set<RoutingAddress>();
 
     public DbSet<InboundMessage> InboundMessages => Set<InboundMessage>();

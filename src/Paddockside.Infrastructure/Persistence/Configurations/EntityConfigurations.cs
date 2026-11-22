@@ -82,6 +82,42 @@ internal sealed class MailoutConfiguration : IEntityTypeConfiguration<Mailout>
         b.Property(x => x.CreatedAt);
         b.Property(x => x.Signature).HasMaxLength(StaffSignature.Length);
         b.HasOne<Horse>().WithMany().HasForeignKey(x => x.HorseId).OnDelete(DeleteBehavior.Restrict);
+        b.HasOne<SocialEvent>().WithMany().HasForeignKey(x => x.SocialEventId).OnDelete(DeleteBehavior.Restrict);
+    }
+}
+
+internal sealed class SocialEventConfiguration : IEntityTypeConfiguration<SocialEvent>
+{
+    public void Configure(EntityTypeBuilder<SocialEvent> b)
+    {
+        b.MapTenantOwned();
+        b.Property(x => x.Title).HasMaxLength(SocialEvent.TitleLength);
+        b.Property(x => x.Kind).AsString();
+        b.Property(x => x.Status).AsString();
+        b.Property(x => x.StartsAt);
+        b.Property(x => x.EndsAt);
+        b.Property(x => x.Venue).HasMaxLength(SocialEvent.TextLength);
+        b.Property(x => x.Places);
+        b.Property(x => x.Notes).HasMaxLength(SocialEvent.NotesLength);
+        b.Property(x => x.CreatedAt);
+        b.HasIndex("TenantId", nameof(SocialEvent.StartsAt));
+    }
+}
+
+internal sealed class SocialAttendeeConfiguration : IEntityTypeConfiguration<SocialAttendee>
+{
+    public void Configure(EntityTypeBuilder<SocialAttendee> b)
+    {
+        b.MapTenantOwned();
+        b.Property(x => x.Status).AsString();
+        b.Property(x => x.Places);
+        b.Property(x => x.Note).HasMaxLength(SocialAttendee.NoteLength);
+        b.Property(x => x.AnsweredBy).HasMaxLength(320);
+        b.Property(x => x.UpdatedAt);
+        b.HasIndex(x => new { x.SocialEventId, x.PartyId }).IsUnique(); // one line per person per event
+        b.HasOne<SocialEvent>().WithMany().HasForeignKey(x => x.SocialEventId).OnDelete(DeleteBehavior.Restrict);
+        b.HasOne<Party>().WithMany().HasForeignKey(x => x.PartyId).OnDelete(DeleteBehavior.Restrict);
+        b.HasOne<Mailout>().WithMany().HasForeignKey(x => x.MailoutId).OnDelete(DeleteBehavior.Restrict);
     }
 }
 

@@ -51,6 +51,15 @@ public sealed class Mailout
     /// <summary>The horse it's about, if any (a share offer); it shows there too.</summary>
     public Guid? HorseId { get; }
 
+    /// <summary>The social event this is the invitation to: each recipient's email carries their reply buttons.</summary>
+    public Guid? SocialEventId { get; private set; }
+
+    public void Invites(SocialEvent socialEvent)
+    {
+        if (socialEvent.TenantId != TenantId) throw new DomainException("That event belongs to another business.");
+        SocialEventId = socialEvent.Id;
+    }
+
     /// <summary>How the sender signed it off (their saved signature, or what they wrote this time), above the business's details.</summary>
     public string? Signature { get; }
 }

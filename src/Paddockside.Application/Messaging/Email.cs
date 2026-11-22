@@ -134,3 +134,16 @@ public static class Unsubscribe
 {
     public static string Link(string baseUrl, string tenantSlug, string token) => $"{baseUrl.TrimEnd('/')}/u/{tenantSlug}/{token}";
 }
+
+/// <summary>
+/// The reply buttons on a social event invitation (David, 22 Nov 2026): each recipient's own, by their mailout token.
+/// They open a page that asks them to confirm (and how many places), so a mail scanner opening links changes nothing.
+/// </summary>
+public static class Rsvp
+{
+    public static string Link(string baseUrl, string tenantSlug, string token, string answer) =>
+        $"{baseUrl.TrimEnd('/')}/s/{tenantSlug}/{token}?answer={Uri.EscapeDataString(answer)}";
+}
+
+/// <summary>The event an invitation is for, as the email shows it, with this recipient's three reply links.</summary>
+public sealed record RsvpBlock(string What, string When, string? Where, string ComingLink, string MaybeLink, string NotComingLink);

@@ -580,6 +580,9 @@ namespace Paddockside.Infrastructure.Persistence.Migrations
                         .HasMaxLength(1000)
                         .HasColumnType("nvarchar(1000)");
 
+                    b.Property<Guid?>("SocialEventId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<string>("Subject")
                         .IsRequired()
                         .HasMaxLength(150)
@@ -591,6 +594,8 @@ namespace Paddockside.Infrastructure.Persistence.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("HorseId");
+
+                    b.HasIndex("SocialEventId");
 
                     b.HasIndex("TenantId");
 
@@ -1209,6 +1214,108 @@ namespace Paddockside.Infrastructure.Persistence.Migrations
                     b.ToTable("RoutingAddresses");
                 });
 
+            modelBuilder.Entity("Paddockside.Domain.SocialAttendee", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("AnsweredBy")
+                        .HasMaxLength(320)
+                        .HasColumnType("nvarchar(320)");
+
+                    b.Property<Guid?>("MailoutId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(300)
+                        .HasColumnType("nvarchar(300)");
+
+                    b.Property<Guid>("PartyId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("Places")
+                        .HasColumnType("int");
+
+                    b.Property<Guid>("SocialEventId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("MailoutId");
+
+                    b.HasIndex("PartyId");
+
+                    b.HasIndex("TenantId");
+
+                    b.HasIndex("SocialEventId", "PartyId")
+                        .IsUnique();
+
+                    b.ToTable("SocialAttendees");
+                });
+
+            modelBuilder.Entity("Paddockside.Domain.SocialEvent", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<DateTimeOffset?>("EndsAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(4000)
+                        .HasColumnType("nvarchar(4000)");
+
+                    b.Property<int?>("Places")
+                        .HasColumnType("int");
+
+                    b.Property<DateTimeOffset>("StartsAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("Venue")
+                        .HasMaxLength(300)
+                        .HasColumnType("nvarchar(300)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TenantId");
+
+                    b.HasIndex("TenantId", "StartsAt");
+
+                    b.ToTable("SocialEvents");
+                });
+
             modelBuilder.Entity("Paddockside.Domain.StaffSignature", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1795,6 +1902,11 @@ namespace Paddockside.Infrastructure.Persistence.Migrations
                         .HasForeignKey("HorseId")
                         .OnDelete(DeleteBehavior.Restrict);
 
+                    b.HasOne("Paddockside.Domain.SocialEvent", null)
+                        .WithMany()
+                        .HasForeignKey("SocialEventId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("Paddockside.Domain.Tenant", null)
                         .WithMany()
                         .HasForeignKey("TenantId")
@@ -2100,6 +2212,41 @@ namespace Paddockside.Infrastructure.Persistence.Migrations
                         .HasForeignKey("StreamItemId")
                         .OnDelete(DeleteBehavior.Restrict);
 
+                    b.HasOne("Paddockside.Domain.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Paddockside.Domain.SocialAttendee", b =>
+                {
+                    b.HasOne("Paddockside.Domain.Mailout", null)
+                        .WithMany()
+                        .HasForeignKey("MailoutId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Paddockside.Domain.Party", null)
+                        .WithMany()
+                        .HasForeignKey("PartyId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Paddockside.Domain.SocialEvent", null)
+                        .WithMany()
+                        .HasForeignKey("SocialEventId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Paddockside.Domain.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Paddockside.Domain.SocialEvent", b =>
+                {
                     b.HasOne("Paddockside.Domain.Tenant", null)
                         .WithMany()
                         .HasForeignKey("TenantId")
