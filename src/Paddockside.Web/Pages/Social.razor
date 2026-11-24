@@ -100,6 +100,7 @@
     {
         e.Places is { } places ? $"{e.Coming} of {places} places" : $"{e.Coming} coming",
         e.Invited > 0 ? $"{e.Invited} waiting to hear" : null,
+        e.Unsent > 0 ? $"{e.Unsent} not invited yet" : null,
         e.Waiting > 0 ? $"{e.Waiting} on the waiting list" : null,
     }.Where(x => x is not null));
 

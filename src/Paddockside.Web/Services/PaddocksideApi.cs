@@ -33,11 +33,11 @@ public sealed record SocialKindOption(string Code, string Label);
 
 /// <param name="Coming">Places taken by people coming.</param>
 public sealed record SocialSummary(Guid Id, string Title, string Kind, string KindLabel, string When, string Date, string? Venue, int? Places, int Coming,
-    int Invited, int Waiting, string Status, bool Past);
+    int Invited, int Waiting, string Status, bool Past, int Unsent = 0);
 
 /// <param name="Status">Invited, Coming, Maybe, NotComing or Waiting.</param>
 public sealed record SocialAttendeeLine(Guid PartyId, string Name, string? Email, string Status, string StatusLabel, int Places, string? Note, string? AnsweredBy,
-    string Updated);
+    string Updated, bool Unsent = false);
 
 public sealed record SocialInvitationLine(Guid MailoutId, string Subject, string Sent, int Recipients);
 

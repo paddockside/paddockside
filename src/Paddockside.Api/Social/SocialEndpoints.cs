@@ -31,10 +31,11 @@ public static class SocialEndpoints
 
     /// <param name="Coming">Places taken by people coming.</param>
     public sealed record SocialSummary(Guid Id, string Title, string Kind, string KindLabel, string When, string Date, string? Venue, int? Places, int Coming,
-        int Invited, int Waiting, string Status, bool Past);
+        int Invited, int Waiting, string Status, bool Past, int Unsent = 0);
 
+    /// <param name="Unsent">Put on the list by hand and not invited yet: nothing has been sent to them.</param>
     public sealed record AttendeeLine(Guid PartyId, string Name, string? Email, string Status, string StatusLabel, int Places, string? Note, string? AnsweredBy,
-        string Updated);
+        string Updated, bool Unsent = false);
 
     public sealed record InvitationLine(Guid MailoutId, string Subject, string Sent, int Recipients);
 
@@ -106,7 +107,8 @@ public static class SocialEndpoints
             e.Notes,
             attendees.OrderBy(a => Rank(a.Status)).ThenBy(a => parties.GetValueOrDefault(a.PartyId)?.DisplayName)
                 .Select(a => new AttendeeLine(a.PartyId, parties.GetValueOrDefault(a.PartyId)?.DisplayName ?? "Unknown", parties.GetValueOrDefault(a.PartyId)?.PrimaryEmail?.Value,
-                    a.Status.ToString(), SocialAttendee.Label(a.Status), a.Places, a.Note, a.AnsweredBy, Words.Recently(a.UpdatedAt, now)))
+                    a.Status.ToString(), a.NotInvitedYet ? "Not invited yet" : SocialAttendee.Label(a.Status), a.Places, a.Note, a.AnsweredBy, Words.Recently(a.UpdatedAt, now),
+                    a.NotInvitedYet))
                 .ToList(),
             mailouts.Select(m => new InvitationLine(m.Id, m.Subject, Words.DayAndTime(m.CreatedAt, now), counts.GetValueOrDefault(m.Id))).ToList(),
             attendees.Count(a => a.Status == AttendeeStatus.Maybe), attendees.Count(a => a.Status == AttendeeStatus.NotComing)));
@@ -174,13 +176,13 @@ public static class SocialEndpoints
         return Results.NoContent();
     }
 
-    /// <summary>Staff put people on the list by hand (a tour, a phone call): as invited, nothing sent.</summary>
+    /// <summary>Staff put people on the list by hand (a tour, a phone call): nothing is sent, and they show as not invited yet.</summary>
     private static async Task<IResult> Add(Guid id, AddRequest request, ClaimsPrincipal user, PaddocksideDbContext db, TimeProvider clock, CancellationToken cancellationToken)
     {
         if (!CanEdit.Contains(user.FindFirstValue(SessionClaims.Role))) return Forbidden();
         var e = await db.SocialEvents.SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
         if (e is null) return Results.NotFound();
-        var already = await AlreadyInvitedAsync(db, id, cancellationToken);
+        var already = (await db.SocialAttendees.Where(a => a.SocialEventId == id).Select(a => a.PartyId).ToListAsync(cancellationToken)).ToHashSet();
         var ids = (request.ClientIds ?? []).Where(c => !already.Contains(c)).Distinct().ToList();
         var parties = await db.Parties.Where(p => ids.Contains(p.Id)).ToListAsync(cancellationToken);
         if (parties.Count != ids.Count) return Problem("Choose from your clients.");
@@ -344,9 +346,9 @@ public static class SocialEndpoints
     {
         var last = e.EndsAt ?? e.StartsAt;
         return new SocialSummary(e.Id, e.Title, e.Kind.ToString(), SocialEvent.Label(e.Kind), When(e), Words.Local(e.StartsAt).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
-            e.Venue, e.Places, attendees.Where(a => a.Counts).Sum(a => a.Places), attendees.Count(a => a.Status == AttendeeStatus.Invited),
+            e.Venue, e.Places, attendees.Where(a => a.Counts).Sum(a => a.Places), attendees.Count(a => a.Status == AttendeeStatus.Invited && !a.NotInvitedYet),
             attendees.Where(a => a.Status == AttendeeStatus.Waiting).Sum(a => a.Places), e.Status.ToString(),
-            Words.Local(last).Date < Words.Local(now).Date);
+            Words.Local(last).Date < Words.Local(now).Date, attendees.Count(a => a.NotInvitedYet));
     }
 
     /// <summary>"Saturday 12 December 2026, 12:30 pm", or "Tuesday 3 November 2026 to Friday 6 November 2026" for a tour.</summary>

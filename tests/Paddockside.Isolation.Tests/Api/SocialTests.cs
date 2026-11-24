@@ -80,4 +80,47 @@ public sealed partial class OwnerSignInTests
         using var otherStaff = await Api.SignedInAsync(db.A.TenantId, MemberRole.Coordinator);
         Assert.Equal(HttpStatusCode.NotFound, (await otherStaff.GetAsync($"/api/social/{id}")).StatusCode);
     }
+
+    private sealed record UnsentHead(int Invited, int Unsent);
+
+    private sealed record UnsentLine(Guid PartyId, string Status, string StatusLabel, bool Unsent);
+
+    private sealed record UnsentPage(UnsentHead Event, List<UnsentLine> Attendees);
+
+    [Fact]
+    public async Task People_added_by_hand_are_not_invited_until_an_invitation_goes_and_then_only_once()
+    {
+        // David, 25 Nov 2026: people were put on with Add people, shown as invited though nothing had been sent, and
+        // then couldn't be invited because they counted as already on the list.
+        var seed = await SeedAsync();
+        using var staff = await Api.SignedInAsync(seed.TenantId, MemberRole.Coordinator);
+        var day = DateTime.Today.AddDays(30).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+        var id = (await (await staff.PostApiAsync("/api/social", new { title = "Golf Day", kind = "Golf", date = day })).Content.ReadFromJsonAsync<SocialMade>())!.Id;
+        Assert.Equal(HttpStatusCode.NoContent, (await staff.PostApiAsync($"/api/social/{id}/attendees", new { clientIds = new[] { seed.AnnId, seed.BobId } })).StatusCode);
+
+        var page = (await staff.GetFromJsonAsync<UnsentPage>($"/api/social/{id}"))!;
+        Assert.Equal((0, 2), (page.Event.Invited, page.Event.Unsent));
+        Assert.All(page.Attendees, a => Assert.Equal(("Not invited yet", true), (a.StatusLabel, a.Unsent)));
+
+        // Bob rings to say yes: he has answered, so an invitation to both goes to Ann only.
+        await staff.PutApiAsync($"/api/social/{id}/attendees/{seed.BobId}", new { status = "Coming", places = 1, note = "" });
+        var both = new { listIds = Array.Empty<Guid>(), statuses = Array.Empty<string>(), clientIds = new[] { seed.AnnId, seed.BobId } };
+        Assert.Equal(1, (await (await staff.PostApiAsync($"/api/social/{id}/invite/preview", both)).Content.ReadFromJsonAsync<MailoutPreview>())!.Sending);
+        var invitation = new { subject = "Golf Day", body = "Join us.", both.listIds, both.statuses, both.clientIds };
+        Assert.Equal(HttpStatusCode.Created, (await staff.PostApiAsync($"/api/social/{id}/invite", invitation)).StatusCode);
+        await DispatchAsync();
+        Assert.Single(Api.Emails.Sent, e => e.Email.Subject == "Golf Day" && e.Email.ToAddress == seed.AnnEmail);
+        Assert.DoesNotContain(Api.Emails.Sent, e => e.Email.Subject == "Golf Day" && e.Email.ToName == "Bob Owner");
+
+        // Still one line each, Ann's now truly invited; a second round has nobody left.
+        page = (await staff.GetFromJsonAsync<UnsentPage>($"/api/social/{id}"))!;
+        Assert.Equal(2, page.Attendees.Count);
+        Assert.Equal((1, 0), (page.Event.Invited, page.Event.Unsent));
+        Assert.Equal("Invited", page.Attendees.Single(a => a.PartyId == seed.AnnId).StatusLabel);
+        Assert.Equal(HttpStatusCode.BadRequest, (await staff.PostApiAsync($"/api/social/{id}/invite", invitation)).StatusCode);
+
+        // Adding someone already on the list still doesn't put them on twice.
+        await staff.PostApiAsync($"/api/social/{id}/attendees", new { clientIds = new[] { seed.AnnId } });
+        Assert.Equal(2, (await staff.GetFromJsonAsync<UnsentPage>($"/api/social/{id}"))!.Attendees.Count);
+    }
 }

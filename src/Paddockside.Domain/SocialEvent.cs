@@ -159,6 +159,10 @@ public sealed class SocialAttendee
 
     public bool Counts => Status == AttendeeStatus.Coming;
 
+    /// <summary>Put on the list by hand and neither sent an invitation nor answered: an invitation can still go to them.</summary>
+    public bool NotInvitedYet => MailoutId is null && Status == AttendeeStatus.Invited;
+
+    /// <summary>An invitation went to someone already on the list by hand; only the first counts.</summary>
     public void InvitedBy(Guid mailoutId) => MailoutId ??= mailoutId;
 
     /// <summary>

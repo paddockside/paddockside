@@ -133,7 +133,7 @@ public static class MailoutEndpoints
         {
             var already = await AlreadyInvitedAsync(db, social.Id, cancellationToken);
             chosen = chosen.Where(p => !already.Contains(p.Id)).ToList();
-            if (chosen.Count == 0) return Problem("Everyone you chose is already on this event's list.");
+            if (chosen.Count == 0) return Problem("Everyone you chose has already been invited, or has answered.");
         }
         if (chosen.All(p => Excluded(p) is not null)) return Problem("Nobody you chose can be sent it: see who is left out, and why.");
         if (request.HorseId is { } horseId && !await db.Horses.AnyAsync(h => h.Id == horseId, cancellationToken)) return Problem("Choose one of your horses.");
@@ -167,7 +167,10 @@ public static class MailoutEndpoints
         if (social is not null)
         {
             var sentTo = recipients.Where(r => r.Status == MailoutRecipientStatus.Queued).Select(r => r.PartyId).ToHashSet();
-            db.SocialAttendees.AddRange(chosen.Where(p => sentTo.Contains(p.Id)).Select(p => new SocialAttendee(social, p, now, mailout.Id)));
+            // Someone put on the list by hand keeps their line; everyone else gets one.
+            var onList = await db.SocialAttendees.Where(a => a.SocialEventId == social.Id && sentTo.Contains(a.PartyId)).ToDictionaryAsync(a => a.PartyId, cancellationToken);
+            foreach (var attendee in onList.Values) attendee.InvitedBy(mailout.Id);
+            db.SocialAttendees.AddRange(chosen.Where(p => sentTo.Contains(p.Id) && !onList.ContainsKey(p.Id)).Select(p => new SocialAttendee(social, p, now, mailout.Id)));
         }
 
         await db.SaveChangesAsync(cancellationToken);
@@ -181,8 +184,11 @@ public static class MailoutEndpoints
         return Results.Created($"/api/mailouts/{mailout.Id}", new Created(mailout.Id, sending));
     }
 
+    /// <summary>Who an invitation leaves out: sent one already, or answered. Not people only put on the list by hand.</summary>
     internal static async Task<HashSet<Guid>> AlreadyInvitedAsync(PaddocksideDbContext db, Guid socialEventId, CancellationToken cancellationToken) =>
-        (await db.SocialAttendees.AsNoTracking().Where(a => a.SocialEventId == socialEventId).Select(a => a.PartyId).ToListAsync(cancellationToken)).ToHashSet();
+        (await db.SocialAttendees.AsNoTracking()
+            .Where(a => a.SocialEventId == socialEventId && (a.MailoutId != null || a.Status != AttendeeStatus.Invited))
+            .Select(a => a.PartyId).ToListAsync(cancellationToken)).ToHashSet();
 
     private static async Task<IResult> Get(Guid id, PaddocksideDbContext db, TimeProvider clock, CancellationToken cancellationToken)
     {

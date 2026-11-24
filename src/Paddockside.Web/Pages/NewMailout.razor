@@ -20,7 +20,7 @@
         <h1>Invite people to @invite.Event.Title</h1>
         <p class="rounded-control bg-surface-sunken px-4 py-3">
             @invite.Event.When@(invite.Event.Venue is null ? null : $" · {invite.Event.Venue}"). Each invitation has buttons to reply with: I'll come (with how many places), maybe,
-            or can't make it, and their answer goes straight onto the event's list. Anyone already on the list is left out of this round.
+            or can't make it, and their answer goes straight onto the event's list. Anyone already invited, or who has answered, is left out of this round.
         </p>
     }
     else
@@ -178,6 +178,9 @@
     /// <summary>Invitation mode: the social event this invites people to.</summary>
     [SupplyParameterFromQuery(Name = "social")] public Guid? Social { get; set; }
 
+    /// <summary>Start with the people on that event's list who haven't been invited yet.</summary>
+    [SupplyParameterFromQuery(Name = "waiting")] public bool Waiting { get; set; }
+
     private SocialDetail? _social;
     private List<ClientRow> _clients = [];
     private string? _personSearch;
@@ -232,6 +235,7 @@
             {
                 _subject = $"Invitation: {_social.Event.Title}";
                 _clients = (await Api.ClientsAsync(null, null, null)).Value ?? [];
+                if (Waiting) _people = [.. _people, .. _social.Attendees.Where(a => a.Unsent && _people.All(p => p.Id != a.PartyId)).Select(a => (a.PartyId, a.Name))];
             }
         }
         _lists = (await Api.ClientListsAsync()).Value ?? [];

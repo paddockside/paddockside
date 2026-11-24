@@ -114,6 +114,7 @@ internal sealed class SocialAttendeeConfiguration : IEntityTypeConfiguration<Soc
         b.Property(x => x.Note).HasMaxLength(SocialAttendee.NoteLength);
         b.Property(x => x.AnsweredBy).HasMaxLength(320);
         b.Property(x => x.UpdatedAt);
+        b.Ignore(x => x.NotInvitedYet);
         b.HasIndex(x => new { x.SocialEventId, x.PartyId }).IsUnique(); // one line per person per event
         b.HasOne<SocialEvent>().WithMany().HasForeignKey(x => x.SocialEventId).OnDelete(DeleteBehavior.Restrict);
         b.HasOne<Party>().WithMany().HasForeignKey(x => x.PartyId).OnDelete(DeleteBehavior.Restrict);
