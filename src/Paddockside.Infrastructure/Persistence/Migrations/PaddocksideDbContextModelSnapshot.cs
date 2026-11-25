@@ -1074,6 +1074,9 @@ namespace Paddockside.Infrastructure.Persistence.Migrations
                         .HasMaxLength(32)
                         .HasColumnType("nvarchar(32)");
 
+                    b.Property<DateTimeOffset?>("MadeClientAt")
+                        .HasColumnType("datetimeoffset");
+
                     b.Property<string>("Notes")
                         .HasMaxLength(4000)
                         .HasColumnType("nvarchar(4000)");

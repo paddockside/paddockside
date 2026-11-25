@@ -41,7 +41,8 @@ public static class HorseAdminEndpoints
     /// <param name="Allocated">"95% of 100% allocated".</param>
     /// <param name="Warning">When the shares don't add up to the whole horse, in words.</param>
     /// <param name="Over">More than 100%: a mistake to correct, not just shares still to sell.</param>
-    public sealed record OwnersView(IReadOnlyList<OwnerLine> Owners, string Allocated, decimal Unallocated, string? Warning = null, bool Over = false);
+    /// <param name="HouseId">The business's own house share, which part of an owner's share can go back to; null if it has none set up.</param>
+    public sealed record OwnersView(IReadOnlyList<OwnerLine> Owners, string Allocated, decimal Unallocated, string? Warning = null, bool Over = false, Guid? HouseId = null);
 
     /// <summary>
     /// What's wrong with a horse's shares, if anything. Over 100% can't be added any more (Horse.AddInterest), but
@@ -144,7 +145,7 @@ public static class HorseAdminEndpoints
                 "Share to confirm", Words.Day(toConfirm.First(i => i.PartyId == p.Id).EffectiveFrom, now), false, null, ToConfirm: true)));
         var allocated = current.Sum(i => i.Units);
         var (warning, over) = Allocation(allocated, horse.CurrentManagementPeriod is not null);
-        return Results.Ok(new OwnersView(lines, $"{Percent(allocated)} of 100% allocated", Math.Max(0, 100m - (decimal)allocated / UnitsPerPercent), warning, over));
+        return Results.Ok(new OwnersView(lines, $"{Percent(allocated)} of 100% allocated", Math.Max(0, 100m - (decimal)allocated / UnitsPerPercent), warning, over, tenant.HousePartyId));
     }
 
     /// <summary>

@@ -303,7 +303,7 @@
                 return;
             }
 
-            _message = $"{_name} added.";
+            _message = result.Value!.WasContact ? $"{result.Value.Name} was already known as a horse's contact, and is now a client too." : $"{_name} added.";
             (_adding, _name, _email, _mobile, _how) = (false, null, null, null, null);
             _newLists.Clear();
             await LoadAsync();

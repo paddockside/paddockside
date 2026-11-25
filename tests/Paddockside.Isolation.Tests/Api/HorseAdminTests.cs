@@ -20,7 +20,7 @@ public sealed partial class OwnerSignInTests
 
     private sealed record OwnerRow(Guid PartyId, string Name, string? Email, string? Mobile, string Percent, bool IsHouse, string? Invited);
 
-    private sealed record OwnerList(List<OwnerRow> Owners, string Allocated, decimal Unallocated, string? Warning = null, bool Over = false);
+    private sealed record OwnerList(List<OwnerRow> Owners, string Allocated, decimal Unallocated, string? Warning = null, bool Over = false, Guid? HouseId = null);
 
     private sealed record HorseInbox(string Name, string? InboxAddress, int CurrentOwners);
 
@@ -124,6 +124,69 @@ public sealed partial class OwnerSignInTests
         // A vet who is on a client list is a client too; a share can still go back to the house.
         Assert.Equal(HttpStatusCode.Created, await AddAsync(new { clientId = listedVetId, percent = 5m }));
         Assert.Equal(HttpStatusCode.NoContent, await PassAsync(new { clientId = houseId, percent = 50m }));
+    }
+
+    private sealed record ContactOnHorse(Guid Id, Guid PartyId, bool IsClient);
+
+    private sealed record AddedClient(Guid Id, string Name, bool WasContact);
+
+    [Fact]
+    public async Task A_trainer_can_be_made_a_client_and_then_own_a_share()
+    {
+        var seed = await SeedAsync();
+        var (terry, vera) = ($"terry-{Guid.NewGuid():N}@stable.test", $"vera-{Guid.NewGuid():N}@vets.test");
+        Guid trainerId, vetId, houseId;
+        await using (var context = db.ContextFor(seed.TenantId))
+        {
+            var tenant = context.Tenants.Single();
+            var (house, trainer, vet) = (new Party(tenant.Id, "Owners House", PartyKind.Organisation), new Party(tenant.Id, "Terry Trainer"), new Party(tenant.Id, "Vera Vet"));
+            trainer.AddEmail(terry);
+            vet.AddEmail(vera);
+            context.Parties.AddRange(house, trainer, vet);
+            tenant.SetHouseParty(house);
+            var horse = context.Horses.Single(h => h.Id == seed.HorseId);
+            context.HorseContacts.Add(HorseContact.Tag(horse, trainer, ContactRole.Trainer, [], DateTimeOffset.UtcNow)!);
+            context.HorseContacts.Add(HorseContact.Tag(horse, vet, ContactRole.Vet, [], DateTimeOffset.UtcNow)!);
+            await context.SaveChangesAsync();
+            (trainerId, vetId, houseId) = (trainer.Id, vet.Id, house.Id);
+        }
+
+        using var manager = await Api.SignedInAsync(seed.TenantId, MemberRole.Manager);
+        var contacts = $"/api/horses/{seed.HorseId}/contacts";
+        var line = (await manager.GetFromJsonAsync<List<ContactOnHorse>>(contacts))!.Single(c => c.PartyId == trainerId);
+        Assert.False(line.IsClient);
+        Assert.Equal(HttpStatusCode.NotFound, (await manager.GetAsync($"/api/clients/{trainerId}")).StatusCode);
+
+        // A viewer can't; staff can, and nothing is sent.
+        using var viewer = await Api.SignedInAsync(seed.TenantId, MemberRole.Viewer);
+        Assert.Equal(HttpStatusCode.Forbidden, (await viewer.PostApiAsync($"{contacts}/{line.Id}/client", new { })).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await manager.PostApiAsync($"{contacts}/{Guid.NewGuid()}/client", new { })).StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, (await manager.PostApiAsync($"{contacts}/{line.Id}/client", new { })).StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, (await manager.PostApiAsync($"{contacts}/{line.Id}/client", new { })).StatusCode); // again: the same
+        await DispatchAsync();
+        Assert.DoesNotContain(Api.Emails.Sent, e => e.Email.ToAddress == terry);
+        Assert.True((await manager.GetFromJsonAsync<List<ContactOnHorse>>(contacts))!.Single(c => c.PartyId == trainerId).IsClient); // still the trainer
+        var client = (await manager.GetFromJsonAsync<ClientDetail>($"/api/clients/{trainerId}"))!;
+        Assert.Equal(("Prospect", "Bel Esprit's trainer"), (client.Status, client.HowWeKnowThem));
+
+        // Adding the vet on the Clients page, by their email, makes them a client under the name they have: nobody is doubled.
+        var added = (await (await manager.PostApiAsync("/api/clients", new { name = "V. Vet", email = vera, mobile = (string?)null, howWeKnowThem = "Wants a share" }))
+            .Content.ReadFromJsonAsync<AddedClient>())!;
+        Assert.Equal(new AddedClient(vetId, "Vera Vet", true), added);
+        Assert.Equal(HttpStatusCode.Conflict, (await manager.PostApiAsync("/api/clients", new { name = "V. Vet", email = vera, mobile = (string?)null, howWeKnowThem = "Again" })).StatusCode);
+
+        // Bob passes some to the trainer, some back to the house (which held nothing), and keeps the rest.
+        var owners = $"/api/horses/{seed.HorseId}/owners";
+        Assert.Equal(HttpStatusCode.NoContent, (await manager.PostApiAsync($"{owners}/{seed.BobId}/transfer", new
+        {
+            recipients = new object[] { new { clientId = seed.BobId, percent = 30m }, new { clientId = trainerId, percent = 5m }, new { clientId = houseId, percent = 15m } },
+            on = (string?)null, access = "LockedOut",
+        })).StatusCode);
+        var now = (await manager.GetFromJsonAsync<OwnerList>(owners))!;
+        Assert.Equal([("Owners House", "15%"), ("Ann Owner", "50%"), ("Bob Owner", "30%"), ("Terry Trainer", "5%")], now.Owners.Select(o => (o.Name, o.Percent)));
+        Assert.Equal(houseId, now.HouseId);
+        await DispatchAsync();
+        Assert.Contains(Api.Emails.Sent, e => e.Email.ToAddress == terry); // their first share: invited
     }
 
     [Fact]

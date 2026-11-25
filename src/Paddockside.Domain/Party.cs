@@ -40,6 +40,20 @@ public sealed class Party
     /// <summary>When staff added them as a client; null for parties that came another way (an owner added before this existed).</summary>
     public DateTimeOffset? AddedAt { get; private set; }
 
+    /// <summary>
+    /// When staff made a horse's trainer, vet, authority or club a client as well (David, 25 Nov 2026: a trainer can own a
+    /// share). Contacts aren't clients otherwise; null for everyone who was never only a contact.
+    /// </summary>
+    public DateTimeOffset? MadeClientAt { get; private set; }
+
+    /// <summary>A contact becomes a client too: listed with them, and can be given a share. How we know them is kept if there.</summary>
+    public void MakeClient(string howWeKnowThem, DateTimeOffset at)
+    {
+        MadeClientAt ??= at;
+        AddedAt ??= at;
+        if (HowWeKnowThem is null) SetHowWeKnowThem(howWeKnowThem);
+    }
+
     public const int HowWeKnowThemLength = 300;
 
     /// <summary>

@@ -24,7 +24,8 @@ public enum ContactEmails
 /// Someone tagged by staff as the horse's trainer, vet, racing authority or a race club (David, 9 Nov 2026): usually
 /// the first time they email the horse's address, "this is the trainer for this horse, from now on …". From then their
 /// email is recognised as theirs: a trainer's lands on the step due, ready to send on to owners. A horse has one
-/// trainer at a time (a new one ends the last), and any number of the others. Contacts are not clients.
+/// trainer at a time (a new one ends the last), and any number of the others. Contacts are not clients unless
+/// staff make them one (<see cref="Party.MakeClient"/>).
 /// </summary>
 public sealed class HorseContact
 {

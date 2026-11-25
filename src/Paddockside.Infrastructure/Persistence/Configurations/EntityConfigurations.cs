@@ -45,6 +45,7 @@ internal sealed class PartyConfiguration : IEntityTypeConfiguration<Party>
         b.HasIndex(x => x.PersonId);
         b.Property(x => x.HowWeKnowThem).HasMaxLength(Party.HowWeKnowThemLength);
         b.Property(x => x.AddedAt);
+        b.Property(x => x.MadeClientAt);
         b.Property(x => x.UnsubscribedAt);
         b.Property(x => x.Title).HasMaxLength(50);
         b.Property(x => x.Company).HasMaxLength(200);

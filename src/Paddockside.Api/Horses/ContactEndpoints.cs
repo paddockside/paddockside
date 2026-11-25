@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
 using Paddockside.Api.Audit;
+using Paddockside.Api.Clients;
 using Paddockside.Api.Formatting;
 using Paddockside.Api.Security;
 using Paddockside.Domain;
@@ -17,7 +18,8 @@ namespace Paddockside.Api.Horses;
 /// </summary>
 public static class ContactEndpoints
 {
-    public sealed record ContactView(Guid Id, Guid PartyId, string Name, string? Email, string Role, string Since);
+    /// <param name="IsClient">Also one of the business's clients, so they can be given a share.</param>
+    public sealed record ContactView(Guid Id, Guid PartyId, string Name, string? Email, string Role, string Since, bool IsClient);
 
     /// <param name="Role">Trainer, Vet, Authority or RaceClub.</param>
     public sealed record TagRequest(string Role);
@@ -33,6 +35,7 @@ public static class ContactEndpoints
     {
         app.MapGet("/api/horses/{id:guid}/contacts", List).RequireAuthorization(StaffPolicy.Name);
         app.MapPost("/api/horses/{id:guid}/contacts/{contactId:guid}/end", End).RequireAuthorization(StaffPolicy.Name);
+        app.MapPost("/api/horses/{id:guid}/contacts/{contactId:guid}/client", MakeClient).RequireAuthorization(StaffPolicy.Name);
         app.MapPost("/api/items/{id:guid}/sender", TagSender).RequireAuthorization(StaffPolicy.Name);
         app.MapPost("/api/items/{id:guid}/step", SetStep).RequireAuthorization(StaffPolicy.Name);
         app.MapPost("/api/items/{id:guid}/event", Place).RequireAuthorization(StaffPolicy.Name);
@@ -45,9 +48,12 @@ public static class ContactEndpoints
         var ids = contacts.Select(c => c.PartyId).ToList();
         var parties = await db.Parties.AsNoTracking().Where(p => ids.Contains(p.Id)).ToDictionaryAsync(p => p.Id, cancellationToken);
         var now = clock.GetUtcNow();
+        var clients = new HashSet<Guid>();
+        foreach (var partyId in parties.Keys)
+            if (await ClientEndpoints.ClientAsync(db, partyId, cancellationToken) is not null) clients.Add(partyId);
         return Results.Ok(contacts.OrderBy(c => c.Role).ThenBy(c => parties[c.PartyId].DisplayName)
             .Select(c => new ContactView(c.Id, c.PartyId, parties[c.PartyId].DisplayName, parties[c.PartyId].PrimaryEmail?.Value, HorseContact.Label(c.Role),
-                Words.Day(c.From, now)))
+                Words.Day(c.From, now), clients.Contains(c.PartyId)))
             .ToList());
     }
 
@@ -62,6 +68,26 @@ public static class ContactEndpoints
         var (horse, party) = (await db.Horses.SingleAsync(h => h.Id == id, cancellationToken), await db.Parties.SingleAsync(p => p.Id == contact.PartyId, cancellationToken));
         await audit.RecordAsync(contact.TenantId, "contact.ended", $"{party.DisplayName} is no longer {horse.Name}'s {HorseContact.Label(contact.Role).ToLowerInvariant()}",
             "Horse", horse.Id, cancellationToken: cancellationToken);
+        return Results.NoContent();
+    }
+
+    /// <summary>
+    /// A trainer, vet, authority or club becomes a client too (a trainer who takes a share): listed with the clients, and
+    /// can be given one. They stay the horse's contact. Nothing is sent.
+    /// </summary>
+    private static async Task<IResult> MakeClient(Guid id, Guid contactId, ClaimsPrincipal user, PaddocksideDbContext db, AuditLog audit, TimeProvider clock,
+        CancellationToken cancellationToken)
+    {
+        if (!CanTag.Contains(user.FindFirstValue(SessionClaims.Role))) return Forbidden();
+        var contact = await db.HorseContacts.SingleOrDefaultAsync(c => c.Id == contactId && c.HorseId == id, cancellationToken);
+        if (contact is null) return Results.NotFound();
+        var (horse, party) = (await db.Horses.SingleAsync(h => h.Id == id, cancellationToken), await db.Parties.SingleAsync(p => p.Id == contact.PartyId, cancellationToken));
+        if (await ClientEndpoints.ClientAsync(db, party.Id, cancellationToken) is not null) return Results.NoContent(); // already one
+        var role = HorseContact.Label(contact.Role).ToLowerInvariant();
+        party.MakeClient($"{horse.Name}'s {role}", clock.GetUtcNow());
+        await db.SaveChangesAsync(cancellationToken);
+        await audit.RecordAsync(contact.TenantId, "client.added", $"Made {party.DisplayName} a client ({horse.Name}'s {role})", "Party", party.Id,
+            cancellationToken: cancellationToken);
         return Results.NoContent();
     }
 

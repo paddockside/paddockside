@@ -107,7 +107,7 @@
 
                         @if (_changing is { } changing && owners.Owners.FirstOrDefault(o => o.PartyId == changing) is { } changed)
                         {
-                            <OwnershipChange HorseId="Id" Owner="changed" HasHouse="@owners.Owners.Any(o => o.IsHouse)" OnDone="OwnershipChangedAsync" OnCancel="() => _changing = null" />
+                            <OwnershipChange HorseId="Id" Owner="changed" HouseId="owners.HouseId" HouseHolds="@owners.Owners.Any(o => o.IsHouse)" OnDone="OwnershipChangedAsync" OnCancel="() => _changing = null" />
                         }
 
                         @if (CanManage && _horse.Managed)
@@ -372,8 +372,26 @@
                                         {
                                             <button type="button" class="underline underline-offset-4" disabled="@_busy" aria-label="@c.Name is no longer @(_horse.Name)'s @c.Role.ToLowerInvariant()"
                                                     @onclick="() => EndContactAsync(c)">No longer</button>
+                                            @if (!c.IsClient && _makingClient != c.Id)
+                                            {
+                                                <button type="button" class="underline underline-offset-4" disabled="@_busy" aria-label="Make @c.Name a client" @onclick="() => _makingClient = c.Id">Make them a client</button>
+                                            }
+                                        }
+                                        @if (c.IsClient)
+                                        {
+                                            <a href="clients/@c.PartyId" class="underline underline-offset-4">Also a client</a>
                                         }
                                     </span>
+                                    @if (_makingClient == c.Id)
+                                    {
+                                        <span class="mt-1 grid gap-2 rounded-control bg-surface-sunken p-3" role="group" aria-label="Make @c.Name a client">
+                                            <span>Make @c.Name a client? They can then be given a share, and are listed with your prospects until they have one, so a mailout to all prospects includes them. Nothing is sent now.</span>
+                                            <span class="flex flex-wrap gap-3">
+                                                <button type="button" class="btn-secondary min-h-[36px] px-3" disabled="@_busy" @onclick="() => MakeClientAsync(c)">Yes, make them a client</button>
+                                                <button type="button" class="underline underline-offset-4" @onclick="() => _makingClient = null">No</button>
+                                            </span>
+                                        </span>
+                                    }
                                 </li>
                             }
                         </ul>
@@ -588,6 +606,25 @@
     {
         _contacts = (await Api.HorseContactsAsync(Id)).Value;
         await ReloadOnHorseAsync();
+    }
+
+    /// <summary>The contact being asked about: make them a client?</summary>
+    private Guid? _makingClient;
+
+    private async Task MakeClientAsync(HorseContactView contact)
+    {
+        _busy = true;
+        try
+        {
+            var result = await Api.MakeContactClientAsync(Id, contact.Id);
+            if (!result.Succeeded) { _error = result.Error; return; }
+            _makingClient = null;
+            await ReloadContactsAsync();
+        }
+        finally
+        {
+            _busy = false;
+        }
     }
 
     private async Task EndContactAsync(HorseContactView contact)

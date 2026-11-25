@@ -2,7 +2,7 @@
 
 @*
     Changing one owner's share (ownership-model.md scenarios 1–3): pass all or part of it on — to themselves (keeping
-    part) or other clients, looked up, never typed in — or record that they've left with nobody taking over. The percentages
+    part), other clients (looked up, never typed in) or the house — or record that they've left with nobody taking over. The percentages
     must add up to what they hold. Whoever stops owning is locked out of the horse in the portal, or keeps read-only
     sight of their own time. Or, when it was simply entered wrongly, correct it: nothing passes on and nobody is told.
     Managers and admins.
@@ -44,6 +44,13 @@
                                     <span class="inline-flex min-h-control items-center">Keeps this part</span>
                                 </div>
                             }
+                            else if (row.House)
+                            {
+                                <div class="field">
+                                    <span class="field-label">House share</span>
+                                    <span class="inline-flex min-h-control items-center">Goes back to the house</span>
+                                </div>
+                            }
                             else
                             {
                                 <ClientPicker @key="row" Label="Client" Chosen="row.Client" ChosenChanged="c => row.Client = c" Exclude="Taken(row)" />
@@ -66,6 +73,10 @@
                 {
                     <button type="button" class="text-small font-strong underline underline-offset-4" @onclick="() => _rows.Insert(0, new Row { Keeps = true })">@Owner.Name keeps part</button>
                 }
+                @if (HouseId is not null && !Owner.IsHouse && !_rows.Any(r => r.House))
+                {
+                    <button type="button" class="text-small font-strong underline underline-offset-4" @onclick="AddHouse">Some goes back to the house</button>
+                }
                 <span class="text-small @(Total == Held ? "text-action-primary-bg" : "text-status-warning-fg")" role="status">
                     @Total.ToString("0.#")% of their @Owner.Percent passed on@(Total == Held ? "" : $": {Math.Abs(Held - Total):0.#}% {(Total < Held ? "still to place" : "too much")}")
                 </span>
@@ -73,7 +84,7 @@
             <p class="field-hint">With their first share, a client is sent their invitation to the owners' portal.</p>
         </fieldset>
     }
-    else if (HasHouse)
+    else if (HouseId is not null)
     {
         <label class="inline-flex items-center gap-2">
             <input type="checkbox" class="size-[18px] accent-action-primary-bg" checked="@_toHouse" @onchange="e => _toHouse = e.Value is true" />
@@ -116,7 +127,7 @@
 
     private Mode _mode = Mode.Pass;
     private decimal? _corrected;
-    private bool _toHouse = true, _readOnly, _busy;
+    private bool _toHouse, _readOnly, _busy;
     private DateTime _on = DateTime.Today;
     private string? _error;
 
@@ -124,8 +135,11 @@
 
     [Parameter, EditorRequired] public OwnerLine Owner { get; set; } = null!;
 
-    /// <summary>The business holds a house share, so a leaver's share can go back to it.</summary>
-    [Parameter] public bool HasHouse { get; set; }
+    /// <summary>The business's house share, which a share, or part of one, can go back to; null if it has none set up.</summary>
+    [Parameter] public Guid? HouseId { get; set; }
+
+    /// <summary>The house owns part of this horse now, so a leaver's share goes back to it unless staff say otherwise.</summary>
+    [Parameter] public bool HouseHolds { get; set; }
 
     [Parameter] public EventCallback<string> OnDone { get; set; }
 
@@ -135,6 +149,10 @@
     {
         /// <summary>The owner themselves, keeping this part.</summary>
         public bool Keeps { get; init; }
+
+        /// <summary>This part goes back to the house share.</summary>
+        public bool House { get; init; }
+
         public ClientRow? Client { get; set; }
         public decimal? Percent { get; set; }
     }
@@ -149,7 +167,15 @@
     /// <summary>Not offered in this row: the owner, and anyone already chosen in another.</summary>
     private HashSet<Guid> Taken(Row row) => [Owner.PartyId, .. _rows.Where(r => r != row && r.Client is not null).Select(r => r.Client!.Id)];
 
-    private bool Incomplete => _rows.Any(r => !r.Keeps && r.Client is null);
+    private bool Incomplete => _rows.Any(r => !r.Keeps && !r.House && r.Client is null);
+
+    /// <summary>The house takes the place of a client not yet chosen, if there's one on its own.</summary>
+    private void AddHouse()
+    {
+        var blank = _rows.FirstOrDefault(r => !r.Keeps && !r.House && r.Client is null);
+        if (blank is null) _rows.Add(new Row { House = true });
+        else _rows[_rows.IndexOf(blank)] = new Row { House = true, Percent = blank.Percent };
+    }
 
     private string SubmitLabel => _mode switch
     {
@@ -162,6 +188,7 @@
     {
         _rows.Add(new Row { Percent = Held });
         _corrected = Held;
+        _toHouse = HouseHolds;
     }
 
     private async Task SaveAsync()
@@ -182,18 +209,18 @@
 
             if (_mode == Mode.Leave)
             {
-                result = await Api.OwnerLeavesAsync(HorseId, Owner.PartyId, HasHouse && _toHouse, on, access);
+                result = await Api.OwnerLeavesAsync(HorseId, Owner.PartyId, HouseId is not null && _toHouse, on, access);
             }
             else
             {
                 var recipients = _rows.Where(r => (r.Percent ?? 0) > 0)
-                    .Select(r => new ShareRecipient(r.Keeps ? Owner.PartyId : r.Client!.Id, r.Percent!.Value)).ToList();
+                    .Select(r => new ShareRecipient(r.Keeps ? Owner.PartyId : r.House ? HouseId!.Value : r.Client!.Id, r.Percent!.Value)).ToList();
                 result = await Api.TransferShareAsync(HorseId, Owner.PartyId, recipients, on, access);
             }
 
             if (!result.Succeeded) { _error = result.Error; return; }
             await OnDone.InvokeAsync(_mode == Mode.Leave
-                ? $"{Owner.Name} has left{(HasHouse && _toHouse ? "; their share is back with the house" : "; their share is unallocated")}."
+                ? $"{Owner.Name} has left{(HouseId is not null && _toHouse ? "; their share is back with the house" : "; their share is unallocated")}."
                 : $"{Owner.Name}'s share has been passed on. Anyone with their first share is sent their portal invitation.");
         }
         finally

@@ -164,7 +164,7 @@ public sealed record AttachmentView(string Name, string? Dropped);
 public sealed record OwnerLine(Guid InterestId, Guid PartyId, string Name, string? Email, string? Mobile, string Percent, string Since, bool IsHouse, string? Invited,
     bool ToConfirm = false);
 
-public sealed record OwnersView(List<OwnerLine> Owners, string Allocated, decimal Unallocated, string? Warning = null, bool Over = false);
+public sealed record OwnersView(List<OwnerLine> Owners, string Allocated, decimal Unallocated, string? Warning = null, bool Over = false, Guid? HouseId = null);
 
 public sealed record CreatedHorse(Guid Id);
 
@@ -230,7 +230,8 @@ public sealed record MailoutCreated(Guid Id, int Sending);
 
 public sealed record ClientListView(Guid Id, string Name, int Count);
 
-public sealed record ClientCreated(Guid Id);
+/// <param name="WasContact">Already known as a horse's trainer, vet or club; now a client too.</param>
+public sealed record ClientCreated(Guid Id, string Name = "", bool WasContact = false);
 
 public sealed record ListChange(int Count);
 
@@ -276,7 +277,8 @@ public sealed record HorseItem(Guid Id, string Kind, string At, string? Title, s
     List<HorseReply>? Replies = null, List<MediaView>? Media = null, string? FromRole = null, bool CanTagSender = false);
 
 /// <param name="Role">"Trainer", "Vet", "Racing authority", "Race club".</param>
-public sealed record HorseContactView(Guid Id, Guid PartyId, string Name, string? Email, string Role, string Since);
+/// <param name="IsClient">Also a client, so they can be given a share.</param>
+public sealed record HorseContactView(Guid Id, Guid PartyId, string Name, string? Email, string Role, string Since, bool IsClient = false);
 
 public sealed record HorseReply(string Author, string At, string Body);
 
@@ -633,6 +635,9 @@ public sealed class PaddocksideApi(HttpClient http)
         PostAsync<RecipientsView>($"api/horses/{horseId}/status/recipients", request);
 
     public Task<ApiResult<List<HorseContactView>>> HorseContactsAsync(Guid horseId) => GetAsync<List<HorseContactView>>($"api/horses/{horseId}/contacts");
+
+    /// <summary>A trainer, vet or club becomes a client too. Nothing is sent.</summary>
+    public Task<ApiResult<object>> MakeContactClientAsync(Guid horseId, Guid contactId) => PostAsync<object>($"api/horses/{horseId}/contacts/{contactId}/client", new { });
 
     public Task<ApiResult<object>> EndHorseContactAsync(Guid horseId, Guid contactId) => PostAsync<object>($"api/horses/{horseId}/contacts/{contactId}/end", new { });
 

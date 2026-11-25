@@ -118,7 +118,13 @@ public static class ClientEndpoints
             new ClientDetails(party.Title, party.Company, party.Address, party.Notes, party.OtherPhones, party.Website, party.Social, party.SourceGroups)));
     }
 
-    /// <summary>A prospect, or anyone not yet here: someone already known by their email is not added twice.</summary>
+    /// <param name="WasContact">They were already known as a horse's trainer, vet or club, and are now a client too.</param>
+    public sealed record Added(Guid Id, string Name, bool WasContact);
+
+    /// <summary>
+    /// A prospect, or anyone not yet here: someone already known by their email is not added twice. A horse's trainer, vet
+    /// or club added this way becomes a client under the name they already have.
+    /// </summary>
     private static async Task<IResult> Create(ClientRequest request, ClaimsPrincipal user, PaddocksideDbContext db, AuditLog audit, TimeProvider clock,
         CancellationToken cancellationToken)
     {
@@ -126,8 +132,14 @@ public static class ClientEndpoints
             return Results.Problem(statusCode: StatusCodes.Status403Forbidden, title: "Your role can see clients but not add them.");
         var email = Clean(request.Email)?.ToLowerInvariant();
         if (email is not null && await ByEmailAsync(db, email, null, cancellationToken) is { } existing)
+        {
+            var house = (await db.Tenants.SingleAsync(cancellationToken)).HousePartyId;
+            if (existing.Id != house && await ClientAsync(db, existing.Id, cancellationToken) is null)
+                return await AddContactAsync(existing, request, db, audit, clock.GetUtcNow(), cancellationToken);
             return Results.Problem(statusCode: StatusCodes.Status409Conflict, title: $"{existing.DisplayName} already has that email address.",
                 extensions: new Dictionary<string, object?> { ["clientId"] = existing.Id });
+        }
+
         if (email is null && Clean(request.Mobile) is null) return Problem("Give an email address or a mobile number, so they can be reached.");
 
         var tenantId = (await db.Tenants.SingleAsync(cancellationToken)).Id;
@@ -149,7 +161,27 @@ public static class ClientEndpoints
         foreach (var list in await db.ClientLists.Where(l => (request.ListIds ?? Array.Empty<Guid>()).Contains(l.Id)).ToListAsync(cancellationToken)) list.Add([party], now);
         await db.SaveChangesAsync(cancellationToken);
         await audit.RecordAsync(tenantId, "client.added", $"Added {party.DisplayName} as a client", "Party", party.Id, cancellationToken: cancellationToken);
-        return Results.Created($"/api/clients/{party.Id}", new { party.Id });
+        return Results.Created($"/api/clients/{party.Id}", new Added(party.Id, party.DisplayName, false));
+    }
+
+    private static async Task<IResult> AddContactAsync(Party contact, ClientRequest request, PaddocksideDbContext db, AuditLog audit, DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            contact.MakeClient(Clean(request.HowWeKnowThem) ?? "Known as a horse's contact", now);
+            if (contact.PrimaryMobile is null && Clean(request.Mobile) is { } mobile) contact.AddMobile(mobile);
+        }
+        catch (DomainException ex)
+        {
+            return Problem(ex.Message);
+        }
+
+        foreach (var list in await db.ClientLists.Where(l => (request.ListIds ?? Array.Empty<Guid>()).Contains(l.Id)).ToListAsync(cancellationToken)) list.Add([contact], now);
+        await db.SaveChangesAsync(cancellationToken);
+        await audit.RecordAsync(contact.TenantId, "client.added", $"Made {contact.DisplayName} a client (already known as a horse's contact)", "Party", contact.Id,
+            cancellationToken: cancellationToken);
+        return Results.Created($"/api/clients/{contact.Id}", new Added(contact.Id, contact.DisplayName, true));
     }
 
     /// <summary>Their name, email, mobile and how we know them. A mistyped email is replaced, not kept beside the right one.</summary>
@@ -357,24 +389,26 @@ public static class ClientEndpoints
         var horses = await db.Horses.AsNoTracking().Include(h => h.ManagementPeriods).Include(h => h.Interests).AsSplitQuery().ToListAsync(cancellationToken);
         var lists = await db.ClientLists.AsNoTracking().ToListAsync(cancellationToken);
 
-        // A horse's trainer, vet, authority or club is a contact, not a client, unless they've owned a share or are on a list.
+        // A horse's trainer, vet, authority or club is a contact, not a client, unless they've owned a share, are on a list,
+        // or staff made them one.
         var contacts = (await db.HorseContacts.AsNoTracking().Select(c => c.PartyId).Distinct().ToListAsync(cancellationToken)).ToHashSet();
         var owners = horses.SelectMany(h => h.Interests).Select(i => i.PartyId).ToHashSet();
         var listed = lists.SelectMany(l => l.Members).Select(m => m.PartyId).ToHashSet();
-        parties = parties.Where(p => !contacts.Contains(p.Id) || owners.Contains(p.Id) || listed.Contains(p.Id)).ToList();
+        parties = parties.Where(p => !contacts.Contains(p.Id) || p.MadeClientAt is not null || owners.Contains(p.Id) || listed.Contains(p.Id)).ToList();
         return new World(parties, horses, lists);
     }
 
     /// <summary>
     /// The client with this id, to give a share to: the same people the Clients page lists. Null for anyone else: the house
-    /// share, another business's client, or a horse's trainer, vet or club who has never owned a share and isn't on a list.
+    /// share, another business's client, or a horse's trainer, vet or club who has never owned a share, isn't on a list and
+    /// hasn't been made a client.
     /// </summary>
     internal static async Task<Party?> ClientAsync(PaddocksideDbContext db, Guid? id, CancellationToken cancellationToken)
     {
         if (id is not { } partyId) return null;
         var houseId = (await db.Tenants.SingleAsync(cancellationToken)).HousePartyId;
         if (partyId == houseId || await db.Parties.SingleOrDefaultAsync(p => p.Id == partyId, cancellationToken) is not { } party) return null;
-        if (!await db.HorseContacts.AnyAsync(c => c.PartyId == partyId, cancellationToken)) return party;
+        if (party.MadeClientAt is not null || !await db.HorseContacts.AnyAsync(c => c.PartyId == partyId, cancellationToken)) return party;
         return await db.Horses.AnyAsync(h => h.Interests.Any(i => i.PartyId == partyId), cancellationToken)
             || await db.ClientLists.AnyAsync(l => l.Members.Any(m => m.PartyId == partyId), cancellationToken) ? party : null;
     }
