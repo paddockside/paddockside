@@ -165,6 +165,7 @@ app.MapMediaEndpoints();
 app.MapFactEndpoints();
 app.MapClientAuthEndpoints();
 app.MapOwnerEndpoints();
+app.MapOwnerSocialEndpoints();
 app.MapAnswerByEmailEndpoints();
 app.MapAccountEndpoints();
 app.MapEmailPictures();

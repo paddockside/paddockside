@@ -79,6 +79,76 @@ public sealed partial class OwnerSignInTests
         Assert.Equal(HttpStatusCode.NotFound, (await otherStaff.GetAsync($"/api/social/{id}")).StatusCode);
     }
 
+    private sealed record PortalInvitation(Guid Id, string Title, string? Venue, string Answer, string Line, bool CanAnswer, bool NeedsAnswer);
+
+    private sealed record PortalInvitationPage(PortalInvitation Event, int Places, string? Note, string? Message, bool Full, bool Emailed);
+
+    [Fact]
+    public async Task An_owner_sees_and_answers_only_their_own_invitations_in_the_portal()
+    {
+        var seed = await SeedAsync();
+        using var staff = await Api.SignedInAsync(seed.TenantId, MemberRole.Coordinator);
+        using var ann = await SignInAsync(seed.AnnEmail);
+        using var bob = await SignInAsync(BobEmail(seed));
+        var day = DateTime.Today.AddDays(30).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+        var id = (await (await staff.PostApiAsync("/api/social", new { title = "Stable Visit", kind = "StableVisit", date = day, venue = "Riverbank", places = 3, notes = "Staff only: keep it small" }))
+            .Content.ReadFromJsonAsync<SocialMade>())!.Id;
+        async Task<List<PortalInvitation>> Mine(HttpClient who) => (await who.GetFromJsonAsync<List<PortalInvitation>>("/api/my/social"))!;
+        async Task<HttpResponseMessage> Answer(HttpClient who, string answer, int places, string? note = null) =>
+            await who.PostApiAsync($"/api/my/social/{id}/answer", new { answer, places, note });
+
+        // On the list but not invited yet: nothing to see, or answer.
+        await staff.PostApiAsync($"/api/social/{id}/attendees", new { clientIds = new[] { seed.AnnId, seed.BobId } });
+        Assert.Empty(await Mine(ann));
+        Assert.Equal(HttpStatusCode.NotFound, (await ann.GetAsync($"/api/my/social/{id}")).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await Answer(ann, "Coming", 1)).StatusCode);
+
+        // Ann is invited; Bob still isn't. Her page is hers: the message, and nothing of the list or staff's notes.
+        Assert.Equal(HttpStatusCode.Created, (await staff.PostApiAsync($"/api/social/{id}/invite", new { subject = "Stable Visit", body = "Come and see the yearlings.",
+            listIds = Array.Empty<Guid>(), statuses = Array.Empty<string>(), clientIds = new[] { seed.AnnId } })).StatusCode);
+        await DispatchAsync();
+        var card = Assert.Single(await Mine(ann));
+        Assert.Equal(("Stable Visit", "Riverbank", "Please let us know if you can come", true), (card.Title, card.Venue, card.Line, card.NeedsAnswer));
+        Assert.Empty(await Mine(bob));
+        var raw = await ann.GetStringAsync($"/api/my/social/{id}");
+        Assert.Contains("Come and see the yearlings.", raw);
+        Assert.DoesNotContain("Bob", raw);
+        Assert.DoesNotContain("keep it small", raw);
+
+        // She answers, and staff see it; she changes it.
+        Assert.Equal(HttpStatusCode.BadRequest, (await Answer(ann, "Waiting", 1)).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await Answer(ann, "Coming", 0)).StatusCode);
+        var answered = (await (await Answer(ann, "Coming", 2, "Vegetarian")).Content.ReadFromJsonAsync<PortalInvitationPage>())!;
+        Assert.Equal(("You're coming: 2 places", false, 2, "Vegetarian"), (answered.Event.Line, answered.Event.NeedsAnswer, answered.Places, answered.Note));
+        var line = (await staff.GetFromJsonAsync<SocialPage>($"/api/social/{id}"))!.Attendees.Single(a => a.PartyId == seed.AnnId);
+        Assert.Equal(("Coming", 2, "Vegetarian", "them"), (line.Status, line.Places, line.Note, line.AnsweredBy));
+        Assert.Equal("You said maybe", (await (await Answer(ann, "Maybe", 1)).Content.ReadFromJsonAsync<PortalInvitationPage>())!.Event.Line);
+
+        // Staff put Bob down for all three: it's on his page though no invitation went, and Ann's yes now waits.
+        await staff.PutApiAsync($"/api/social/{id}/attendees/{seed.BobId}", new { status = "Coming", places = 3, note = "" });
+        Assert.Equal("You're coming: 3 places", Assert.Single(await Mine(bob)).Line);
+        Assert.True((await ann.GetFromJsonAsync<PortalInvitationPage>($"/api/my/social/{id}"))!.Full);
+        Assert.Equal("You're on the waiting list for 1 place", (await (await Answer(ann, "Coming", 1)).Content.ReadFromJsonAsync<PortalInvitationPage>())!.Event.Line);
+
+        // Staff fit Ann in over the number; telling them about her diet doesn't cost her the place.
+        await staff.PutApiAsync($"/api/social/{id}/attendees/{seed.AnnId}", new { status = "Coming", places = 1, note = "" });
+        Assert.Equal("You're coming: 1 place", (await (await Answer(ann, "Coming", 1, "No nuts")).Content.ReadFromJsonAsync<PortalInvitationPage>())!.Event.Line);
+
+        // Cancelled: still shown, in words, and takes no more answers. Past: gone from the list. Taken off: gone altogether.
+        await staff.PostApiAsync($"/api/social/{id}/status", new { status = "Cancelled" });
+        Assert.Equal(("Cancelled", false), (Assert.Single(await Mine(ann)).Line, Assert.Single(await Mine(ann)).CanAnswer));
+        Assert.Equal(HttpStatusCode.BadRequest, (await Answer(ann, "NotComing", 1)).StatusCode);
+        await staff.PostApiAsync($"/api/social/{id}/status", new { status = "Open" });
+        await staff.PutApiAsync($"/api/social/{id}", new { title = "Stable Visit", kind = "StableVisit", date = DateTime.Today.AddDays(-5).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture), venue = "Riverbank", places = 3 });
+        Assert.Empty(await Mine(ann));
+        Assert.Equal(HttpStatusCode.BadRequest, (await Answer(ann, "NotComing", 1)).StatusCode);
+        await staff.PostApiAsync($"/api/social/{id}/attendees/{seed.AnnId}/remove", new { });
+        Assert.Equal(HttpStatusCode.NotFound, (await ann.GetAsync($"/api/my/social/{id}")).StatusCode);
+
+        // Staff aren't owners: this is the owners' side only.
+        Assert.Equal(HttpStatusCode.Forbidden, (await staff.GetAsync("/api/my/social")).StatusCode);
+    }
+
     private sealed record UnsentHead(int Invited, int Unsent);
 
     private sealed record UnsentLine(Guid PartyId, string Status, string StatusLabel, bool Unsent);

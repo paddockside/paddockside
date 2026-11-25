@@ -158,6 +158,7 @@ Also decided:
 **P63. A horse's trainer, vet or club can be made a client too, by staff, and then given a share.** They stay the horse's contact; nothing is sent by it.
 **P64. Part or all of a share can go back to the house when it is passed on, not only when an owner leaves.**
 **P65. Being known isn't being a client.** Someone staff only reply to stays out of Clients (and prospect mailouts) until staff add them. Clients are owners past and present, people on a list, and people added by staff or an import.
+**P66. In the portal an owner sees only the social events they were invited to or are down for, and answers there as from the email.** Never who else is coming, how many, or staff's notes. Proposed default, built 25 Nov 2026; the alternative is every upcoming event.
 
 ---
 

@@ -72,7 +72,7 @@
     private bool IsCurrent(string href)
     {
         var path = "/" + Navigation.ToBaseRelativePath(Navigation.Uri).Split('#', '?')[0];
-        return path.StartsWith("/" + href, StringComparison.Ordinal) || (href == "my/horses" && path.StartsWith("/my/events", StringComparison.Ordinal));
+        return path.StartsWith("/" + href, StringComparison.Ordinal) || (href == "my/horses" && (path.StartsWith("/my/events", StringComparison.Ordinal) || path.StartsWith("/my/social", StringComparison.Ordinal)));
     }
 
     private async Task Switch(TenantOption tenant)

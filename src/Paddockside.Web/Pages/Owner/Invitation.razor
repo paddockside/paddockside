@@ -1,0 +1,139 @@
+@page "/my/social/{Id:guid}"
+@layout OwnerLayout
+@inherits OwnerPage
+
+@*
+    One invitation (David, 25 Nov 2026): what it is, when and where, what the invitation said, and their answer, the same
+    choices as the buttons in the email. They can change it here until the day. Never who else is coming.
+*@
+<PageTitle>@(_page?.Event.Title ?? "Invitation")</PageTitle>
+
+<div class="grid grid-cols-[minmax(0,1fr)] gap-4">
+    <a href="my/horses" class="btn-link justify-self-start">← My horses</a>
+    @if (_error is not null && _page is null)
+    {
+        <h1 class="text-heading font-heading">Invitation</h1>
+        <Error Message="@_error" />
+    }
+    else if (_page is not { } invite)
+    {
+        <p class="text-text-muted" role="status">Loading…</p>
+    }
+    else
+    {
+        <h1 class="text-heading font-heading">@invite.Event.Title</h1>
+        <section class="card grid gap-1" aria-label="When and where">
+            <p class="font-strong">@invite.Event.When</p>
+            @if (invite.Event.Venue is not null)
+            {
+                <p>@invite.Event.Venue</p>
+            }
+        </section>
+
+        @if (!string.IsNullOrWhiteSpace(invite.Message))
+        {
+            <section class="card" aria-label="The invitation">
+                <p class="whitespace-pre-line break-words">@invite.Message</p>
+            </section>
+        }
+
+        <p class="rounded-card px-4 py-3 font-strong @(invite.Event.NeedsAnswer ? "bg-status-warning-bg text-status-warning-fg" : "bg-scope-owners-bg text-scope-owners-fg")">
+            @invite.Event.Line.
+        </p>
+
+        @if (invite.Event.CanAnswer)
+        {
+            <form class="card grid gap-6" @onsubmit="SendAsync" @onsubmit:preventDefault aria-label="Your reply">
+                <fieldset class="grid gap-2">
+                    <legend class="mb-2 font-heading">Can you come?</legend>
+                    @foreach (var (value, label) in Choices)
+                    {
+                        <label class="flex min-h-[56px] cursor-pointer items-center gap-3 rounded-control border px-4 @(_answer == value ? "border-action-primary-bg bg-scope-owners-bg font-strong" : "border-border-strong")">
+                            <input type="radio" name="answer" class="size-[22px] accent-action-primary-bg" checked="@(_answer == value)" @onchange="() => Choose(value)" />
+                            @label
+                        </label>
+                    }
+                </fieldset>
+                @if (invite.Full && _answer == "Coming")
+                {
+                    <p class="rounded-control bg-status-warning-bg px-4 py-3 text-status-warning-fg">It's full at the moment. Say you'll come and you'll go on the waiting list.</p>
+                }
+                @if (_answer is "Coming" or "Maybe")
+                {
+                    <div class="field">
+                        <label class="field-label" for="my-places">How many places (you and anyone coming with you)</label>
+                        <select id="my-places" class="input max-w-[8rem]" @bind="_places">
+                            @for (var n = 1; n <= invite.MostPlaces; n++)
+                            {
+                                var count = n;
+                                <option value="@count">@count</option>
+                            }
+                        </select>
+                    </div>
+                }
+                <div class="field">
+                    <label class="field-label" for="my-note">Anything we should know (optional)</label>
+                    <input id="my-note" class="input" maxlength="300" @bind="_note" placeholder="Partner's name, dietary needs" />
+                </div>
+                @if (_error is not null)
+                {
+                    <p class="alert-danger" role="alert">@_error</p>
+                }
+                <div class="grid gap-3">
+                <button type="submit" class="btn-primary justify-self-start" disabled="@(_busy || _answer is null)">@(_busy ? "Sending…" : invite.Event.NeedsAnswer ? "Send my reply" : "Change my reply")</button>
+                <p class="font-strong text-action-primary-bg empty:hidden" role="status">@(_sent ? $"Thank you. {invite.Event.Line}." : null)</p>
+                </div>
+            </form>
+            <p class="text-text-muted">You can change your reply here until the day.@(invite.Emailed ? " For anything else, reply to the invitation in your email." : null)</p>
+        }
+        else if (invite.Emailed)
+        {
+            <p class="text-text-muted">If you need to change anything, reply to the invitation in your email.</p>
+        }
+    }
+</div>
+
+@code {
+    private static readonly (string Value, string Label)[] Choices = [("Coming", "I'll come"), ("Maybe", "Maybe"), ("NotComing", "Can't make it")];
+
+    [Parameter] public Guid Id { get; set; }
+
+    private MyInvitationPage? _page;
+    private string? _answer, _note, _error;
+    private int _places = 1;
+    private bool _busy, _sent;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (!await EnsureSignedInAsync()) return;
+        (_sent, _error) = (false, null);
+        var result = await Api.MyInvitationAsync(Id);
+        if (result.Succeeded) Show(result.Value!);
+        else (_page, _error) = (null, result.Error);
+    }
+
+    private void Show(MyInvitationPage page)
+    {
+        (_page, _places, _note) = (page, page.Places, page.Note);
+        _answer = page.Event.Answer switch { "Invited" => null, "Waiting" => "Coming", var answer => answer };
+    }
+
+    private void Choose(string answer) => (_answer, _sent) = (answer, false);
+
+    private async Task SendAsync()
+    {
+        if (_answer is null) return;
+        (_busy, _error, _sent) = (true, null, false);
+        try
+        {
+            var result = await Api.AnswerInvitationAsync(Id, _answer, _places, _note);
+            if (!result.Succeeded) { _error = result.Error; return; }
+            Show(result.Value!);
+            _sent = true;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}

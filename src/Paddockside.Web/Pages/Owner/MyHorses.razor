@@ -4,8 +4,9 @@
 @inherits OwnerPage
 
 @*
-    Owner home (search-reporting.md §3): their horses as cards — photo, what's next, how much is new — then the
-    latest things they can see across all of them. Everything opens the event it belongs to.
+    Owner home (search-reporting.md §3): their horses as cards — photo, what's next, how much is new — then
+    the social events they're invited to, if any are coming up, then the latest things they can see across all of them.
+    Everything opens the event it belongs to.
 *@
 <PageTitle>My horses</PageTitle>
 
@@ -32,6 +33,25 @@
             }
         }
     </section>
+
+    @if (_invitations is { Count: > 0 })
+    {
+        <section class="grid gap-4" aria-labelledby="invitations-heading">
+            <h2 id="invitations-heading" class="text-title font-heading">Invitations</h2>
+            <ul class="grid gap-3">
+                @foreach (var i in _invitations)
+                {
+                    <li>
+                        <a href="my/social/@i.Id" class="card grid gap-1 hover:border-border-strong">
+                            <span class="font-strong">@i.Title</span>
+                            <span class="text-small text-text-muted">@i.When@(i.Venue is null ? null : $" · {i.Venue}")</span>
+                            <span class="@(i.NeedsAnswer ? "justify-self-start rounded-control bg-status-warning-bg px-3 py-1 font-strong text-status-warning-fg" : null)">@i.Line</span>
+                        </a>
+                    </li>
+                }
+            </ul>
+        </section>
+    }
 
     @if (_updates is { Count: > 0 })
     {
@@ -68,6 +88,7 @@
 @code {
     private List<OwnerHorse>? _horses;
     private List<OwnerUpdate>? _updates;
+    private List<MyInvitation>? _invitations;
     private string? _error;
 
     protected override async Task OnInitializedAsync()
@@ -75,10 +96,12 @@
         if (!await EnsureSignedInAsync()) return;
         var horses = Api.MyHorsesAsync();
         var updates = Api.MyUpdatesAsync();
+        var invitations = Api.MyInvitationsAsync();
         var result = await horses;
         if (result.Succeeded) _horses = result.Value;
         else _error = result.Error;
         _updates = (await updates).Value;
+        _invitations = (await invitations).Value;
     }
 
     private static string UpdateLink(OwnerUpdate u) => u.EventId is { } e ? $"my/events/{e}#item-{u.ItemId}" : $"my/horses/{u.HorseId}";

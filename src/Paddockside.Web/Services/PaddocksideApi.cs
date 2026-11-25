@@ -348,6 +348,11 @@ public sealed record JoinDetails(string TenantName, string Email, string Role, s
 
 public sealed record OwnerTenant(Guid Id, string Name, bool Current);
 
+/// <summary>One of their social events, and where their answer is up to.</summary>
+public sealed record MyInvitation(Guid Id, string Title, string Kind, string When, string? Venue, string Answer, string Line, bool CanAnswer, bool NeedsAnswer);
+
+public sealed record MyInvitationPage(MyInvitation Event, int Places, int MostPlaces, string? Note, string? Message, bool Full, bool Emailed);
+
 public sealed record OwnerSession(string Name, string? Email, string? Mobile, string TenantName, string? TenantLogoUrl, List<OwnerTenant> Tenants);
 
 public sealed record OwnerHorse(Guid Id, string Name, string? SexAge, string? Pedigree, string? Next, string LastUpdate, int Unread,
@@ -795,6 +800,13 @@ public sealed class PaddocksideApi(HttpClient http)
     public Task<ApiResult<List<OwnerHorse>>> MyHorsesAsync() => GetAsync<List<OwnerHorse>>("api/my/horses");
 
     public Task<ApiResult<List<EventSummary>>> MyHorseEventsAsync(Guid horseId) => GetAsync<List<EventSummary>>($"api/my/horses/{horseId}/events");
+
+    public Task<ApiResult<List<MyInvitation>>> MyInvitationsAsync() => GetAsync<List<MyInvitation>>("api/my/social");
+
+    public Task<ApiResult<MyInvitationPage>> MyInvitationAsync(Guid id) => GetAsync<MyInvitationPage>($"api/my/social/{id}");
+
+    public Task<ApiResult<MyInvitationPage>> AnswerInvitationAsync(Guid id, string answer, int places, string? note) =>
+        PostAsync<MyInvitationPage>($"api/my/social/{id}/answer", new { answer, places, note });
 
     public Task<ApiResult<List<OwnerUpdate>>> MyUpdatesAsync() => GetAsync<List<OwnerUpdate>>("api/my/updates");
 

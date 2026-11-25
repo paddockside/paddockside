@@ -71,6 +71,9 @@ public static class SocialEndpoints
 
     public sealed record KindOption(string Code, string Label);
 
+    /// <summary>The most places offered on a reply, unless someone already has more.</summary>
+    internal const int UsualPlaces = 8;
+
     private static readonly string[] CanEdit = [nameof(MemberRole.Coordinator), nameof(MemberRole.Manager), nameof(MemberRole.TenantAdmin)];
 
     private static readonly CultureInfo Culture = CultureInfo.GetCultureInfo("en-AU");
@@ -342,7 +345,7 @@ public static class SocialEndpoints
         var chosen = answer is "Coming" or "Maybe" or "NotComing" ? answer : a.Status is AttendeeStatus.Invited or AttendeeStatus.Waiting ? "Coming" : a.Status.ToString();
         string Choice(string value, string label) =>
             $"<label style=\"display:block;margin:0 0 8px;\"><input type=\"radio\" name=\"answer\" value=\"{value}\"{(chosen == value ? " checked" : "")} style=\"width:20px;height:20px;vertical-align:-4px;margin-right:8px;\">{label}</label>";
-        var places = string.Join("", Enumerable.Range(1, 8).Select(n => $"<option value=\"{n}\"{(n == a.Places ? " selected" : "")}>{n}</option>"));
+        var places = string.Join("", Enumerable.Range(1, Math.Max(UsualPlaces, a.Places)).Select(n => $"<option value=\"{n}\"{(n == a.Places ? " selected" : "")}>{n}</option>"));
         var now = a.Status == AttendeeStatus.Invited ? "" : $"<p class=\"note\">At the moment you're down as: {E(SocialAttendee.Label(a.Status))}{(a.Counts ? $", {a.Places} {(a.Places == 1 ? "place" : "places")}" : "")}.</p>";
         return Page(e.Title, $"""
             <p>{E(When(e))}{(e.Venue is null ? "" : $"<br>{E(e.Venue)}")}</p>
@@ -372,13 +375,7 @@ public static class SocialEndpoints
             return Page(e.Title, "<p>Choose whether you're coming, then send your reply.</p>");
         var places = int.TryParse(form!["places"].ToString(), out var p) ? p : 1;
 
-        int? left = null;
-        if (e.Places is { } total)
-        {
-            var taken = await db.SocialAttendees.Where(x => x.SocialEventId == e.Id && x.Id != a.Id && x.Status == AttendeeStatus.Coming).SumAsync(x => x.Places, cancellationToken);
-            left = Math.Max(0, total - taken);
-        }
-
+        var left = await PlacesLeftAsync(db, e, a, cancellationToken);
         try
         {
             a.Answer(answer, places, form["note"].ToString(), left, "them", clock.GetUtcNow());
@@ -399,6 +396,14 @@ public static class SocialEndpoints
             _ => $"<p>Thanks for letting us know, {E(party.FirstName)}. Sorry you can't make it.</p>",
         };
         return Page(e.Title, thanks + "<p class=\"note\">You can change your reply with the link in your invitation.</p>");
+    }
+
+    /// <summary>The places not taken by anyone else coming; null when there's no limit.</summary>
+    internal static async Task<int?> PlacesLeftAsync(PaddocksideDbContext db, SocialEvent e, SocialAttendee a, CancellationToken cancellationToken)
+    {
+        if (e.Places is not { } total) return null;
+        var taken = await db.SocialAttendees.Where(x => x.SocialEventId == e.Id && x.Id != a.Id && x.Status == AttendeeStatus.Coming).SumAsync(x => x.Places, cancellationToken);
+        return Math.Max(0, total - taken);
     }
 
     private static (SocialKind Kind, DateTimeOffset Starts, DateTimeOffset? Ends) Parse(SocialRequest request)

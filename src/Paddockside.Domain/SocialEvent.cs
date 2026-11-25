@@ -176,14 +176,16 @@ public sealed class SocialAttendee
 
     /// <summary>
     /// An answer, from the invitation's buttons or from staff. A yes that needs more places than are left goes on the
-    /// waiting list (<paramref name="placesLeft"/> excludes this person's own places).
+    /// waiting list (<paramref name="placesLeft"/> excludes this person's own places), but someone already coming keeps the
+    /// places they have when they answer again, even if staff fitted them in over the number.
     /// </summary>
     public void Answer(AttendeeStatus answer, int places, string? note, int? placesLeft, string by, DateTimeOffset at)
     {
         if (answer == AttendeeStatus.Invited) throw new DomainException("Choose coming, maybe or not coming.");
         if (places is < 1 or > MaxPlaces) throw new DomainException($"Places is between 1 and {MaxPlaces}.");
         if (note?.Trim().Length > NoteLength) throw new DomainException($"Keep the note under {NoteLength} characters.");
-        Status = answer == AttendeeStatus.Coming && placesLeft is { } left && places > left ? AttendeeStatus.Waiting : answer;
+        var keeps = Status == AttendeeStatus.Coming && places <= Places;
+        Status = answer == AttendeeStatus.Coming && !keeps && placesLeft is { } left && places > left ? AttendeeStatus.Waiting : answer;
         Places = places;
         if (note is not null) Note = string.IsNullOrWhiteSpace(note) ? null : note.Trim();
         (AnsweredBy, UpdatedAt) = (by, at);
