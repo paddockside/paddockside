@@ -18,7 +18,7 @@ namespace Paddockside.Infrastructure.Identity.Migrations
 #pragma warning disable 612, 618
             modelBuilder
                 .HasDefaultSchema("identity")
-                .HasAnnotation("ProductVersion", "9.0.20")
+                .HasAnnotation("ProductVersion", "9.0.22")
                 .HasAnnotation("Relational:MaxIdentifierLength", 128);
 
             SqlServerModelBuilderExtensions.UseIdentityColumns(modelBuilder);
@@ -272,6 +272,36 @@ namespace Paddockside.Infrastructure.Identity.Migrations
                     b.ToTable("SignInTokens", "identity");
                 });
 
+            modelBuilder.Entity("Paddockside.Infrastructure.Identity.StaffDevice", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("Label")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("nvarchar(60)");
+
+                    b.Property<DateTimeOffset>("LastSeenAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<Guid>("PersonId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset?>("RevokedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PersonId");
+
+                    b.ToTable("StaffDevices", "identity");
+                });
+
             modelBuilder.Entity("Paddockside.Infrastructure.Identity.StaffInvitation", b =>
                 {
                     b.Property<Guid>("Id")
@@ -369,6 +399,15 @@ namespace Paddockside.Infrastructure.Identity.Migrations
                 {
                     b.HasOne("Paddockside.Infrastructure.Identity.Person", null)
                         .WithMany("Memberships")
+                        .HasForeignKey("PersonId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Paddockside.Infrastructure.Identity.StaffDevice", b =>
+                {
+                    b.HasOne("Paddockside.Infrastructure.Identity.Person", null)
+                        .WithMany()
                         .HasForeignKey("PersonId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();

@@ -230,6 +230,9 @@ namespace Paddockside.Infrastructure.Persistence.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("nvarchar(200)");
 
+                    b.Property<bool>("Standing")
+                        .HasColumnType("bit");
+
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasMaxLength(32)
@@ -1044,6 +1047,60 @@ namespace Paddockside.Infrastructure.Persistence.Migrations
                     b.ToTable("MediaAssets");
                 });
 
+            modelBuilder.Entity("Paddockside.Domain.MediaUpload", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("BlobName")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("nvarchar(300)");
+
+                    b.Property<DateTimeOffset?>("CompletedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("ContentType")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("FileName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<Guid>("HorseId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<long>("Length")
+                        .HasColumnType("bigint");
+
+                    b.Property<Guid>("PersonId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid?>("StreamItemId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("HorseId");
+
+                    b.HasIndex("StreamItemId");
+
+                    b.HasIndex("TenantId");
+
+                    b.HasIndex("TenantId", "CreatedAt");
+
+                    b.ToTable("MediaUploads");
+                });
+
             modelBuilder.Entity("Paddockside.Domain.NotificationPreference", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1308,6 +1365,41 @@ namespace Paddockside.Infrastructure.Persistence.Migrations
                         .HasFilter("[Kind] = 'HorseInbox'");
 
                     b.ToTable("RoutingAddresses");
+                });
+
+            modelBuilder.Entity("Paddockside.Domain.SentUpdate", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<Guid>("Key")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("PersonId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("Recipients")
+                        .HasColumnType("int");
+
+                    b.Property<Guid>("StreamItemId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("StreamItemId");
+
+                    b.HasIndex("TenantId");
+
+                    b.HasIndex("TenantId", "Key")
+                        .IsUnique();
+
+                    b.ToTable("SentUpdates");
                 });
 
             modelBuilder.Entity("Paddockside.Domain.SocialAttendee", b =>
@@ -2244,6 +2336,26 @@ namespace Paddockside.Infrastructure.Persistence.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("Paddockside.Domain.MediaUpload", b =>
+                {
+                    b.HasOne("Paddockside.Domain.Horse", null)
+                        .WithMany()
+                        .HasForeignKey("HorseId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Paddockside.Domain.StreamItem", null)
+                        .WithMany()
+                        .HasForeignKey("StreamItemId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Paddockside.Domain.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("Paddockside.Domain.NotificationPreference", b =>
                 {
                     b.HasOne("Paddockside.Domain.Party", null)
@@ -2373,6 +2485,21 @@ namespace Paddockside.Infrastructure.Persistence.Migrations
                         .WithMany()
                         .HasForeignKey("StreamItemId")
                         .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Paddockside.Domain.Tenant", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Paddockside.Domain.SentUpdate", b =>
+                {
+                    b.HasOne("Paddockside.Domain.StreamItem", null)
+                        .WithMany()
+                        .HasForeignKey("StreamItemId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
 
                     b.HasOne("Paddockside.Domain.Tenant", null)
                         .WithMany()

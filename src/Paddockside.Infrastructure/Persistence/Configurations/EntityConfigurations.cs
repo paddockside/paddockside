@@ -367,6 +367,7 @@ internal sealed class EventConfiguration : IEntityTypeConfiguration<Event>
     {
         b.MapTenantOwned();
         b.Property(x => x.EventType).HasMaxLength(100);
+        b.Property(x => x.Standing);
         b.Property(x => x.Title).HasMaxLength(300);
         b.Property(x => x.Status).AsString();
         b.Property(x => x.KeyDate);
@@ -478,6 +479,39 @@ internal sealed class MediaAssetConfiguration : IEntityTypeConfiguration<MediaAs
 
         b.HasOne<StreamItem>().WithMany().HasForeignKey(x => x.StreamItemId).OnDelete(DeleteBehavior.Restrict);
         b.HasOne<Horse>().WithMany().HasForeignKey(x => x.HorseId).OnDelete(DeleteBehavior.Restrict);
+    }
+}
+
+internal sealed class MediaUploadConfiguration : IEntityTypeConfiguration<MediaUpload>
+{
+    public void Configure(EntityTypeBuilder<MediaUpload> b)
+    {
+        b.MapTenantOwned();
+        b.Property(x => x.PersonId);
+        b.Property(x => x.FileName).HasMaxLength(200);
+        b.Property(x => x.ContentType).HasMaxLength(100);
+        b.Property(x => x.Length);
+        b.Property(x => x.BlobName).HasMaxLength(300);
+        b.Property(x => x.CreatedAt);
+        b.Property(x => x.CompletedAt);
+        b.Ignore(x => x.Parts);
+        b.HasIndex(x => new { x.TenantId, x.CreatedAt });
+        b.HasOne<Horse>().WithMany().HasForeignKey(x => x.HorseId).OnDelete(DeleteBehavior.Restrict);
+        b.HasOne<StreamItem>().WithMany().HasForeignKey(x => x.StreamItemId).OnDelete(DeleteBehavior.Restrict);
+    }
+}
+
+internal sealed class SentUpdateConfiguration : IEntityTypeConfiguration<SentUpdate>
+{
+    public void Configure(EntityTypeBuilder<SentUpdate> b)
+    {
+        b.MapTenantOwned();
+        b.Property(x => x.Key);
+        b.Property(x => x.PersonId);
+        b.Property(x => x.Recipients);
+        b.Property(x => x.CreatedAt);
+        b.HasIndex(x => new { x.TenantId, x.Key }).IsUnique(); // the same update sent twice is one
+        b.HasOne<StreamItem>().WithMany().HasForeignKey(x => x.StreamItemId).OnDelete(DeleteBehavior.Restrict);
     }
 }
 

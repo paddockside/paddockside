@@ -43,6 +43,10 @@ public sealed class PaddocksideDbContext(DbContextOptions<PaddocksideDbContext> 
 
     public DbSet<MediaAsset> MediaAssets => Set<MediaAsset>();
 
+    public DbSet<MediaUpload> MediaUploads => Set<MediaUpload>();
+
+    public DbSet<SentUpdate> SentUpdates => Set<SentUpdate>();
+
     public DbSet<ClientList> ClientLists => Set<ClientList>();
 
     public DbSet<Mailout> Mailouts => Set<Mailout>();

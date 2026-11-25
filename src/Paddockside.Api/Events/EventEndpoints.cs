@@ -221,7 +221,7 @@ public static class EventEndpoints
 
         var summary = HorseEndpoints.Summarise(e, items.Select(i => i.StepCode), items.Count == 0 ? null : items.Max(i => i.OccurredAt), now);
         var stepPrompts = type.Steps.Where(s => s.Prompt is not null)
-            .ToDictionary(s => s.Label, s => new PromptRequest(s.Prompt!.Kind.ToString(), s.Prompt.Question, s.Prompt.Options, s.Prompt.Max));
+            .ToDictionary(s => s.Label, s => ToRequest(s.Prompt!));
         // Race starts carry owners tickets: the one-line state, linking to the allocation screen.
         string? tickets = null;
         if (e.EventType == EventTypes.RaceStart.Code)
@@ -249,22 +249,28 @@ public static class EventEndpoints
     {
         var e = await db.Events.AsNoTracking().SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
         if (e is null) return Results.NotFound();
-        if (!Enum.TryParse<StreamItemScope>(request.Scope, out var scope) || scope is not (StreamItemScope.Owners or StreamItemScope.OwnersAtTheTime or StreamItemScope.NamedParties))
-            return Problem("Choose who can see it.");
         var horse = await db.Horses.AsNoTracking().Include(h => h.ManagementPeriods).Include(h => h.Interests).AsSplitQuery()
             .SingleAsync(h => h.Id == e.HorseId, cancellationToken);
+        // The event page's photos and video always go by each person's preference.
+        return await RecipientsForAsync(horse, e, request.Photos ? request with { Channel = "Preferred" } : request, db, clock.GetUtcNow(), texts, cancellationToken);
+    }
+
+    internal static async Task<IResult> RecipientsForAsync(Horse horse, DomainEvent e, RecipientsRequest request, PaddocksideDbContext db, DateTimeOffset now, ISmsSender texts,
+        CancellationToken cancellationToken)
+    {
+        if (!Enum.TryParse<StreamItemScope>(request.Scope, out var scope) || scope is not (StreamItemScope.Owners or StreamItemScope.OwnersAtTheTime or StreamItemScope.NamedParties))
+            return Problem("Choose who can see it.");
         var tenant = await db.Tenants.AsNoTracking().SingleAsync(cancellationToken);
         var stepCode = string.IsNullOrWhiteSpace(request.Step) ? null
             : EventTypes.Find(e.EventType).Steps.FirstOrDefault(s => s.Label == request.Step || s.Code == request.Step)?.Code;
 
         // The message as it would be, never saved: the access rule and the categories need its scope, step and date.
-        var now = clock.GetUtcNow();
         if (scope == StreamItemScope.NamedParties && request.NamedParties is not { Count: > 0 }) return Problem("Choose at least one owner.");
         var named = scope == StreamItemScope.NamedParties ? request.NamedParties : null;
         var draft = request.Photos
             ? StreamItem.Media(horse, e, null, null, scope, now, "Staff", named)
             : StreamItem.Message(horse, e, null, "(not sent)", scope, now, "Staff", named, stepCode);
-        var channel = request.Photos ? null : ToChannel(request.Channel);
+        var channel = ToChannel(request.Channel);
         var plan = await OutboundQueue.PlanAsync(db, tenant, horse, e, draft, channel, texts.IsConfigured, cancellationToken);
 
         var period = horse.CurrentManagementPeriod;
@@ -300,59 +306,73 @@ public static class EventEndpoints
 
         var e = await db.Events.SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
         if (e is null) return Results.NotFound();
-        // Nothing is sent from a draft (event-library.md §2); staff notes are fine.
-        if (e.Status == EventStatus.Draft && request.Audience != "InternalNote")
-            return Problem("This event is still a draft: owners can't see it and nothing is sent. Open it first, or add a staff note.");
-        // A question can be the whole message; anything else needs words.
-        if (string.IsNullOrWhiteSpace(request.Body) && !(request.Audience == "Owners" && request.Prompt is not null)) return Problem("Write something first.");
-
         var horse = await db.Horses.Include(h => h.ManagementPeriods).Include(h => h.Interests).AsSplitQuery()
             .SingleAsync(h => h.Id == e.HorseId, cancellationToken);
         var tenant = await db.Tenants.SingleAsync(cancellationToken);
+        var author = await StaffNames.AuthorAsync(user, db, cancellationToken);
+        var (problem, item, deliveries) = await PrepareAsync(e, horse, tenant, request, author, db, texts, clock.GetUtcNow(), cancellationToken);
+        if (problem is not null) return problem;
+
+        e.RecordActivity();
+        await db.SaveChangesAsync(cancellationToken);
+        if (deliveries.Count > 0) emailSignal.Notify();
+        return Results.Created($"/api/events/{id}", new Posted(item!.Id, deliveries.Count));
+    }
+
+    /// <summary>A message, question or note on an event, checked and added but not saved; or why not.</summary>
+    internal static async Task<(IResult? Problem, StreamItem? Item, IReadOnlyList<Delivery> Deliveries)> PrepareAsync(DomainEvent e, Horse horse, Tenant tenant, ComposeRequest request,
+        string author, PaddocksideDbContext db, ISmsSender texts, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        (IResult?, StreamItem?, IReadOnlyList<Delivery>) Refused(string title) => (Problem(title), null, []);
+
+        // Nothing is sent from a draft (event-library.md §2); staff notes are fine.
+        if (e.Status == EventStatus.Draft && request.Audience != "InternalNote")
+            return Refused("This event is still a draft: owners can't see it and nothing is sent. Open it first, or add a staff note.");
+        // A question can be the whole message; anything else needs words.
+        if (string.IsNullOrWhiteSpace(request.Body) && !(request.Audience == "Owners" && request.Prompt is not null)) return Refused("Write something first.");
+
         var type = EventTypes.Find(e.EventType);
         string? stepCode = null;
         if (!string.IsNullOrWhiteSpace(request.Step))
         {
             stepCode = type.Steps.FirstOrDefault(s => s.Label == request.Step || s.Code == request.Step)?.Code;
-            if (stepCode is null) return Problem("That step is not part of this event.");
+            if (stepCode is null) return Refused("That step is not part of this event.");
         }
 
-        var now = clock.GetUtcNow();
-        var author = await StaffNames.AuthorAsync(user, db, cancellationToken);
-        if (!Enum.TryParse<StreamItemScope>(request.Scope, out var scope)) return Problem("Choose who can see it.");
+        if (!Enum.TryParse<StreamItemScope>(request.Scope, out var scope)) return Refused("Choose who can see it.");
 
         StreamItem item;
         IReadOnlyList<Delivery> deliveries = [];
         switch (request.Audience)
         {
             case "InternalNote":
-                if (scope != StreamItemScope.Internal) return Problem("A staff note is internal.");
+                if (scope != StreamItemScope.Internal) return Refused("A staff note is internal.");
                 item = StreamItem.Note(horse, e, request.Body.Trim(), now, author, stepCode);
                 break;
 
             case "Owners":
                 if (scope is not (StreamItemScope.Owners or StreamItemScope.OwnersAtTheTime or StreamItemScope.NamedParties))
-                    return Problem("A message to owners must be visible to owners.");
+                    return Refused("A message to owners must be visible to owners.");
                 var named = request.NamedParties ?? [];
                 if (scope == StreamItemScope.NamedParties)
                 {
                     var current = horse.CurrentManagementPeriod is { } period
                         ? horse.Interests.Where(i => i.ManagementPeriodId == period.Id && i.IsActive).Select(i => i.PartyId).ToHashSet()
                         : [];
-                    if (named.Count == 0 || !named.All(current.Contains)) return Problem("Choose at least one current owner.");
+                    if (named.Count == 0 || !named.All(current.Contains)) return Refused("Choose at least one current owner.");
                 }
 
                 MessagePrompt? prompt = null;
                 if (request.Prompt is { } asked)
                 {
-                    if (!Enum.TryParse<PromptKind>(asked.Kind, out var kind)) return Problem("Choose what kind of answer you want.");
+                    if (!Enum.TryParse<PromptKind>(asked.Kind, out var kind)) return Refused("Choose what kind of answer you want.");
                     try
                     {
                         prompt = MessagePrompt.Create(kind, asked.Question ?? "", asked.Options ?? [], asked.Max ?? 10);
                     }
                     catch (DomainException ex)
                     {
-                        return Problem(ex.Message);
+                        return Refused(ex.Message);
                     }
                 }
 
@@ -363,20 +383,17 @@ public static class EventEndpoints
                 break;
 
             case "Trainer":
-                if (scope != StreamItemScope.Trainer) return Problem("A message to the trainer is scoped to the trainer.");
+                if (scope != StreamItemScope.Trainer) return Refused("A message to the trainer is scoped to the trainer.");
                 // The trainer becomes a recipient once party roles exist; until then it is recorded, not sent.
                 item = StreamItem.Message(horse, e, null, request.Body.Trim(), scope, now, author, stepCode: stepCode);
                 break;
 
             default:
-                return Problem("Choose who to send it to.");
+                return Refused("Choose who to send it to.");
         }
 
-        e.RecordActivity();
         if (db.Entry(item).State == EntityState.Detached) db.StreamItems.Add(item);
-        await db.SaveChangesAsync(cancellationToken);
-        if (deliveries.Count > 0) emailSignal.Notify();
-        return Results.Created($"/api/events/{id}", new Posted(item.Id, deliveries.Count));
+        return (null, item, deliveries);
     }
 
     /// <summary>For a corrected fact, the value it had before, when it changed.</summary>
@@ -469,7 +486,9 @@ public static class EventEndpoints
     }
 
     /// <summary>Staff's channel override; null is "Preferred", each owner by their notification choices.</summary>
-    private static DeliveryChannel? ToChannel(string channel) => channel switch
+    internal static PromptRequest ToRequest(MessagePrompt prompt) => new(prompt.Kind.ToString(), prompt.Question, prompt.Options, prompt.Max);
+
+    internal static DeliveryChannel? ToChannel(string channel) => channel switch
     {
         "Email" => DeliveryChannel.Email,
         "Sms" => DeliveryChannel.Sms,

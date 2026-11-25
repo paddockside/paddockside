@@ -15,6 +15,8 @@ public sealed class PaddocksideIdentityDbContext(DbContextOptions<PaddocksideIde
 
     public DbSet<SignInToken> SignInTokens => Set<SignInToken>();
 
+    public DbSet<StaffDevice> StaffDevices => Set<StaffDevice>();
+
     public DbSet<StaffInvitation> StaffInvitations => Set<StaffInvitation>();
 
     protected override void OnModelCreating(ModelBuilder builder)
@@ -51,6 +53,14 @@ public sealed class PaddocksideIdentityDbContext(DbContextOptions<PaddocksideIde
             b.HasIndex(t => t.TokenHash).IsUnique().HasFilter("[TokenHash] IS NOT NULL");
             b.HasIndex(t => t.BindingHash);
             b.HasIndex(t => t.ExpiresAt);
+        });
+
+        builder.Entity<StaffDevice>(b =>
+        {
+            b.HasKey(d => d.Id);
+            b.Property(d => d.Label).HasMaxLength(StaffDevice.LabelLength);
+            b.HasIndex(d => d.PersonId);
+            b.HasOne<Person>().WithMany().HasForeignKey(d => d.PersonId).OnDelete(DeleteBehavior.Cascade);
         });
 
         builder.Entity<StaffInvitation>(b =>

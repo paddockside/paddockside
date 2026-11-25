@@ -49,7 +49,8 @@ public static class AuthEndpoints
 
     public sealed record PasswordRequest(string Email, string Password);
 
-    public sealed record CodeRequest(string Code);
+    /// <param name="KeepSignedIn">They said this phone is their own: signed in for a week unused, not 12 hours.</param>
+    public sealed record CodeRequest(string Code, bool KeepSignedIn = false);
 
     public sealed record ForgotRequest(string Email);
 
@@ -104,13 +105,27 @@ public static class AuthEndpoints
         return Results.Ok(new NextStep(person.TwoFactorEnabled ? "totp" : "enrol"));
     }
 
-    private static async Task<IResult> SignInWithAuthenticatorCode(CodeRequest request, SignInManager<Person> signIn, PaddocksideIdentityDbContext identity, AuditLog audit)
+    private static async Task<IResult> SignInWithAuthenticatorCode(CodeRequest request, HttpContext http, SignInManager<Person> signIn, PaddocksideIdentityDbContext identity, AuditLog audit,
+        TimeProvider clock)
     {
         var person = await signIn.GetTwoFactorAuthenticationUserAsync();
         if (person is null || !person.TwoFactorEnabled) return SignInFailed();
 
         var result = await signIn.TwoFactorAuthenticatorSignInAsync(Normalise(request.Code), isPersistent: true, rememberClient: false);
-        if (result.Succeeded) await AuditStaffAsync(audit, identity, person, "auth.signed-in", "Signed in with password and authenticator");
+        if (result.Succeeded)
+        {
+            // Staff only: an operator with no business would have nothing to do on one.
+            var kept = request.KeepSignedIn && await identity.ActiveStaffMembershipAsync(person.Id) is not null;
+            if (kept)
+            {
+                var principal = await signIn.CreateUserPrincipalAsync(person);
+                ((ClaimsIdentity)principal.Identity!).AddClaims([new Claim("amr", "mfa"), new Claim(SessionClaims.KeptPhone, "true")]);
+                await http.SignInAsync(IdentityConstants.ApplicationScheme, principal, await StaffDevices.StartAsync(http, identity, person, clock.GetUtcNow()));
+            }
+
+            await AuditStaffAsync(audit, identity, person, "auth.signed-in", $"Signed in with password and authenticator{(kept ? ", and kept signed in on their phone" : "")}");
+        }
+
         return result.Succeeded ? Results.NoContent() : result.IsLockedOut ? LockedOut() : SignInFailed();
     }
 
@@ -205,8 +220,15 @@ public static class AuthEndpoints
         return Results.Ok(new RecoveryCodes(codes.ToList()));
     }
 
-    private static async Task<IResult> SignOut(HttpContext http, AuditLog audit)
+    private static async Task<IResult> SignOut(HttpContext http, AuditLog audit, PaddocksideIdentityDbContext identity, TimeProvider clock)
     {
+        if (StaffDevices.Of((await http.AuthenticateAsync(IdentityConstants.ApplicationScheme)).Properties) is { } phone
+            && await identity.StaffDevices.SingleOrDefaultAsync(d => d.Id == phone) is { } device)
+        {
+            device.RevokedAt ??= clock.GetUtcNow();
+            await identity.SaveChangesAsync();
+        }
+
         if (Guid.TryParse(http.User.FindFirstValue(SessionClaims.Tenant), out var tenantId))
             await audit.RecordAsync(tenantId, "auth.signed-out", "Signed out");
         await http.SignOutAsync(IdentityConstants.ApplicationScheme);
@@ -227,7 +249,7 @@ public static class AuthEndpoints
             user.FindFirstValue(ClaimTypes.Email) ?? user.Identity!.Name!,
             tenant.Name,
             user.FindFirstValue(SessionClaims.Role)!,
-            user.FindFirstValue(SessionClaims.Operator) == "true",
+            user.FindFirstValue(SessionClaims.Operator) == "true" && !user.HasClaim(SessionClaims.KeptPhone, "true"),
             supportUntil is { } until ? Formatting.Words.Time(until) : null));
     }
 
@@ -254,7 +276,7 @@ public static class AuthEndpoints
 
     /// <summary>Moves the session to another tenant the person is staff in. The session changes; the URL does not.</summary>
     private static async Task<IResult> SwitchTenant(SwitchRequest request, ClaimsPrincipal user, HttpContext http, PaddocksideIdentityDbContext identity,
-        SignInManager<Person> signIn, AuditLog audit, CancellationToken cancellationToken)
+        SignInManager<Person> signIn, AuditLog audit, TimeProvider clock, CancellationToken cancellationToken)
     {
         if (user.HasClaim(c => c.Type == SessionClaims.SupportSession))
             return Results.Problem(statusCode: StatusCodes.Status409Conflict, title: "Leave the support session first.");
@@ -267,7 +289,9 @@ public static class AuthEndpoints
         var claims = (ClaimsIdentity)principal.Identity!;
         StaffTenant.Apply(claims, membership);
         claims.AddClaim(new Claim("amr", "mfa"));
-        await http.SignInAsync(IdentityConstants.ApplicationScheme, principal, new AuthenticationProperties { IsPersistent = true });
+        if (user.HasClaim(SessionClaims.KeptPhone, "true")) claims.AddClaim(new Claim(SessionClaims.KeptPhone, "true"));
+        var current = (await http.AuthenticateAsync(IdentityConstants.ApplicationScheme)).Properties;
+        await http.SignInAsync(IdentityConstants.ApplicationScheme, principal, StaffDevices.Carry(current, clock.GetUtcNow()));
         await audit.RecordAsync(membership.TenantId, "auth.switched-in", "Switched into this organisation", "Person", personId,
             actor: (personId, person.Email ?? person.UserName ?? "Unknown"), cancellationToken: cancellationToken);
         return Results.NoContent();

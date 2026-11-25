@@ -83,6 +83,13 @@ public sealed class MediaAsset
         BlobName = $"{TenantId}/{HorseId}/{Id}{type.Extension}";
     }
 
+    /// <summary>A file that came up in pieces (<see cref="MediaUpload"/>), now on the update it was sent with.</summary>
+    public MediaAsset(StreamItem item, MediaUpload upload, DateTimeOffset at) : this(item, upload.FileName, upload.ContentType, upload.Length, at)
+    {
+        if (upload.StreamItemId != item.Id) throw new DomainException($"{upload.FileName} isn't on this update.");
+        BlobName = upload.BlobName;
+    }
+
     public Guid Id { get; } = Guid.CreateVersion7();
 
     public Guid TenantId { get; }

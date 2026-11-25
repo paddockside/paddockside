@@ -22,6 +22,9 @@ public static class SessionClaims
     /// <summary>Set ("true") for the product's operators (identity-access.md §7). Carries no tenant.</summary>
     public const string Operator = "paddockside:operator";
 
+    /// <summary>Set ("true") on a phone that stays signed in for a week (StaffDevice). The operator console refuses it.</summary>
+    public const string KeptPhone = "paddockside:kept-phone";
+
     /// <summary>Set while an operator is inside a tenant through an approved support session: the session id.</summary>
     public const string SupportSession = "paddockside:support";
 }

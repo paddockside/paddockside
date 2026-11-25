@@ -22,7 +22,8 @@ namespace Paddockside.Api.Members;
 /// </summary>
 public static class MemberEndpoints
 {
-    public sealed record MemberView(Guid Id, string Email, string Role, string RoleLabel, string Status, string? Since, bool IsYou);
+    public sealed record MemberView(Guid Id, string Email, string Role, string RoleLabel, string Status, string? Since, bool IsYou,
+        IReadOnlyList<StaffDevices.DeviceView>? Phones = null);
 
     public sealed record InvitationView(Guid Id, string Email, string Role, string RoleLabel, string InvitedBy, string Sent, string Expires);
 
@@ -81,6 +82,7 @@ public static class MemberEndpoints
                              where m.TenantId == tenantId
                              select new { m, p.Email, p.UserName })
             .ToListAsync(cancellationToken);
+        var phones = await StaffDevices.ForAsync(members.Select(x => x.m.PersonId).ToList(), null, identity, now, cancellationToken);
         var invitations = await identity.StaffInvitations
             .Where(i => i.TenantId == tenantId && i.AcceptedAt == null && i.RevokedAt == null && i.ExpiresAt > now)
             .OrderBy(i => i.CreatedAt)
@@ -90,7 +92,7 @@ public static class MemberEndpoints
             members.Where(x => MemberRoles.ClassOf(x.m.Role) == AudienceClass.Staff)
                 .OrderBy(x => MemberRoles.StaffRoles.ToList().IndexOf(x.m.Role)).ThenBy(x => x.Email)
                 .Select(x => new MemberView(x.m.Id, x.Email ?? x.UserName ?? "", x.m.Role.ToString(), MemberRoles.Label(x.m.Role), x.m.Status.ToString(),
-                    x.m.AcceptedAt is { } at ? Words.Day(at, now) : Words.Day(x.m.CreatedAt, now), x.m.PersonId == me))
+                    x.m.AcceptedAt is { } at ? Words.Day(at, now) : Words.Day(x.m.CreatedAt, now), x.m.PersonId == me, phones[x.m.PersonId].ToList()))
                 .ToList(),
             invitations.Select(i => new InvitationView(i.Id, i.Email, i.Role.ToString(), MemberRoles.Label(i.Role), i.InvitedByName,
                 Words.Day(i.CreatedAt, now), Words.Day(i.ExpiresAt, now))).ToList(),

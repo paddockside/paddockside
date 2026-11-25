@@ -134,6 +134,8 @@ public static class SessionRefresh
 
         foreach (var amr in current.FindAll("amr").Where(c => !fresh.HasClaim("amr", c.Value)))
             fresh.AddClaim(new Claim("amr", amr.Value));
+        if (current.HasClaim(SessionClaims.KeptPhone, "true") && !fresh.HasClaim(SessionClaims.KeptPhone, "true"))
+            fresh.AddClaim(new Claim(SessionClaims.KeptPhone, "true"));
 
         var keep = current.HasClaim(c => c.Type == SessionClaims.SupportSession) ? SupportClaims
             : current.FindFirst(SessionClaims.AudienceClass)?.Value == nameof(AudienceClass.Client) ? OwnerClaims

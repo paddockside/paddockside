@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -18,7 +19,8 @@ public sealed class SessionStampValidator(
     IOptions<SecurityStampValidatorOptions> options,
     SignInManager<Person> signInManager,
     ILoggerFactory logger,
-    PaddocksideIdentityDbContext identity)
+    PaddocksideIdentityDbContext identity,
+    TimeProvider clock)
     : SecurityStampValidator<Person>(options, signInManager, logger)
 {
     protected override async Task SecurityStampVerified(Person user, CookieValidatePrincipalContext context)
@@ -28,6 +30,13 @@ public sealed class SessionStampValidator(
                              && context.Principal?.HasClaim(c => c.Type == SessionClaims.SupportSession) != true;
 
         await base.SecurityStampVerified(user, context);
+
+        if (!await StaffDevices.StillSignedInAsync(context.Properties, identity, clock.GetUtcNow()))
+        {
+            context.RejectPrincipal();
+            await context.HttpContext.SignOutAsync(context.Scheme.Name);
+            return;
+        }
 
         if (!isStaffSession || !Guid.TryParse(chosen, out var tenantId) || context.Principal?.Identity is not ClaimsIdentity fresh) return;
         if (fresh.FindFirst(SessionClaims.Tenant)?.Value == chosen) return;

@@ -110,7 +110,7 @@ public sealed partial class InboundProcessor(TenantScopedDb tenants, IOptions<Em
             if (routing is null) continue;
 
             var horse = await db.Horses.SingleAsync(h => h.Id == routing.HorseId, cancellationToken);
-            var candidates = (await db.Events.Where(e => e.HorseId == horse.Id && e.Status == EventStatus.Open).ToListAsync(cancellationToken))
+            var candidates = (await db.Events.Where(e => e.HorseId == horse.Id && e.Status == EventStatus.Open && !e.Standing).ToListAsync(cancellationToken))
                 .Where(e => e.IsInWindow(message.ReceivedAt))
                 .ToList();
             var @event = candidates.Count == 1 ? candidates[0] : null;
@@ -145,7 +145,7 @@ public sealed partial class InboundProcessor(TenantScopedDb tenants, IOptions<Em
             .Where(h => h.CurrentManagementPeriod is not null)
             .ToList();
         var horseIds = horses.Select(h => h.Id).ToList();
-        var openEvents = (await db.Events.Where(e => horseIds.Contains(e.HorseId) && e.Status == EventStatus.Open).ToListAsync(cancellationToken))
+        var openEvents = (await db.Events.Where(e => horseIds.Contains(e.HorseId) && e.Status == EventStatus.Open && !e.Standing).ToListAsync(cancellationToken))
             .ToLookup(e => e.HorseId);
         var eventIds = openEvents.SelectMany(g => g).Select(e => e.Id).ToList();
         var lastActivity = await db.StreamItems.Where(i => i.EventId != null && eventIds.Contains(i.EventId.Value))

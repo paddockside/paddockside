@@ -196,7 +196,7 @@ public static class MediaEndpoints
     }
 
     /// <summary>The item's title; the email's subject puts the horse first ("Faultless Miss: New photos").</summary>
-    private static string Title(IReadOnlyList<MediaKind> kinds) => kinds.Distinct().ToList() switch
+    internal static string Title(IReadOnlyList<MediaKind> kinds) => kinds.Distinct().ToList() switch
     {
         [MediaKind.Photo] => kinds.Count == 1 ? "A new photo" : "New photos",
         [MediaKind.Video] => kinds.Count == 1 ? "A new video" : "New videos",
@@ -204,7 +204,9 @@ public static class MediaEndpoints
         _ => "New photos and video",
     };
 
-    private static string Describe(IReadOnlyList<MediaAsset> assets) => string.Join(", ", assets.GroupBy(a => a.Kind).Select(g => (g.Key, g.Count()) switch
+    private static string Describe(IReadOnlyList<MediaAsset> assets) => Describe(assets.Select(a => a.Kind).ToList());
+
+    internal static string Describe(IReadOnlyList<MediaKind> kinds) => string.Join(", ", kinds.GroupBy(k => k).Select(g => (g.Key, g.Count()) switch
     {
         (MediaKind.Photo, 1) => "1 photo",
         (MediaKind.Photo, var n) => $"{n} photos",

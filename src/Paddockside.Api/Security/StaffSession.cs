@@ -6,7 +6,10 @@ using Paddockside.Infrastructure.Identity;
 
 namespace Paddockside.Api.Security;
 
-/// <summary>Staff session lifetime (identity-access.md §4.2): 12 hours idle, 30 days absolute, per device.</summary>
+/// <summary>
+/// Staff session lifetime (identity-access.md §4.2): 12 hours idle, or a week on a phone its owner said is their own
+/// (StaffDevices); 30 days absolute, per device.
+/// </summary>
 public static class StaffSessionCookie
 {
     public static readonly TimeSpan IdleTimeout = TimeSpan.FromHours(12);
@@ -94,7 +97,9 @@ public static class OperatorPolicy
     public static void Build(AuthorizationPolicyBuilder policy) => policy
         .RequireAuthenticatedUser()
         .RequireClaim("amr", "mfa")
-        .RequireClaim(SessionClaims.Operator, "true");
+        .RequireClaim(SessionClaims.Operator, "true")
+        // Never from a phone that stays signed in for a week: a fresh sign-in, always.
+        .RequireAssertion(context => !context.User.HasClaim(SessionClaims.KeptPhone, "true"));
 }
 
 /// <summary>

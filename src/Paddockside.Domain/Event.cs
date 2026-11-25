@@ -28,6 +28,22 @@ public sealed class Event
         KeyDate = keyDate;
     }
 
+    public const string StandingTitle = "General updates";
+
+    /// <summary>
+    /// The horse's standing event for updates not about anything in particular (David, 25 Nov 2026), open from the first
+    /// one. Mail that comes in is never filed on it by itself, and it doesn't count as having gone quiet.
+    /// </summary>
+    public static Event GeneralUpdates(Horse horse, DateTimeOffset at)
+    {
+        var e = new Event(horse, EventTypes.General.Code, StandingTitle) { Standing = true };
+        e.Open(at);
+        return e;
+    }
+
+    /// <summary>See <see cref="GeneralUpdates"/>.</summary>
+    public bool Standing { get; private init; }
+
     public Guid Id { get; } = Guid.CreateVersion7();
 
     public Guid TenantId { get; }

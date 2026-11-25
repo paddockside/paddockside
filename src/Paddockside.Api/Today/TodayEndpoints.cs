@@ -131,7 +131,7 @@ public static class TodayEndpoints
         var waiting = await db.InboundMessages.Where(m => m.State == InboundState.Pending || m.State == InboundState.Suggested)
             .Select(m => m.ReceivedAt).ToListAsync(cancellationToken);
 
-        var dormant = events.Where(e => e.Status == EventStatus.Open)
+        var dormant = events.Where(e => e.Status == EventStatus.Open && !e.Standing)
             .Select(e => (Event: e, Last: byEvent[e.Id].Select(a => (DateTimeOffset?)a.OccurredAt).Max() ?? e.OpenedAt))
             .Where(x => x.Last is { } last && now - last > Dormancy && !(x.Event.KeyDate > now))
             .OrderBy(x => x.Last)
