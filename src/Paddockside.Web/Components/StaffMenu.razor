@@ -1,0 +1,121 @@
+@implements IDisposable
+@inject NavigationManager Navigation
+
+@*
+    The top of every staff page on a phone or tablet: the business, Today, Horses, and everything else under Menu
+    (David, 26 Nov 2026). One row, so the page itself starts near the top. While it's shut, Menu carries the count of
+    what's waiting in Pending.
+*@
+<header class="relative z-30 border-b border-border-subtle bg-surface-default" @onkeydown="Key">
+    <div class="flex min-w-0 items-center justify-between gap-2 bg-surface-default px-4 py-2 sm:gap-3 sm:px-6">
+        <span aria-hidden="true" class="grid size-[40px] shrink-0 place-items-center min-[360px]:hidden rounded-control bg-action-secondary-bg font-heading text-text-primary sm:grid">@Monogram</span>
+        <span class="line-clamp-2 min-w-0 flex-1 break-words text-small font-heading leading-tight max-[359px]:sr-only sm:text-title">@Me.TenantName</span>
+
+        <nav aria-label="Main" class="flex shrink-0 items-center">
+            @foreach (var link in StaffNav.First)
+            {
+                var current = IsCurrent(link.Href);
+                <a href="@link.Href" aria-current="@(current ? "page" : null)"
+                   class="flex min-h-[48px] items-center px-2 font-strong sm:px-3 @(current ? "text-action-primary-bg underline decoration-2 underline-offset-8" : "text-text-primary")">@link.Label</a>
+            }
+        </nav>
+        <button @ref="_button" type="button" class="btn-secondary min-h-[48px] shrink-0 !px-3" aria-expanded="@(_open ? "true" : "false")" aria-controls="staff-menu" @onclick="() => _open = !_open">
+            @(_open ? "Close" : "Menu")
+            @if (Waiting > 0 && !_open)
+            {
+                <span class="rounded-pill bg-action-primary-bg px-2 text-small font-strong text-action-primary-fg">@Waiting<span class="sr-only"> waiting in Pending</span></span>
+            }
+        </button>
+    </div>
+
+    @if (_open)
+    {
+        <div class="fixed inset-0 -z-10 bg-[rgb(0_0_0/0.45)]" aria-hidden="true" @onclick="Close"></div>
+        <div id="staff-menu" class="absolute inset-x-0 top-full grid max-h-[calc(100dvh-5rem)] gap-4 overflow-y-auto overscroll-contain border-b border-border-subtle bg-surface-raised px-4 pb-[max(16px,env(safe-area-inset-bottom))] pt-3 shadow-overlay sm:px-6">
+            <nav aria-label="More" class="grid grid-cols-[repeat(auto-fill,minmax(8.5rem,1fr))] gap-x-2 gap-y-1 sm:grid-cols-3">
+                @foreach (var link in StaffNav.Rest)
+                {
+                    @Item(link)
+                }
+            </nav>
+            @if (StaffNav.Administration(Me) is { Count: > 0 } administration)
+            {
+                <nav aria-label="Administration" class="grid grid-cols-[repeat(auto-fill,minmax(8.5rem,1fr))] gap-x-2 gap-y-1 border-t border-border-subtle pt-3 sm:grid-cols-3">
+                    @foreach (var link in administration)
+                    {
+                        @Item(link)
+                    }
+                </nav>
+            }
+            <div class="grid grid-cols-[minmax(0,1fr)] gap-1 border-t border-border-subtle px-2 pt-3 sm:px-3">
+                <p class="text-small text-text-muted"><span class="font-strong">@Me.TenantName</span><br /><span class="break-words">@Me.Email</span> · @StaffNav.RoleLabel(Me.Role)</p>
+                <div class="flex flex-wrap items-center gap-x-6 gap-y-1">
+                    <a href="account" class="btn-link min-h-[48px]" aria-current="@(IsCurrent("account") ? "page" : null)" @onclick="Close">Account</a>
+                    @foreach (var other in OtherTenants)
+                    {
+                        <button type="button" class="btn-link min-h-[48px] text-left" @onclick="() => OnSwitchTenant.InvokeAsync(other)">Switch to @other.Name</button>
+                    }
+                    <button type="button" class="btn-link min-h-[48px]" @onclick="() => OnSignOut.InvokeAsync()">Sign out</button>
+                </div>
+            </div>
+        </div>
+    }
+</header>
+
+@code {
+    private bool _open;
+    private ElementReference _button;
+
+    [Parameter, EditorRequired] public SessionInfo Me { get; set; } = null!;
+
+    /// <summary>How many are waiting in Pending.</summary>
+    [Parameter] public int Waiting { get; set; }
+
+    [Parameter] public IReadOnlyList<TenantOption> OtherTenants { get; set; } = [];
+
+    [Parameter] public EventCallback<TenantOption> OnSwitchTenant { get; set; }
+
+    [Parameter] public EventCallback OnSignOut { get; set; }
+
+    private string Monogram => string.Concat(Me.TenantName.Split(' ', StringSplitOptions.RemoveEmptyEntries).Take(2).Select(w => char.ToUpperInvariant(w[0])));
+
+    private RenderFragment Item(StaffLink link) => __builder =>
+    {
+        var current = IsCurrent(link.Href);
+        <a href="@link.Href" aria-current="@(current ? "page" : null)" @onclick="Close"
+           class="flex min-h-[48px] min-w-0 items-center gap-2 rounded-control px-2 font-medium sm:gap-3 sm:px-3 @(current ? "bg-action-secondary-bg" : "hover:bg-surface-sunken")">
+            <svg class="shrink-0 text-text-muted" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">@((MarkupString)link.Icon)</svg>
+            <span class="min-w-0">@link.Label</span>
+            @if (link.Href == StaffNav.Pending && Waiting > 0)
+            {
+                <span class="rounded-pill bg-action-primary-bg px-2 text-small font-strong text-action-primary-fg">@Waiting<span class="sr-only"> waiting</span></span>
+            }
+        </a>
+    };
+
+    private bool IsCurrent(string href)
+    {
+        var path = Navigation.ToBaseRelativePath(Navigation.Uri).Split('?', '#')[0];
+        return path == href || path.StartsWith(href + "/", StringComparison.Ordinal);
+    }
+
+    private void Close() => _open = false;
+
+    private async Task Key(KeyboardEventArgs e)
+    {
+        if (e.Key != "Escape" || !_open) return;
+        _open = false;
+        await _button.FocusAsync();
+    }
+
+    protected override void OnInitialized() => Navigation.LocationChanged += Moved;
+
+    /// <summary>On another page: shut, and the one that's current marked.</summary>
+    private void Moved(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e) => InvokeAsync(() =>
+    {
+        _open = false;
+        StateHasChanged();
+    });
+
+    public void Dispose() => Navigation.LocationChanged -= Moved;
+}

@@ -8,7 +8,7 @@
 @*
     The staff console's frame, after the event-page mockup: on wide screens a solid green rail on the left with the
     business, Today / Horses / Pending (with its count), the horse being looked at and its events, and the person signed
-    in at the bottom. On phones and tablets the rail folds into the top header. The event page runs edge to edge (it
+    in at the bottom. On phones and tablets the rail folds into one row at the top (StaffMenu). The event page runs edge to edge (it
     has its own right-hand panel); every other page sits in a centred column.
 *@
 <div class="min-h-screen lg:grid lg:grid-cols-[264px_minmax(0,1fr)]">
@@ -24,14 +24,10 @@
             </div>
 
             <nav aria-label="Main" class="grid gap-1">
-                @NavItem("today", "Today", Icons.Clock)
-                @NavItem("horses", "Horses", Icons.House)
-                @NavItem("social", "Social", Icons.Glass)
-                @NavItem("calendar", "Calendar", Icons.Calendar)
-                @NavItem("clients", "Clients", Icons.Book)
-                @NavItem("mailouts", "Mailouts", Icons.Send)
-                @NavItem("inbound", "Pending", Icons.Mail, _pending)
-                @NavItem("reports", "Reports", Icons.Chart)
+                @foreach (var link in StaffNav.First.Concat(StaffNav.Rest))
+                {
+                    @NavItem(link)
+                }
             </nav>
 
             @if (Rail.Horse is { } horse)
@@ -59,18 +55,13 @@
                 </ol>
             }
 
-            @if (me.Role == "TenantAdmin" || (me.IsOperator && me.SupportUntil is null))
+            @if (StaffNav.Administration(me) is { Count: > 0 } administration)
             {
                 <div class="mx-2 my-[18px] h-px bg-rail-active" aria-hidden="true"></div>
                 <nav aria-label="Administration" class="grid gap-1">
-                    @if (me.Role == "TenantAdmin")
+                    @foreach (var link in administration)
                     {
-                        @NavItem("members", "Members", Icons.People)
-                        @NavItem("audit", "Audit log", Icons.List)
-                    }
-                    @if (me.IsOperator && me.SupportUntil is null)
-                    {
-                        @NavItem("ops", "Operator console", Icons.Gear)
+                        @NavItem(link)
                     }
                 </nav>
             }
@@ -80,7 +71,7 @@
                     <span class="grid size-[36px] shrink-0 place-items-center rounded-pill bg-rail-muted text-small font-strong text-action-primary-bg" aria-hidden="true">@Monogram(me.Email)</span>
                     <span class="grid min-w-0 text-small leading-tight">
                         <span class="truncate font-strong">@me.Email</span>
-                        <span class="text-rail-muted">@RoleLabel(me.Role)</span>
+                        <span class="text-rail-muted">@StaffNav.RoleLabel(me.Role)</span>
                     </span>
                 </div>
                 <div class="flex flex-wrap gap-x-4">
@@ -100,36 +91,16 @@
     }
 
     <div class="grid min-h-screen grid-cols-[minmax(0,1fr)] grid-rows-[auto_auto_auto_1fr]">
-        @* Phones and tablets: the rail's links in the top header instead. *@
+        @* Phones and tablets: one row at the top instead of the rail. *@
         <div class="lg:hidden">
-            <AppHeader TenantName="@Session.Current?.TenantName" OtherTenants="_otherTenants" OnSwitchTenant="SwitchTenant">
-                <Actions>
-                    @if (Session.Current is not null)
-                    {
-                        <nav aria-label="Main" class="flex flex-wrap items-center gap-x-4 gap-y-2">
-                            <a href="today" class="btn-link">Today</a>
-                            <a href="horses" class="btn-link">Horses</a>
-                            <a href="social" class="btn-link">Social</a>
-                            <a href="calendar" class="btn-link">Calendar</a>
-                            <a href="clients" class="btn-link">Clients</a>
-                            <a href="mailouts" class="btn-link">Mailouts</a>
-                            <a href="inbound" class="btn-link">Pending@(_pending > 0 ? $" ({_pending})" : null)</a>
-                            <a href="reports" class="btn-link">Reports</a>
-                            @if (Session.Current.Role == "TenantAdmin")
-                            {
-                                <a href="members" class="btn-link">Members</a>
-                                <a href="audit" class="btn-link">Audit log</a>
-                            }
-                            <a href="account" class="btn-link">Account</a>
-                            @if (Session.Current.IsOperator && Session.Current.SupportUntil is null)
-                            {
-                                <a href="ops" class="btn-link">Operator console</a>
-                            }
-                        </nav>
-                        <button type="button" class="btn-secondary" @onclick="SignOut">Sign out</button>
-                    }
-                </Actions>
-            </AppHeader>
+            @if (Session.Current is { } staff)
+            {
+                <StaffMenu Me="staff" Waiting="_pending" OtherTenants="_otherTenants" OnSwitchTenant="SwitchTenant" OnSignOut="SignOut" />
+            }
+            else
+            {
+                <AppHeader />
+            }
         </div>
 
         <div>
@@ -176,13 +147,14 @@
         }
     }
 
-    private RenderFragment NavItem(string href, string label, string icon, int count = 0) => __builder =>
+    private RenderFragment NavItem(StaffLink link) => __builder =>
     {
-        var current = IsCurrent(href);
-        <a href="@href" aria-current="@(current ? "page" : null)"
+        var current = IsCurrent(link.Href);
+        var count = link.Href == StaffNav.Pending ? _pending : 0;
+        <a href="@link.Href" aria-current="@(current ? "page" : null)"
            class="flex min-h-control items-center gap-3 rounded-control px-3 font-medium @(current ? "bg-rail-active text-rail-fg" : "text-rail-fg hover:bg-rail-active")">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">@((MarkupString)icon)</svg>
-            <span class="flex-1">@label</span>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">@((MarkupString)link.Icon)</svg>
+            <span class="flex-1">@link.Label</span>
             @if (count > 0)
             {
                 <span class="rounded-pill bg-surface-raised px-2 py-1 text-small font-strong text-action-primary-bg">@count<span class="sr-only"> waiting</span></span>
@@ -271,35 +243,10 @@
         };
     }
 
-    private static string RoleLabel(string role) => role switch
-    {
-        "TenantAdmin" => "Tenant admin",
-        "Coordinator" => "Coordinator",
-        "Manager" => "Manager",
-        "Viewer" => "Viewer",
-        _ => role,
-    };
-
     public void Dispose()
     {
         Session.Changed -= Refresh;
         Rail.Changed -= Redraw;
         Navigation.LocationChanged -= Moved;
-    }
-
-    /// <summary>The rail's line icons (24-unit paths, as drawn in the mockup).</summary>
-    private static class Icons
-    {
-        public const string Clock = "<circle cx=\"12\" cy=\"12\" r=\"9\"></circle><path d=\"M12 7v5l3 2\"></path>";
-        public const string House = "<path d=\"M4 20V9l8-5 8 5v11\"></path><path d=\"M9 20v-6h6v6\"></path>";
-        public const string Mail = "<path d=\"M4 6h16v12H4z\"></path><path d=\"M4 8l8 5 8-5\"></path>";
-        public const string People = "<circle cx=\"9\" cy=\"8\" r=\"3\"></circle><path d=\"M3 20a6 6 0 0 1 12 0\"></path><path d=\"M16 4a3 3 0 0 1 0 6\"></path><path d=\"M18 14a5 5 0 0 1 3 6\"></path>";
-        public const string Book = "<path d=\"M5 4h12a2 2 0 0 1 2 2v14H7a2 2 0 0 1-2-2z\"></path><path d=\"M5 18a2 2 0 0 1 2-2h12\"></path><circle cx=\"12\" cy=\"9\" r=\"2\"></circle>";
-        public const string Send = "<path d=\"M21 3L3 10l7 3 3 7z\"></path><path d=\"M10 13l4-4\"></path>";
-        public const string Calendar = "<path d=\"M4 6h16v14H4z\"></path><path d=\"M4 10h16\"></path><path d=\"M8 3v4\"></path><path d=\"M16 3v4\"></path>";
-        public const string Glass = "<path d=\"M7 3h10l-1 7a4 4 0 0 1-8 0z\"></path><path d=\"M12 14v6\"></path><path d=\"M8 21h8\"></path>";
-        public const string Chart = "<path d=\"M4 20h16\"></path><path d=\"M7 16v-5\"></path><path d=\"M12 16V7\"></path><path d=\"M17 16v-8\"></path>";
-        public const string List = "<path d=\"M8 6h12\"></path><path d=\"M8 12h12\"></path><path d=\"M8 18h12\"></path><path d=\"M4 6h.01\"></path><path d=\"M4 12h.01\"></path><path d=\"M4 18h.01\"></path>";
-        public const string Gear = "<circle cx=\"12\" cy=\"12\" r=\"3\"></circle><path d=\"M19 12a7 7 0 0 0-.1-1.2l2-1.5-2-3.4-2.4.9a7 7 0 0 0-2-1.2L14 3h-4l-.5 2.6a7 7 0 0 0-2 1.2l-2.4-.9-2 3.4 2 1.5A7 7 0 0 0 5 12a7 7 0 0 0 .1 1.2l-2 1.5 2 3.4 2.4-.9a7 7 0 0 0 2 1.2L10 21h4l.5-2.6a7 7 0 0 0 2-1.2l2.4.9 2-3.4-2-1.5A7 7 0 0 0 19 12z\"></path>";
     }
 }

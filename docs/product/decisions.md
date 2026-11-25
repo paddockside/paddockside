@@ -164,6 +164,7 @@ Also decided:
 **P69. Sending an update from a phone has a page of its own, opened from the horse or its event: voice recorded there, video and photos by the phone's own camera, anything from the phone.** Files go up in pieces while it's written and are kept on the phone until it's sent; sent twice after a dropout, it's one update.
 **P70. Each horse has a standing "General updates" event for updates not about one event.** Started by the first one; incoming mail is never filed on it automatically.
 **P71. A member of staff's own phone stays signed in for 7 days unused, 30 days at most, if they say it's theirs.** Amends identity-access.md §4.2 (12 hours idle), which still holds everywhere else. They or an admin can sign it out; the operator console is never open to it.
+**P72. On a phone or tablet, staff have Today and Horses always showing and everything else under one Menu button, which carries the Pending count.** One row, so the page starts near the top. Staff only: design-system.md §2.0's bottom bar for owners is unchanged.
 
 ---
 

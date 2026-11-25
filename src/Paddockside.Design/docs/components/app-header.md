@@ -5,7 +5,8 @@
 ## Purpose
 
 The top of every screen. It tells the person which business they are dealing with, and on staff screens
-carries the few controls that belong to the whole app (sign out). It is the whole of the tenant's branding in
+carries the few controls that belong to the whole app (sign out). Signed-in staff on a phone or tablet have
+`StaffMenu` instead (P72), which has its own rules: one row, Today and Horses, and the rest under **Menu**. It is the whole of the tenant's branding in
 the main system: logo and name, nothing else (design-system.md §2.2, P48).
 
 ## Anatomy
