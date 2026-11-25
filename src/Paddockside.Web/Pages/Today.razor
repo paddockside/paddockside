@@ -86,6 +86,25 @@
                     }
                 </a>
 
+                @if (_page.ToAnswer is { Count: > 0 } toAnswer)
+                {
+                    <section class="grid gap-2 rounded-card border border-border-subtle bg-surface-raised px-4 py-4" aria-labelledby="answer-heading">
+                        <h2 id="answer-heading" class="@SideHeading">Replies to answer</h2>
+                        <p class="text-small text-text-muted">To mailouts and invitations. Here until they're answered, or marked as needing no answer.</p>
+                        <ul class="grid">
+                            @foreach (var a in toAnswer)
+                            {
+                                <li class="border-t border-border-subtle py-2 first:border-t-0">
+                                    <a href="@(a.Social ? $"social/{a.Id}" : $"mailouts/{a.Id}")" class="grid hover:underline">
+                                        <span class="font-strong">@a.Title</span>
+                                        <span class="text-small text-status-warning-fg">@a.Detail</span>
+                                    </a>
+                                </li>
+                            }
+                        </ul>
+                    </section>
+                }
+
                 @if (_page.ClosedReplies is { Count: > 0 } closedReplies)
                 {
                     @Quiet("Replies on closed events", closedReplies, "Kept with the message they answer; the event stays closed. Shown for two weeks.")

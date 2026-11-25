@@ -1,0 +1,130 @@
+@inject PaddocksideApi Api
+
+@*
+    The address a business's emails come from (David, 25 Nov 2026), operators only: save it, send a test once the domain is
+    verified in Postmark, check the test passed DMARC, then turn it on. Each step opens when the one before is done.
+*@
+<section class="grid gap-4 rounded-control bg-surface-sunken p-4" aria-labelledby="sender-heading">
+    <h3 id="sender-heading" class="font-strong">Address emails come from</h3>
+    @if (_sender is not { } s)
+    {
+        <p class="text-text-muted" role="status">@(_error ?? "Loading…")</p>
+    }
+    else
+    {
+        <p class="rounded-control px-4 py-3 @(s.On ? "bg-status-success-bg text-status-success-fg" : "bg-surface-raised")" role="status">
+            @(s.On ? "Emails come from " : "At the moment emails come from ")<span class="font-strong break-words">@(s.On ? $"{s.Name ?? s.TenantName} <{s.Address}>" : s.Otherwise)</span>
+        </p>
+        @if (s.Problem is not null)
+        {
+            <p class="alert-danger" role="alert">It was turned off because Postmark refused it: @s.Problem Check the domain in Postmark, send a test, and turn it on again.</p>
+        }
+
+        <ol class="grid gap-6">
+            <li class="grid gap-2">
+                <h4 class="font-strong">1. The address their clients know</h4>
+                <form class="grid items-end gap-3 sm:grid-cols-[1fr_1fr_auto]" @onsubmit="SaveAsync" @onsubmit:preventDefault>
+                    <div class="grid gap-2">
+                        <label for="sender-address" class="text-small font-strong">Email address</label>
+                        <input id="sender-address" type="email" class="min-h-control min-w-0 rounded-control border border-border-strong bg-surface-raised px-4" @bind="_address" placeholder="office@theirbusiness.com.au" />
+                    </div>
+                    <div class="grid gap-2">
+                        <label for="sender-name" class="text-small font-strong">Name shown</label>
+                        <input id="sender-name" class="min-h-control min-w-0 rounded-control border border-border-strong bg-surface-raised px-4" maxlength="100" @bind="_name" placeholder="@s.TenantName" />
+                    </div>
+                    <button type="submit" class="btn-secondary" disabled="@_busy">Save</button>
+                </form>
+            </li>
+            @if (s.Address is not null)
+            {
+                <li class="grid gap-2">
+                    <h4 class="font-strong">2. Verify @Domain(s.Address) in Postmark</h4>
+                    <p class="text-small text-text-muted">Sender Signatures → Add Domain or Signature → Add Domain. Add the DKIM and Return-Path records it gives you to their DNS, then verify both. Use Add Domain: verifying only the single address isn't enough, and their emails would go to spam. Nothing already in their DNS needs to change.</p>
+                </li>
+                <li class="grid gap-2">
+                    <h4 class="font-strong">3. Send a test</h4>
+                    <form class="flex flex-wrap items-end gap-3" @onsubmit="TestAsync" @onsubmit:preventDefault>
+                        <div class="grid min-w-0 flex-[1_1_16rem] gap-2">
+                            <label for="sender-to" class="text-small font-strong">To (a Gmail address is easiest to check)</label>
+                            <input id="sender-to" type="email" class="min-h-control min-w-0 rounded-control border border-border-strong bg-surface-raised px-4" @bind="_to" />
+                        </div>
+                        <button type="submit" class="btn-secondary" disabled="@_busy">Send test</button>
+                    </form>
+                    @if (s.Tested is not null)
+                    {
+                        <p class="text-small text-status-success-fg">Postmark accepted a test, @s.Tested.ToLowerInvariant().</p>
+                    }
+                </li>
+                @if (s.On)
+                {
+                    <li class="grid gap-2">
+                        <h4 class="font-strong">4. On</h4>
+                        <button type="button" class="btn-secondary justify-self-start" disabled="@_busy" @onclick="() => SwitchAsync(false)">Turn off</button>
+                    </li>
+                }
+                else if (s.Tested is not null)
+                {
+                    <li class="grid gap-3">
+                        <h4 class="font-strong">4. Turn it on</h4>
+                        <label class="flex items-start gap-3">
+                            <input type="checkbox" class="mt-1 size-5" @bind="_checked" />
+                            <span>I've opened the test, and it says DMARC: PASS <span class="text-small text-text-muted">(in Gmail: three dots, Show original)</span></span>
+                        </label>
+                        <button type="button" class="btn-primary justify-self-start" disabled="@(_busy || !_checked)" @onclick="() => SwitchAsync(true)">Send their emails from @s.Address</button>
+                    </li>
+                }
+            }
+        </ol>
+        @if (_error is not null)
+        {
+            <p class="alert-danger" role="alert">@_error</p>
+        }
+        <p class="text-small text-text-muted">Replies still come back to Paddockside, to the right horse, mailout or event. Staff emails come from Paddockside. Each change is in the business's audit log.</p>
+    }
+</section>
+
+@code {
+    [Parameter, EditorRequired] public string TenantId { get; set; } = "";
+
+    private SenderView? _sender;
+    private string? _loaded, _address, _name, _to, _error;
+    private bool _busy, _checked;
+
+    private static string Domain(string address) => address[(address.LastIndexOf('@') + 1)..];
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_loaded == TenantId) return;
+        (_loaded, _sender, _error, _checked) = (TenantId, null, null, false);
+        Show(await Api.SenderAsync(TenantId));
+    }
+
+    private void Show(ApiResult<SenderView> result)
+    {
+        if (!result.Succeeded) { _error = result.Error; return; }
+        (_sender, _address, _name) = (result.Value, result.Value!.Address, result.Value.Name);
+    }
+
+    private Task SaveAsync() => DoAsync(() => Api.SaveSenderAsync(TenantId, _address, _name));
+
+    private Task TestAsync() => DoAsync(() => Api.TestSenderAsync(TenantId, _to));
+
+    private async Task SwitchAsync(bool on)
+    {
+        await DoAsync(() => Api.SwitchSenderAsync(TenantId, on));
+        _checked = false;
+    }
+
+    private async Task DoAsync(Func<Task<ApiResult<SenderView>>> change)
+    {
+        (_busy, _error) = (true, null);
+        try
+        {
+            Show(await change());
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}

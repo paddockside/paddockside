@@ -47,6 +47,14 @@ public static class EmailSamples
         var invitation = new Mailout(tenant.Id, "Christmas Lunch", "Please join us for our annual Christmas lunch. Partners are very welcome.\n\nDrinks from 12 noon, with lunch at 12:30 pm.",
             "Social list", "sample@preview.invalid", now, signature: $"Kind regards,\n{by}");
 
+        // To a mailout or an invitation; made in memory like the rest.
+        MailoutAnswer SampleAnswer()
+        {
+            var sent = new MailoutRecipient(invitation, owner, RoutingToken.New(), now);
+            var arrived = new InboundMessage(tenant.Id, "Postmark", "preview", now, "jordan@preview.invalid", owner.DisplayName, "m@preview.invalid", "", "Christmas Lunch", "Is there parking?", null, "[]", "preview");
+            return new MailoutAnswer(sent, new MailoutReply(sent, arrived, "Is there parking?"), "Yes, there's parking under the building, and it's free for lunch guests.\n\nLooking forward to seeing you.", $"Kind regards,\n{by}", by, now);
+        }
+
         return
         [
             new("update", "Update from staff", Updates, Update(Message(null, "She worked well this morning and pulled up bright. The stable is happy to push on to Saturday.\n\nWe will let you know the barrier on Wednesday."))),
@@ -68,6 +76,7 @@ public static class EmailSamples
             new("mailout", "Mailout", Mailouts, renderer.RenderMailout(tenant, newsletter, owner, link)),
             new("invitation", "Social event invitation", Mailouts, renderer.RenderMailout(tenant, invitation, owner, link,
                 new RsvpBlock("Christmas Lunch", "Saturday 12 December, 12:30 pm", "The Sample Club", link, link, link))),
+            new("mailoutanswer", "Answer to a reply", Mailouts, renderer.RenderMailoutAnswer(tenant, invitation, null, SampleAnswer(), owner)),
             new("staffinvite", "Staff invitation", Staff, renderer.RenderStaffInvitation(EmailBrand.Of(tenant), by, MemberRoles.Label(MemberRole.Coordinator), MemberRoles.Describe(MemberRole.Coordinator), link)),
             new("password", "New password", Staff, renderer.RenderPasswordReset(link, 30), FromProduct: true),
             new("changed", "Password changed", Staff, renderer.RenderPasswordChanged(link), FromProduct: true),

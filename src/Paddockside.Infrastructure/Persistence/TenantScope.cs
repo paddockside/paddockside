@@ -33,7 +33,19 @@ public sealed class TenantScopedDb(DbContextOptions<PaddocksideDbContext> option
         return rows.Select(r => (r.TenantId, r.Id, r.PersonId)).ToList();
     }
 
-    /// <summary>Which tenants have owner invitations waiting to go out.</summary>
+    /// <summary>Which tenants have answers to mailout replies waiting to go out.</summary>
+    public async Task<IReadOnlyList<Guid>> TenantsWithQueuedMailoutAnswersAsync(int limit, CancellationToken cancellationToken)
+    {
+        await using var db = new PaddocksideDbContext(options, new FixedTenantContext(null));
+        return await db.MailoutAnswers.IgnoreQueryFilters()
+            .Where(a => a.Status == Domain.MailoutRecipientStatus.Queued)
+            .Select(a => a.TenantId)
+            .Distinct()
+            .Take(limit)
+            .ToListAsync(cancellationToken);
+    }
+
+    /// <summary>Which tenants have mailouts waiting to go out.</summary>
     public async Task<IReadOnlyList<Guid>> TenantsWithQueuedMailoutsAsync(int limit, CancellationToken cancellationToken)
     {
         await using var db = new PaddocksideDbContext(options, new FixedTenantContext(null));

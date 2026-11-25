@@ -29,6 +29,7 @@ public sealed class ClientSignIn(
     PaddocksideIdentityDbContext identity,
     TenantScopedDb tenants,
     IEmailSender email,
+    TenantMailer mailer,
     ISmsSender sms,
     OwnerEmailRenderer renderer,
     IOptions<EmailOptions> emailOptions,
@@ -72,10 +73,11 @@ public sealed class ClientSignIn(
         });
         await identity.SaveChangesAsync(cancellationToken);
 
-        var sender = await SenderAsync(parties, cancellationToken);
+        var (sender, tenant) = await SenderAsync(parties, cancellationToken);
         var rendered = renderer.RenderSignIn(sender, PortalLink(link), code, (int)EmailLinkLifetime.TotalMinutes);
-        var result = await email.SendAsync(new OutboundEmail(emailOptions.Value.FromAddress, Senders.For(sender.Name), normalised, string.Empty, emailOptions.Value.FromAddress,
-            rendered.Subject, rendered.Html, rendered.Text, new Dictionary<string, string> { ["purpose"] = "sign-in" }, TrackOpens: false), cancellationToken);
+        var message = new OutboundEmail(emailOptions.Value.FromAddress, Senders.For(sender.Name), normalised, string.Empty, emailOptions.Value.FromAddress,
+            rendered.Subject, rendered.Html, rendered.Text, new Dictionary<string, string> { ["purpose"] = "sign-in" }, TrackOpens: false);
+        var result = tenant is null ? await email.SendAsync(message, cancellationToken) : await mailer.SendAsync(tenant, message, cancellationToken);
         if (!result.Accepted) logger.LogWarning("Sign-in email to a known address was not accepted: {Error}", result.Error);
     }
 
@@ -102,7 +104,7 @@ public sealed class ClientSignIn(
         });
         await identity.SaveChangesAsync(cancellationToken);
 
-        var sender = await SenderAsync(parties, cancellationToken);
+        var (sender, _) = await SenderAsync(parties, cancellationToken);
         var result = await sms.SendAsync(mobile, $"{code} is your {sender.Name} sign-in code. It works for {(int)SmsCodeLifetime.TotalMinutes} minutes.", cancellationToken);
         if (!result.Accepted) logger.LogWarning("Sign-in text to a known number was not accepted: {Error}", result.Error);
         return true;
@@ -302,15 +304,15 @@ public sealed class ClientSignIn(
     }
 
     /// <summary>Sign-in mail comes from the tenant when the address is one tenant's owner; otherwise from the product.</summary>
-    private async Task<EmailBrand> SenderAsync(IReadOnlyList<(Guid TenantId, Guid PartyId, Guid? PersonId)> parties, CancellationToken cancellationToken)
+    private async Task<(EmailBrand Brand, Tenant? Tenant)> SenderAsync(IReadOnlyList<(Guid TenantId, Guid PartyId, Guid? PersonId)> parties, CancellationToken cancellationToken)
     {
         if (parties.Select(p => p.TenantId).Distinct().ToList() is [var only])
         {
             await using var db = tenants.For(only);
-            if (await db.Tenants.SingleOrDefaultAsync(cancellationToken) is { } tenant) return EmailBrand.Of(tenant);
+            if (await db.Tenants.SingleOrDefaultAsync(cancellationToken) is { } tenant) return (EmailBrand.Of(tenant), tenant);
         }
 
-        return EmailBrand.Product;
+        return (EmailBrand.Product, null);
     }
 
     private string PortalLink(string token) => $"{emailOptions.Value.PortalBaseUrl?.TrimEnd('/')}/my/link#{token}";

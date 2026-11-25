@@ -45,7 +45,12 @@
                             <span class="text-small text-text-muted">@m.Sent</span>
                         </span>
                         <span class="text-small text-text-muted">To @m.Audience@(m.Horse is null ? null : $" · about {m.Horse}") · by @m.SentBy</span>
-                        <span class="text-small">@m.Recipients sent · @m.Delivered delivered · @m.Opened opened · <span class="@(m.Replies > 0 ? "font-strong" : null)">@m.Replies @(m.Replies == 1 ? "reply" : "replies")</span></span>
+                        <span class="text-small">@m.Recipients sent · @m.Delivered delivered · @m.Opened opened · <span class="@(m.Replies > 0 ? "font-strong" : null)">@m.Replies @(m.Replies == 1 ? "reply" : "replies")</span>
+                            @if (m.Waiting > 0)
+                            {
+                                <span class="badge bg-status-warning-bg text-status-warning-fg">@m.Waiting to answer</span>
+                            }
+                        </span>
                     </a>
                 </li>
             }

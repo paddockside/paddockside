@@ -49,6 +49,7 @@ public static class DependencyInjection
             http.Timeout = TimeSpan.FromSeconds(15);
         });
         services.AddSingleton<OwnerEmailRenderer>();
+        services.AddScoped<TenantMailer>();
         services.AddScoped<EmailDispatcher>();
         services.AddScoped<Sms.SmsDispatcher>();
         services.AddScoped<Sms.SmsInbox>();

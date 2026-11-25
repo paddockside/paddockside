@@ -43,9 +43,14 @@ public static class TodayEndpoints
     /// <summary>A horse whose shares add up to more than the whole horse: a mistake that must be put right.</summary>
     public sealed record OverAllocated(Guid HorseId, string Horse, string Allocated);
 
+    /// <summary>A mailout, or a social event, with replies nobody has answered or set aside.</summary>
+    /// <param name="Social">A social event's page; otherwise a mailout's.</param>
+    public sealed record ToAnswer(Guid Id, bool Social, string Title, string Detail);
+
     public sealed record TodayPage(string Date, IReadOnlyList<Runner> Today, IReadOnlyList<Runner> Tomorrow, IReadOnlyList<Undelivered> Undelivered,
         QueueState Queue, IReadOnlyList<QuietEvent> Dormant, IReadOnlyList<QuietEvent> Drafts, IReadOnlyList<Health> Health,
-        IReadOnlyList<OverAllocated>? OverAllocated = null, IReadOnlyList<Runner>? ComingUp = null, IReadOnlyList<QuietEvent>? ClosedReplies = null);
+        IReadOnlyList<OverAllocated>? OverAllocated = null, IReadOnlyList<Runner>? ComingUp = null, IReadOnlyList<QuietEvent>? ClosedReplies = null,
+        IReadOnlyList<ToAnswer>? ToAnswer = null);
 
     /// <summary>How long a reply on a closed event stays on Today.</summary>
     public static readonly TimeSpan ClosedReplyShown = TimeSpan.FromDays(14);
@@ -171,7 +176,28 @@ public static class TodayEndpoints
                 .Select(h => new OverAllocated(h.Id, h.Name, Horse.Percent(h.AllocatedUnits)))
                 .ToList(),
             ComingUp: comingUp.Select(ToDatedRunner).ToList(),
-            ClosedReplies: closedReplies);
+            ClosedReplies: closedReplies,
+            ToAnswer: await ToAnswerAsync(db, now, cancellationToken));
+    }
+
+    /// <summary>Replies to mailouts and invitations waiting for an answer, by the page they're answered on, the latest first.</summary>
+    private static async Task<IReadOnlyList<ToAnswer>> ToAnswerAsync(PaddocksideDbContext db, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        var replies = await db.MailoutReplies.AsNoTracking().Where(r => r.HandledAt == null)
+            .Join(db.Mailouts, r => r.MailoutId, m => m.Id, (r, m) => new { r.PartyId, r.FromAddress, r.ReceivedAt, MailoutId = m.Id, m.Subject, m.SocialEventId })
+            .ToListAsync(cancellationToken);
+        if (replies.Count == 0) return [];
+        var socialIds = replies.Where(r => r.SocialEventId != null).Select(r => r.SocialEventId!.Value).Distinct().ToList();
+        var socials = await db.SocialEvents.AsNoTracking().Where(e => socialIds.Contains(e.Id)).ToDictionaryAsync(e => e.Id, e => e.Title, cancellationToken);
+        var partyIds = replies.Select(r => r.PartyId).Distinct().ToList();
+        var names = await db.Parties.AsNoTracking().Where(p => partyIds.Contains(p.Id)).ToDictionaryAsync(p => p.Id, p => p.DisplayName, cancellationToken);
+        return replies.GroupBy(r => r.SocialEventId ?? r.MailoutId)
+            .Select(g => (Latest: g.MaxBy(r => r.ReceivedAt)!, Count: g.Count()))
+            .OrderByDescending(x => x.Latest.ReceivedAt)
+            .Select(x => new ToAnswer(x.Latest.SocialEventId ?? x.Latest.MailoutId, x.Latest.SocialEventId is not null,
+                x.Latest.SocialEventId is { } s ? socials.GetValueOrDefault(s) ?? x.Latest.Subject : x.Latest.Subject,
+                $"{(x.Count == 1 ? "1 reply" : $"{x.Count} replies")}; the latest from {names.GetValueOrDefault(x.Latest.PartyId) ?? x.Latest.FromAddress}, {Words.Recently(x.Latest.ReceivedAt, now)}"))
+            .ToList();
     }
 
     private static string Excerpt(string body) => body.Length <= 60 ? body : $"{body[..60].TrimEnd()}…";
@@ -199,11 +225,14 @@ public static class TodayEndpoints
         var bounced = await db.Deliveries.CountAsync(d => d.Channel == DeliveryChannel.Email && d.Status == DeliveryStatus.Bounced && d.StatusAt >= dayAgo, cancellationToken);
         var lastIn = await db.InboundMessages.Where(m => m.Channel == "Email").MaxAsync(m => (DateTimeOffset?)m.ReceivedAt, cancellationToken);
 
+        var tenant = await db.Tenants.AsNoTracking().SingleAsync(cancellationToken);
+
         return
         [
             !email.IsConfigured ? new Health("Email to owners", "off", "Not set up: nothing can be sent.")
+                : tenant.SenderProblem is not null ? new Health("Email to owners", "warn", $"{tenant.SenderAddress} was refused, so emails come from Paddockside's address for now. Paddockside can put it right.")
                 : bounced > 0 ? new Health("Email to owners", "warn", $"{bounced} bounced in the last day.")
-                : new Health("Email to owners", "ok", "Sending normally."),
+                : new Health("Email to owners", "ok", tenant.SendsAsSender ? $"Sending normally, from {tenant.SenderAddress}." : "Sending normally."),
             lastIn is { } last ? new Health("Email coming in", "ok", $"Last message: {Words.Recently(last, now)}.")
                 : new Health("Email coming in", "warn", "Nothing received yet."),
             texts.IsConfigured ? new Health("Texts", "ok", "Sending and receiving.")

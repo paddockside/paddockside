@@ -44,6 +44,9 @@ public sealed class PostmarkEmailSender(HttpClient http, IOptions<PostmarkOption
         406, // inactive recipient: Postmark suppressed the address after a hard bounce or complaint
     ];
 
+    // The From address, not the recipient: its domain isn't in our Postmark account, or isn't verified there.
+    private static readonly HashSet<int> SenderErrors = [400, 401];
+
     public bool IsConfigured => !string.IsNullOrWhiteSpace(options.Value.ServerToken);
 
     public bool CanBroadcast => IsConfigured && !string.IsNullOrWhiteSpace(options.Value.BroadcastStream);
@@ -59,7 +62,7 @@ public sealed class PostmarkEmailSender(HttpClient http, IOptions<PostmarkOption
                 Mailbox(email.FromName, email.FromAddress),
                 Mailbox(email.ToName, email.ToAddress),
                 // A reply address that can never exist (the demo's .test domain) is left off: filters treat it as forgery.
-                EmailAddresses.CanReceive(email.ReplyTo) ? email.ReplyTo : null,
+                EmailAddresses.CanReceive(email.ReplyTo) ? Mailbox(email.ReplyToName ?? "", email.ReplyTo) : null,
                 email.Subject,
                 email.HtmlBody,
                 email.TextBody,
@@ -84,6 +87,8 @@ public sealed class PostmarkEmailSender(HttpClient http, IOptions<PostmarkOption
 
             var error = $"Postmark {(int)response.StatusCode}, code {body?.ErrorCode}: {body?.Message}";
             var permanent = response.StatusCode == HttpStatusCode.UnprocessableEntity && body is not null && PermanentRecipientErrors.Contains(body.ErrorCode);
+            if (response.StatusCode == HttpStatusCode.UnprocessableEntity && body is not null && SenderErrors.Contains(body.ErrorCode))
+                return new EmailSendResult(false, null, false, error, SenderRefused: true);
             if (!permanent) logger.LogWarning("Email not accepted; will retry. {Error}", error);
             return EmailSendResult.Failed(error, permanent);
         }

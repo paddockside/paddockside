@@ -111,6 +111,14 @@ public static class PostmarkWebhooks
                 return Results.Ok();
             }
 
+            if (recordType is not null && messageId is not null
+                && Guid.TryParse(Text(metadata, "tenantId"), out var answerTenantId)
+                && Guid.TryParse(Text(metadata, "mailoutAnswerId"), out var answerId))
+            {
+                await RecordAnswerAsync(root, recordType, messageId, answerTenantId, answerId, tenants, clock, logger, cancellationToken);
+                return Results.Ok();
+            }
+
             if (recordType is null || messageId is null
                 || !Guid.TryParse(Text(metadata, "tenantId"), out var tenantId)
                 || !Guid.TryParse(Text(metadata, "deliveryId"), out var deliveryId))
@@ -202,6 +210,44 @@ public static class PostmarkWebhooks
 
         await db.SaveChangesAsync(cancellationToken);
     }
+
+    /// <summary>What happened to staff's answer to someone's reply. A hard bounce or a complaint stops email to that address.</summary>
+    private static async Task RecordAnswerAsync(JsonElement root, string recordType, string messageId, Guid tenantId, Guid answerId, TenantScopedDb tenants,
+        TimeProvider clock, ILogger logger, CancellationToken cancellationToken)
+    {
+        await using var db = tenants.For(tenantId);
+        var answer = await db.MailoutAnswers.SingleOrDefaultAsync(a => a.Id == answerId && a.ProviderMessageId == messageId, cancellationToken);
+        if (answer is null)
+        {
+            logger.LogWarning("Postmark {RecordType} for message {MessageId} matched no mailout answer; ignored.", recordType, messageId);
+            return;
+        }
+
+        var at = Time(root, "DeliveredAt") ?? Time(root, "ReceivedAt") ?? Time(root, "BouncedAt") ?? clock.GetUtcNow();
+        switch (recordType)
+        {
+            case "Delivery":
+                answer.Record(MailoutRecipientStatus.Delivered, at);
+                break;
+            case "Open":
+                answer.Record(MailoutRecipientStatus.Opened, at);
+                break;
+            case "Bounce" when IsHard(root):
+                answer.Record(MailoutRecipientStatus.Bounced, at, $"Bounced: {Text(root, "Description") ?? "the address does not accept mail"}");
+                (await db.Parties.SingleAsync(p => p.Id == answer.PartyId, cancellationToken)).MarkUndeliverable(answer.ToAddress, at);
+                break;
+            case "SpamComplaint":
+                answer.Record(MailoutRecipientStatus.Bounced, at, "Marked as spam.");
+                (await db.Parties.SingleAsync(p => p.Id == answer.PartyId, cancellationToken)).MarkUndeliverable(answer.ToAddress, at);
+                break;
+        }
+
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
+    private static bool IsHard(JsonElement root) => Text(root, "Type") == "HardBounce"
+        || (root.TryGetProperty("TypeCode", out var code) && code.TryGetInt32(out var c) && c == 1)
+        || (root.TryGetProperty("Inactive", out var inactive) && inactive.ValueKind == JsonValueKind.True);
 
     private static async Task MarkUndeliverable(PaddocksideDbContext db, Delivery delivery, DateTimeOffset at, CancellationToken cancellationToken)
     {

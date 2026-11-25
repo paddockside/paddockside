@@ -149,8 +149,13 @@ public sealed class FakeEmailSender : IEmailSender
     /// <summary>Addresses to reject permanently, as Postmark does for an inactive recipient.</summary>
     public HashSet<string> Inactive { get; } = new(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>From addresses to refuse, as Postmark does for a domain that isn't verified.</summary>
+    public HashSet<string> RefusedSenders { get; } = new(StringComparer.OrdinalIgnoreCase);
+
     public Task<EmailSendResult> SendAsync(OutboundEmail email, CancellationToken cancellationToken)
     {
+        if (RefusedSenders.Contains(email.FromAddress))
+            return Task.FromResult(new EmailSendResult(false, null, false, "Postmark 422, code 400: sender refused", SenderRefused: true));
         if (Inactive.Contains(email.ToAddress))
             return Task.FromResult(EmailSendResult.Failed("Postmark 422, code 406: inactive recipient", permanent: true));
         var id = Guid.NewGuid().ToString();

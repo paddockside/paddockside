@@ -15,13 +15,14 @@ public sealed record OutboundEmail(
     bool TrackOpens = true,
     bool Broadcast = false,
     IReadOnlyDictionary<string, string>? Headers = null,
-    IReadOnlyList<EmailAttachment>? Attachments = null);
+    IReadOnlyList<EmailAttachment>? Attachments = null,
+    string? ReplyToName = null);
 
 /// <summary>A file sent with an email (a mailout's share offer PDF).</summary>
 public sealed record EmailAttachment(string Name, string ContentType, byte[] Content);
 
 /// <summary>
-/// Who an email says it is from. The tenant sends through Paddockside's domain, so the name says both:
+/// Who an email says it is from while the tenant sends through Paddockside's domain (not yet its own: TenantMailer), so the name says both:
 /// "Laurel Oak Bloodstock via Paddockside". A tenant's name alone on another organisation's domain is the pattern
 /// phishing filters look for (Microsoft scored our invitations "high confidence phish" for it).
 /// </summary>
@@ -34,7 +35,8 @@ public static class Senders
 }
 
 /// <summary>What the provider said. A permanent failure will never succeed on retry (e.g. an inactive address).</summary>
-public sealed record EmailSendResult(bool Accepted, string? ProviderMessageId, bool PermanentFailure, string? Error)
+/// <param name="SenderRefused">It was the From address that was refused (its domain isn't verified), not the recipient's.</param>
+public sealed record EmailSendResult(bool Accepted, string? ProviderMessageId, bool PermanentFailure, string? Error, bool SenderRefused = false)
 {
     public static EmailSendResult Sent(string providerMessageId) => new(true, providerMessageId, false, null);
 

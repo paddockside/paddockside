@@ -26,9 +26,7 @@ public sealed partial class OwnerSignInTests
 
     private sealed record RecipientLine(Guid PartyId, string Name, string Status, string? Note);
 
-    private sealed record ReplyLine(Guid PartyId, string Name, string Body);
-
-    private sealed record MailoutPage(string Subject, string Audience, string Summary, List<RecipientLine> Recipients, List<ReplyLine> Replies);
+    private sealed record MailoutPage(string Subject, string Audience, string Summary, List<RecipientLine> Recipients, List<ConversationLine> Conversations);
 
     [Fact]
     public async Task A_mailout_reaches_who_was_chosen_can_be_unsubscribed_from_and_keeps_its_replies()
@@ -91,8 +89,8 @@ public sealed partial class OwnerSignInTests
         // Rob replies: it's kept under the mailout, from him.
         await InboundEmailAsync(robEmail.Email.ReplyTo, robEmail.Email.ToAddress, "Re: Season news", "Count me in for 5% of the colt.");
         var page = (await staff.GetFromJsonAsync<MailoutPage>($"/api/mailouts/{created.Id}"))!;
-        var reply = Assert.Single(page.Replies);
-        Assert.Equal((rob, "Count me in for 5% of the colt."), (reply.PartyId, reply.Body));
+        var reply = Assert.Single(page.Conversations);
+        Assert.Equal((rob, true, "Count me in for 5% of the colt."), (reply.PartyId, reply.Waiting, reply.Messages.Single().Body));
         Assert.Equal("Delivered", page.Recipients.Single(r => r.PartyId == rob).Status);
         Assert.StartsWith("Unsubscribed", page.Recipients.Single(r => r.PartyId == una).Note);
         Assert.Equal(("Left out", "No email address"), (page.Recipients.Single(r => r.PartyId == mo).Status, page.Recipients.Single(r => r.PartyId == mo).Note));

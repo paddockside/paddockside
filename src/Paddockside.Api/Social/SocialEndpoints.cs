@@ -43,7 +43,7 @@ public static class SocialEndpoints
     public sealed record InvitationLine(Guid MailoutId, string Subject, string Sent, int Recipients);
 
     public sealed record SocialDetail(SocialSummary Event, string? Time, string? EndDate, string? Notes, IReadOnlyList<AttendeeLine> Attendees,
-        IReadOnlyList<InvitationLine> Invitations, int Maybe, int NotComing);
+        IReadOnlyList<InvitationLine> Invitations, int Maybe, int NotComing, IReadOnlyList<MailoutConversations.Conversation>? Conversations = null);
 
     public sealed record AddRequest(IReadOnlyList<Guid>? ClientIds, IReadOnlyList<Guid>? ListIds = null);
 
@@ -137,7 +137,8 @@ public static class SocialEndpoints
                     a.NotInvitedYet, a.NotInvitedYet && parties.TryGetValue(a.PartyId, out var p) ? Excluded(p) : null, Delivery(a)))
                 .ToList(),
             mailouts.Select(m => new InvitationLine(m.Id, m.Subject, Words.DayAndTime(m.CreatedAt, now), counts.GetValueOrDefault(m.Id))).ToList(),
-            attendees.Count(a => a.Status == AttendeeStatus.Maybe), attendees.Count(a => a.Status == AttendeeStatus.NotComing)));
+            attendees.Count(a => a.Status == AttendeeStatus.Maybe), attendees.Count(a => a.Status == AttendeeStatus.NotComing),
+            await MailoutConversations.ForAsync(db, mailoutIds, now, cancellationToken)));
     }
 
     private static async Task<IResult> Create(SocialRequest request, ClaimsPrincipal user, PaddocksideDbContext db, AuditLog audit, TimeProvider clock,

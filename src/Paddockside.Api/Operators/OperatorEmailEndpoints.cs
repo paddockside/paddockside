@@ -75,7 +75,7 @@ public static class OperatorEmailEndpoints
 
     /// <summary>Sends the chosen samples, one email each, now. Nothing is queued: what the provider refused is said at once.</summary>
     private static async Task<IResult> Preview(Guid id, PreviewRequest request, ClaimsPrincipal user, TenantScopedDb tenants, OwnerEmailRenderer renderer, IEmailSender sender,
-        IOptions<EmailOptions> options, HttpRequest http, AuditLog audit, TimeProvider clock, CancellationToken cancellationToken)
+        TenantMailer mailer, IOptions<EmailOptions> options, HttpRequest http, AuditLog audit, TimeProvider clock, CancellationToken cancellationToken)
     {
         var address = request.Email?.Trim() ?? "";
         if (address.Length > 320 || !MailAddress.TryCreate(address, out var parsed) || parsed.Address != address || !address.Contains('.'))
@@ -93,9 +93,11 @@ public static class OperatorEmailEndpoints
         foreach (var (sample, n) in chosen.Select((s, n) => (s, n + 1)))
         {
             // The tenant's id isn't in the metadata: provider events for a preview belong to no delivery of theirs.
-            var result = await sender.SendAsync(new OutboundEmail(options.Value.FromAddress, sample.FromProduct ? Senders.Product : Senders.For(tenant.Name), address, "",
+            var email = new OutboundEmail(options.Value.FromAddress, sample.FromProduct ? Senders.Product : Senders.For(tenant.Name), address, "",
                 options.Value.FromAddress, $"[Preview {n} of {chosen.Count}] {sample.Email.Subject}", sample.Email.Html, sample.Email.Text,
-                new Dictionary<string, string> { ["purpose"] = "preview" }, TrackOpens: false), cancellationToken);
+                new Dictionary<string, string> { ["purpose"] = "preview" }, TrackOpens: false);
+            // Staff's come from Paddockside; the rest as the business's clients would get them.
+            var result = sample.Group == EmailSamples.Staff ? await sender.SendAsync(email, cancellationToken) : await mailer.SendAsync(tenant, email, cancellationToken);
             if (result.Accepted) { sent++; continue; }
             problems.Add($"{sample.Label}: {result.Error}");
             if (result.PermanentFailure) break; // the address itself is refused; the rest would be too

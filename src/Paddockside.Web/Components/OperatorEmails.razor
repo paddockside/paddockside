@@ -1,8 +1,8 @@
 @inject PaddocksideApi Api
 
 @*
-    The operator console's email section (David, 25 Nov 2026): choose a business, set its logo, colour and details, and
-    send yourself a batch of sample emails in its look. The samples are made up; nothing of the business's is read.
+    The operator console's email section (David, 25 Nov 2026): choose a business, set the address its emails come from, its
+    logo, colour and details, and send yourself a batch of sample emails in its look. The samples are made up; nothing of the business's is read.
 *@
 <section class="card grid grid-cols-[minmax(0,1fr)] gap-6" aria-labelledby="ops-emails-heading">
     <div class="grid gap-2">
@@ -24,6 +24,8 @@
 
     @if (_brand is not null && _samples is not null)
     {
+        <OperatorSender TenantId="@(_tenant ?? "")" />
+
         <section class="grid gap-4 rounded-control bg-surface-sunken p-4" aria-labelledby="preview-heading">
             <h3 id="preview-heading" class="font-strong">Send a batch preview</h3>
             <form class="grid gap-4" @onsubmit="SendAsync" @onsubmit:preventDefault>

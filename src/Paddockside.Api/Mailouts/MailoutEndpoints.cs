@@ -42,15 +42,13 @@ public static class MailoutEndpoints
     public sealed record SignatureView(string Text);
 
     public sealed record MailoutSummary(Guid Id, string Subject, string Audience, string Sent, string SentBy, int Recipients, int Delivered, int Opened, int Replies,
-        string? Horse);
+        string? Horse, int Waiting = 0);
 
     public sealed record RecipientLine(Guid PartyId, string Name, string? Address, string Status, string? Note, string At);
 
-    public sealed record ReplyLine(Guid PartyId, string Name, string From, string At, string Body);
-
     public sealed record MailoutDetail(Guid Id, string Subject, string Body, string Audience, string Sent, string SentBy, Guid? HorseId, string? Horse,
-        string Summary, IReadOnlyList<RecipientLine> Recipients, IReadOnlyList<ReplyLine> Replies, string? Signature = null,
-        IReadOnlyList<AttachmentView>? Attachments = null);
+        string Summary, IReadOnlyList<RecipientLine> Recipients, IReadOnlyList<MailoutConversations.Conversation> Conversations, string? Signature = null,
+        IReadOnlyList<AttachmentView>? Attachments = null, Guid? SocialEventId = null, string? SocialEvent = null);
 
     public sealed record Created(Guid Id, int Sending);
 
@@ -83,8 +81,8 @@ public static class MailoutEndpoints
         var ids = mailouts.Select(m => m.Id).ToList();
         var recipients = (await db.MailoutRecipients.AsNoTracking().Where(r => ids.Contains(r.MailoutId)).Select(r => new { r.MailoutId, r.Status }).ToListAsync(cancellationToken))
             .ToLookup(r => r.MailoutId);
-        var replies = (await db.MailoutReplies.AsNoTracking().Where(r => ids.Contains(r.MailoutId)).Select(r => r.MailoutId).ToListAsync(cancellationToken))
-            .GroupBy(id => id).ToDictionary(g => g.Key, g => g.Count());
+        var replies = (await db.MailoutReplies.AsNoTracking().Where(r => ids.Contains(r.MailoutId)).Select(r => new { r.MailoutId, Waiting = r.HandledAt == null }).ToListAsync(cancellationToken))
+            .ToLookup(r => r.MailoutId);
         var horseIds = mailouts.Where(m => m.HorseId != null).Select(m => m.HorseId!.Value).ToList();
         var horses = await db.Horses.AsNoTracking().Where(h => horseIds.Contains(h.Id)).ToDictionaryAsync(h => h.Id, h => h.Name, cancellationToken);
         var now = clock.GetUtcNow();
@@ -92,7 +90,7 @@ public static class MailoutEndpoints
             recipients[m.Id].Count(r => r.Status != MailoutRecipientStatus.Skipped),
             recipients[m.Id].Count(r => r.Status is MailoutRecipientStatus.Delivered or MailoutRecipientStatus.Opened),
             recipients[m.Id].Count(r => r.Status == MailoutRecipientStatus.Opened),
-            replies.GetValueOrDefault(m.Id), m.HorseId is { } h ? horses.GetValueOrDefault(h) : null)).ToList();
+            replies[m.Id].Count(), m.HorseId is { } h ? horses.GetValueOrDefault(h) : null, replies[m.Id].Count(r => r.Waiting))).ToList();
     }
 
     /// <summary>Who the choice comes to, before anything is sent: how many will get it, and who is left out and why.</summary>
@@ -189,12 +187,13 @@ public static class MailoutEndpoints
         var mailout = await db.Mailouts.AsNoTracking().SingleOrDefaultAsync(m => m.Id == id, cancellationToken);
         if (mailout is null) return Results.NotFound();
         var recipients = await db.MailoutRecipients.AsNoTracking().Where(r => r.MailoutId == id).ToListAsync(cancellationToken);
-        var replies = await db.MailoutReplies.AsNoTracking().Where(r => r.MailoutId == id).OrderBy(r => r.ReceivedAt).ToListAsync(cancellationToken);
         var partyIds = recipients.Select(r => r.PartyId).ToList();
         var names = await db.Parties.AsNoTracking().Where(p => partyIds.Contains(p.Id)).ToDictionaryAsync(p => p.Id, p => p.DisplayName, cancellationToken);
         var horse = mailout.HorseId is { } h ? (await db.Horses.AsNoTracking().SingleOrDefaultAsync(x => x.Id == h, cancellationToken))?.Name : null;
         var files = await db.MailoutAttachments.AsNoTracking().Where(a => a.MailoutId == id).OrderBy(a => a.CreatedAt).ToListAsync(cancellationToken);
         var now = clock.GetUtcNow();
+        var conversations = await MailoutConversations.ForAsync(db, [id], now, cancellationToken);
+        var social = mailout.SocialEventId is { } s ? await db.SocialEvents.AsNoTracking().Where(e => e.Id == s).Select(e => e.Title).SingleOrDefaultAsync(cancellationToken) : null;
 
         int Count(params MailoutRecipientStatus[] statuses) => recipients.Count(r => statuses.Contains(r.Status));
         var sent = recipients.Count - Count(MailoutRecipientStatus.Skipped, MailoutRecipientStatus.Queued);
@@ -202,7 +201,7 @@ public static class MailoutEndpoints
         if (Count(MailoutRecipientStatus.Queued) is > 0 and var waiting) parts.Add($"{waiting} still sending");
         parts.Add($"{Count(MailoutRecipientStatus.Delivered, MailoutRecipientStatus.Opened)} delivered");
         parts.Add($"{Count(MailoutRecipientStatus.Opened)} opened");
-        parts.Add($"{replies.Select(r => r.PartyId).Distinct().Count()} replied");
+        parts.Add($"{conversations.Count} replied");
         if (Count(MailoutRecipientStatus.Bounced) is > 0 and var bounced) parts.Add($"{bounced} bounced");
         if (Count(MailoutRecipientStatus.Skipped) is > 0 and var skipped) parts.Add($"{skipped} left out");
 
@@ -211,8 +210,7 @@ public static class MailoutEndpoints
             recipients.OrderBy(r => r.Status == MailoutRecipientStatus.Skipped).ThenBy(r => names.GetValueOrDefault(r.PartyId))
                 .Select(r => new RecipientLine(r.PartyId, names.GetValueOrDefault(r.PartyId) ?? "Unknown", r.Address, StatusWords(r.Status), r.Note, Formatting.Words.Recently(r.StatusAt, now)))
                 .ToList(),
-            replies.Select(r => new ReplyLine(r.PartyId, names.GetValueOrDefault(r.PartyId) ?? r.FromAddress, r.FromAddress, Formatting.Words.Recently(r.ReceivedAt, now), r.Body)).ToList(),
-            mailout.Signature, files.Select(ToView).ToList()));
+            conversations, mailout.Signature, files.Select(ToView).ToList(), mailout.SocialEventId, social));
     }
 
     /// <summary>A file chosen while writing a mailout (multipart, field <c>file</c>): stored now, sent with the mailout it ends up in.</summary>

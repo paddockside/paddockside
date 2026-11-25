@@ -1,0 +1,136 @@
+@inject PaddocksideApi Api
+
+@*
+    What people wrote back to a mailout or an invitation, and staff's answers (David, 25 Nov 2026): one conversation per
+    person, the ones waiting for an answer first. An answer is emailed to them alone, and what they write next comes back
+    here. "No answer needed" takes it off Today without sending anything.
+*@
+@if (Conversations.Count == 0)
+{
+    <p class="text-text-muted">@Empty</p>
+}
+else
+{
+    <ul class="grid gap-4">
+        @foreach (var c in Conversations)
+        {
+            <li @key="c.RecipientId" class="card grid grid-cols-[minmax(0,1fr)] gap-3">
+                <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
+                    <a href="clients/@c.PartyId" class="font-strong underline-offset-4 hover:underline">@c.Name</a>
+                    <span class="truncate text-small text-text-muted">@c.Address</span>
+                    @if (c.Waiting)
+                    {
+                        <span class="badge bg-status-warning-bg text-status-warning-fg">To answer</span>
+                    }
+                </div>
+                <ol class="grid gap-3">
+                    @foreach (var m in c.Messages)
+                    {
+                        <li class="grid gap-1 border-l-2 pl-3 @(m.Out ? "border-action-primary-bg" : "border-border-strong")">
+                            <p class="flex flex-wrap items-baseline gap-x-2 text-small">
+                                <span class="font-strong">@m.Who</span>
+                                <span class="text-text-muted">@m.At@(m.Delivery is null ? null : $" · {m.Delivery.ToLowerInvariant()}")</span>
+                            </p>
+                            <p class="whitespace-pre-line break-words">@m.Body</p>
+                            @if (m.Files is { Count: > 0 } files)
+                            {
+                                <p class="text-small text-text-muted">Attached, not shown here yet: @string.Join(", ", files)</p>
+                            }
+                            @if (m.Note is not null)
+                            {
+                                <p class="text-small @(m.Out ? "font-strong text-status-danger-fg" : "text-text-muted")">@m.Note</p>
+                            }
+                        </li>
+                    }
+                </ol>
+                @if (CanAnswer)
+                {
+                    @if (_answering == c.RecipientId)
+                    {
+                        <form class="grid gap-3" @onsubmit="() => SendAsync(c)" @onsubmit:preventDefault aria-label="Answer @c.Name">
+                            <label class="field-label" for="answer-@c.RecipientId">Answer @c.Name</label>
+                            <textarea id="answer-@c.RecipientId" class="input min-h-[7rem] py-3" @bind="_body" @bind:event="oninput"></textarea>
+                            <p class="field-hint">Emailed to @c.Address alone. It starts "Hi {first name}," and ends with your signature. What they write back comes here.</p>
+                            @if (_error is not null)
+                            {
+                                <p class="alert-danger" role="alert">@_error</p>
+                            }
+                            <div class="flex flex-wrap gap-3">
+                                <button type="submit" class="btn-primary" disabled="@_busy">@(_busy ? "Sending…" : "Send answer")</button>
+                                <button type="button" class="btn-secondary" disabled="@_busy" @onclick="() => _answering = null">Cancel</button>
+                            </div>
+                        </form>
+                    }
+                    else
+                    {
+                        <div class="flex flex-wrap items-center gap-4">
+                            <button type="button" class="@(c.Waiting ? "btn-primary" : "btn-secondary") min-h-[40px] px-4" @onclick="() => Open(c)">@(c.Waiting ? "Answer" : "Write again")<span class="sr-only"> to @c.Name</span></button>
+                            @if (c.Waiting)
+                            {
+                                <button type="button" class="text-small underline underline-offset-4" disabled="@_busy" @onclick="() => DoneAsync(c)">No answer needed<span class="sr-only"> for @c.Name</span></button>
+                            }
+                            @if (_sent == c.RecipientId)
+                            {
+                                <span class="text-small font-strong text-status-success-fg" role="status">Sent.</span>
+                            }
+                        </div>
+                        @if (_error is not null && _failed == c.RecipientId)
+                        {
+                            <p class="alert-danger" role="alert">@_error</p>
+                        }
+                    }
+                }
+            </li>
+        }
+    </ul>
+}
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<MailoutConversation> Conversations { get; set; } = [];
+
+    [Parameter] public bool CanAnswer { get; set; }
+
+    [Parameter] public string Empty { get; set; } = "No replies yet. They'll appear here as they come in.";
+
+    /// <summary>Something was sent or set aside: the page reloads.</summary>
+    [Parameter] public EventCallback OnChanged { get; set; }
+
+    private Guid? _answering, _sent, _failed;
+    private string _body = "";
+    private string? _error;
+    private bool _busy;
+
+    private void Open(MailoutConversation c) => (_answering, _sent, _failed, _error, _body) = (c.RecipientId, null, null, null, "");
+
+    private async Task SendAsync(MailoutConversation c)
+    {
+        if (string.IsNullOrWhiteSpace(_body)) { _error = "Write your answer first."; return; }
+        (_busy, _error) = (true, null);
+        try
+        {
+            var result = await Api.AnswerConversationAsync(c.RecipientId, _body);
+            if (!result.Succeeded) { _error = result.Error; return; }
+            (_answering, _sent, _body) = (null, c.RecipientId, "");
+            await OnChanged.InvokeAsync();
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task DoneAsync(MailoutConversation c)
+    {
+        (_busy, _error, _failed, _sent) = (true, null, null, null);
+        try
+        {
+            var result = await Api.SetConversationAsideAsync(c.RecipientId);
+            if (!result.Succeeded) { (_error, _failed) = (result.Error, c.RecipientId); return; }
+            await OnChanged.InvokeAsync();
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}

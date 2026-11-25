@@ -42,7 +42,7 @@ public sealed record SocialAttendeeLine(Guid PartyId, string Name, string? Email
 public sealed record SocialInvitationLine(Guid MailoutId, string Subject, string Sent, int Recipients);
 
 public sealed record SocialDetail(SocialSummary Event, string? Time, string? EndDate, string? Notes, List<SocialAttendeeLine> Attendees,
-    List<SocialInvitationLine> Invitations, int Maybe, int NotComing);
+    List<SocialInvitationLine> Invitations, int Maybe, int NotComing, List<MailoutConversation>? Conversations = null);
 
 public sealed record SocialRequest(string Title, string Kind, string Date, string? Time, string? EndDate, string? Venue, int? Places, string? Notes);
 
@@ -199,14 +199,24 @@ public sealed record MailoutReason(string Why, int Count);
 
 public sealed record MailoutPreview(int Chosen, int Sending, List<MailoutReason> LeftOut);
 
-public sealed record MailoutSummary(Guid Id, string Subject, string Audience, string Sent, string SentBy, int Recipients, int Delivered, int Opened, int Replies, string? Horse);
+public sealed record MailoutSummary(Guid Id, string Subject, string Audience, string Sent, string SentBy, int Recipients, int Delivered, int Opened, int Replies, string? Horse, int Waiting = 0);
 
 public sealed record MailoutRecipientLine(Guid PartyId, string Name, string? Address, string Status, string? Note, string At);
 
-public sealed record MailoutReplyLine(Guid PartyId, string Name, string From, string At, string Body);
+/// <param name="Out">Staff's answer; otherwise what they wrote.</param>
+public sealed record MailoutMessage(Guid Id, bool Out, string Who, string At, string Body, string? Delivery = null, string? Note = null, List<string>? Files = null);
+
+/// <summary>What one person wrote back to a mailout or invitation, and staff's answers.</summary>
+public sealed record MailoutConversation(Guid RecipientId, Guid PartyId, string Name, string Address, bool Waiting, List<MailoutMessage> Messages);
+
+public sealed record ConversationAnswered(string To);
+
+/// <summary>The address a business's emails come from (operators).</summary>
+public sealed record SenderView(string? Address, string? Name, string TenantName, bool On, string? Tested, string? Problem, string Otherwise);
 
 public sealed record MailoutDetail(Guid Id, string Subject, string Body, string Audience, string Sent, string SentBy, Guid? HorseId, string? Horse, string Summary,
-    List<MailoutRecipientLine> Recipients, List<MailoutReplyLine> Replies, string? Signature = null, List<MailoutAttachmentView>? Attachments = null);
+    List<MailoutRecipientLine> Recipients, List<MailoutConversation> Conversations, string? Signature = null, List<MailoutAttachmentView>? Attachments = null,
+    Guid? SocialEventId = null, string? SocialEvent = null);
 
 /// <param name="Size">"340 KB".</param>
 public sealed record MailoutAttachmentView(Guid Id, string FileName, string Size, long Bytes);
@@ -250,9 +260,12 @@ public sealed record TodayHealth(string Label, string State, string Detail);
 
 public sealed record TodayOverAllocated(Guid HorseId, string Horse, string Allocated);
 
+/// <param name="Social">Answered on a social event's page; otherwise on a mailout's.</param>
+public sealed record TodayToAnswer(Guid Id, bool Social, string Title, string Detail);
+
 public sealed record TodayPage(string Date, List<TodayRunner> Today, List<TodayRunner> Tomorrow, List<TodayUndelivered> Undelivered, TodayQueue Queue,
     List<TodayQuiet> Dormant, List<TodayQuiet> Drafts, List<TodayHealth> Health, List<TodayOverAllocated>? OverAllocated = null, List<TodayRunner>? ComingUp = null,
-    List<TodayQuiet>? ClosedReplies = null);
+    List<TodayQuiet>? ClosedReplies = null, List<TodayToAnswer>? ToAnswer = null);
 
 public sealed record InboundView(
     Guid Id,
@@ -532,6 +545,12 @@ public sealed class PaddocksideApi(HttpClient http)
 
     public Task<ApiResult<List<MailoutSummary>>> MailoutsAsync() => GetAsync<List<MailoutSummary>>("api/mailouts");
 
+    public Task<ApiResult<ConversationAnswered>> AnswerConversationAsync(Guid recipientId, string body) =>
+        PostAsync<ConversationAnswered>($"api/mailouts/conversations/{recipientId}/answer", new { body });
+
+    /// <summary>Their reply needs no answer: off Today, and nothing sent.</summary>
+    public Task<ApiResult<object>> SetConversationAsideAsync(Guid recipientId) => PostAsync<object>($"api/mailouts/conversations/{recipientId}/done", new { });
+
     public Task<ApiResult<MailoutDetail>> MailoutAsync(Guid id) => GetAsync<MailoutDetail>($"api/mailouts/{id}");
 
     public Task<ApiResult<MailoutPreview>> PreviewMailoutAsync(IEnumerable<Guid> listIds, IEnumerable<string> statuses, IEnumerable<Guid> clientIds) =>
@@ -727,6 +746,17 @@ public sealed class PaddocksideApi(HttpClient http)
 
     public Task<ApiResult<EmailPreviewSent>> SendEmailPreviewAsync(string tenantId, string? email, IEnumerable<string> keys) =>
         PostAsync<EmailPreviewSent>($"api/ops/tenants/{tenantId}/email/preview", new { email, keys });
+
+    public Task<ApiResult<SenderView>> SenderAsync(string tenantId) => GetAsync<SenderView>($"api/ops/tenants/{tenantId}/email/sender");
+
+    public Task<ApiResult<SenderView>> SaveSenderAsync(string tenantId, string? address, string? name) =>
+        PutAsync<SenderView>($"api/ops/tenants/{tenantId}/email/sender", new { address, name });
+
+    public Task<ApiResult<SenderView>> TestSenderAsync(string tenantId, string? email) => PostAsync<SenderView>($"api/ops/tenants/{tenantId}/email/sender/test", new { email });
+
+    /// <summary>Turned on only by an operator who has seen the test pass DMARC.</summary>
+    public Task<ApiResult<SenderView>> SwitchSenderAsync(string tenantId, bool on) =>
+        PostAsync<SenderView>($"api/ops/tenants/{tenantId}/email/sender/{(on ? "on" : "off")}", new { @checked = on });
 
     // ---- Operator console ------------------------------------------------------------------------------------------
 

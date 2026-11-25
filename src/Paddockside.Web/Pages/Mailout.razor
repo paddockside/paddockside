@@ -7,7 +7,7 @@
 
 @*
     One mailout: what it said, who it was for, how it did ("Sent to 212 · 198 delivered · 120 opened · 9 replied ·
-    5 left out"), every reply, and everyone it went to with what happened, the people left out first with why.
+    5 left out"), every reply with staff's answers, and everyone it went to with what happened, the people left out first with why.
 *@
 <div class="grid max-w-4xl gap-6">
     <a href="mailouts" class="btn-link justify-self-start">← Mailouts</a>
@@ -29,30 +29,16 @@
             {
                 <p class="text-small">About <a href="horses/@horseId" class="underline underline-offset-4">@m.Horse</a></p>
             }
+            @if (m.SocialEventId is { } socialId)
+            {
+                <p class="text-small">Invitation to <a href="social/@socialId" class="underline underline-offset-4">@m.SocialEvent</a></p>
+            }
             <p class="font-strong">@m.Summary</p>
         </header>
 
-        <section class="card grid gap-3" aria-labelledby="replies-heading">
-            <h2 id="replies-heading" class="text-title">Replies (@m.Replies.Count)</h2>
-            @if (m.Replies.Count == 0)
-            {
-                <p class="text-text-muted">No replies yet. They'll appear here as they come in.</p>
-            }
-            <ol class="grid">
-                @foreach (var reply in m.Replies)
-                {
-                    <li class="flex gap-3 border-t border-border-subtle py-3 first:border-t-0">
-                        <span aria-hidden="true" class="grid size-[36px] shrink-0 place-items-center rounded-pill bg-scope-owners-bg text-small font-heading text-scope-owners-fg">@Monograms.Of(reply.Name)</span>
-                        <div class="grid min-w-0 flex-1 gap-1">
-                            <p class="flex flex-wrap items-baseline gap-x-2">
-                                <a href="clients/@reply.PartyId" class="font-strong underline-offset-4 hover:underline">@reply.Name</a>
-                                <span class="text-small text-text-muted">@reply.At · @reply.From</span>
-                            </p>
-                            <p class="whitespace-pre-line break-words">@reply.Body</p>
-                        </div>
-                    </li>
-                }
-            </ol>
+        <section class="grid grid-cols-[minmax(0,1fr)] gap-3" aria-labelledby="replies-heading">
+            <h2 id="replies-heading" class="text-title">Replies (@m.Conversations.Count)</h2>
+            <MailoutConversations Conversations="m.Conversations" CanAnswer="CanAnswer" OnChanged="LoadAsync" />
         </section>
 
         <details class="card">
@@ -119,8 +105,15 @@
             return;
         }
 
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
         var result = await Api.MailoutAsync(Id);
         if (result.Succeeded) _mailout = result.Value;
         else _error = result.Error;
     }
+
+    private bool CanAnswer => Session.Current?.Role is "Coordinator" or "Manager" or "TenantAdmin";
 }

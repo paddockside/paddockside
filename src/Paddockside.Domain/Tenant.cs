@@ -49,6 +49,53 @@ public sealed class Tenant
     public string? FooterDetails { get; private set; }
 
     /// <summary>
+    /// The business's own address its emails come from, "office@laureloak.com.au": the one its clients already know
+    /// (David, 25 Nov 2026). Only used once turned on; until then they come from Paddockside's.
+    /// </summary>
+    public string? SenderAddress { get; private set; }
+
+    /// <summary>The name shown with it; null for the business's name.</summary>
+    public string? SenderName { get; private set; }
+
+    /// <summary>Emails come from <see cref="SenderAddress"/>.</summary>
+    public bool SendsAsSender { get; private set; }
+
+    /// <summary>When the provider last accepted a test from this address; null until it has.</summary>
+    public DateTimeOffset? SenderTestedAt { get; private set; }
+
+    /// <summary>Why the provider refused the address, when that turned it off.</summary>
+    public string? SenderProblem { get; private set; }
+
+    public const int SenderNameLength = 100, SenderProblemLength = 500;
+
+    /// <summary>A different address starts again: off, and to be tested. The name can change at any time.</summary>
+    public void SetSender(string? address, string? name)
+    {
+        var shown = string.IsNullOrWhiteSpace(name) ? null : name.Trim();
+        if (shown?.Length > SenderNameLength) throw new DomainException($"Keep the name under {SenderNameLength} characters.");
+        if (shown is not null && shown.Any(c => char.IsControl(c) || c is '<' or '>' or '"' or '@')) throw new DomainException("The name can't have <, >, @ or quotation marks in it.");
+        SenderName = shown;
+        var to = string.IsNullOrWhiteSpace(address) ? null : address.Trim().ToLowerInvariant();
+        if (to == SenderAddress) return;
+        (SenderAddress, SendsAsSender, SenderTestedAt, SenderProblem) = (to, false, null, null);
+    }
+
+    public void SenderTested(DateTimeOffset at) => (SenderTestedAt, SenderProblem) = (at, null);
+
+    public void TurnSenderOn()
+    {
+        if (SenderAddress is null) throw new DomainException("Set the address first.");
+        if (SenderTestedAt is null) throw new DomainException("Send a test from the address first.");
+        SendsAsSender = true;
+    }
+
+    public void TurnSenderOff() => SendsAsSender = false;
+
+    /// <summary>The provider refused it: off, to be tested again, and why.</summary>
+    public void RefuseSender(string problem) =>
+        (SendsAsSender, SenderTestedAt, SenderProblem) = (false, null, problem.Length > SenderProblemLength ? problem[..SenderProblemLength] : problem);
+
+    /// <summary>
     /// Tenant setting "returning horse" (tenant-model.md §3). When false — the default, D10 — owners in a
     /// new management period do not see items from earlier periods.
     /// </summary>

@@ -159,6 +159,8 @@ Also decided:
 **P64. Part or all of a share can go back to the house when it is passed on, not only when an owner leaves.**
 **P65. Being known isn't being a client.** Someone staff only reply to stays out of Clients (and prospect mailouts) until staff add them. Clients are owners past and present, people on a list, and people added by staff or an import.
 **P66. In the portal an owner sees only the social events they were invited to or are down for, and answers there as from the email.** Never who else is coming, how many, or staff's notes. Proposed default, built 25 Nov 2026; the alternative is every upcoming event.
+**P67. Everything a business's clients are sent can come from the address they already know (office@…), as the business alone, without "via Paddockside".** Amends messaging-channels.md §2.1, which kept the main domain out of it: the familiar address matters more. Verified in Postmark, tested, seen to pass DMARC and turned on by an operator; if it's ever refused, emails go from Paddockside's address at once. Reply addresses stay per recipient.
+**P68. A reply to a mailout or invitation is a conversation on that mailout or social event, answered from there, and on Today until it's answered or set aside.** Mail sent straight to the business's own mailbox isn't caught yet.
 
 ---
 

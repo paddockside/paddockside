@@ -129,6 +129,15 @@
             </section>
         }
 
+        @if (_event.Invitations.Count > 0)
+        {
+            <section class="grid grid-cols-[minmax(0,1fr)] gap-3" aria-labelledby="messages-heading">
+                <h2 id="messages-heading">Messages (@(_event.Conversations?.Count ?? 0))</h2>
+                <MailoutConversations Conversations="@(_event.Conversations ?? [])" CanAnswer="CanEdit" OnChanged="LoadAsync"
+                                      Empty="Nobody has written back yet. Replies to the invitation's email appear here, and you can answer them." />
+            </section>
+        }
+
         @if (_event.Notes is { } notes)
         {
             <section class="card grid gap-1" aria-label="Notes">

@@ -256,6 +256,27 @@ public sealed class OwnerEmailRenderer(IOptions<EmailOptions>? options = null)
             TextFrame(text.ToString(), replyLine, tenant.Name, tenant.FooterDetails, whyLine, unsubscribeLink: unsubscribeLink));
     }
 
+    /// <summary>Staff's answer to someone who replied to a mailout or an invitation, under the subject they used.</summary>
+    public RenderedEmail RenderMailoutAnswer(Tenant tenant, Mailout mailout, string? theirSubject, MailoutAnswer answer, Party recipient)
+    {
+        var subject = string.IsNullOrWhiteSpace(theirSubject) ? mailout.Subject : theirSubject.Trim();
+        if (!subject.StartsWith("Re:", StringComparison.OrdinalIgnoreCase)) subject = $"Re: {subject}";
+        var replyLine = $"Reply to this email to answer. It goes to {tenant.Name}.";
+        var whyLine = $"You are receiving this because you wrote to {tenant.Name}.";
+
+        var html = new StringBuilder().Append(Paragraph($"Hi {recipient.FirstName},"));
+        foreach (var paragraph in Paragraphs(answer.Body)) html.Append(Paragraph(paragraph));
+        foreach (var paragraph in Paragraphs(answer.Signature)) html.Append(Paragraph(paragraph));
+
+        var text = new StringBuilder().AppendLine($"Hi {recipient.FirstName},").AppendLine();
+        foreach (var paragraph in Paragraphs(answer.Body)) text.AppendLine(paragraph).AppendLine();
+        foreach (var paragraph in Paragraphs(answer.Signature)) text.AppendLine(paragraph).AppendLine();
+
+        return new RenderedEmail(subject,
+            Frame(EmailBrand.Of(tenant), subject, Preview(answer.Body), mailout.Subject, null, html.ToString(), replyLine, whyLine),
+            TextFrame(text.ToString(), replyLine, tenant.Name, tenant.FooterDetails, whyLine));
+    }
+
     /// <summary>How to answer a question by email, in words ("Two please").</summary>
     private static string AnswerHint(MessagePrompt prompt) => prompt.Kind switch
     {

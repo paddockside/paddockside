@@ -26,6 +26,11 @@ internal sealed class TenantConfiguration : IEntityTypeConfiguration<Tenant>
         b.Property(x => x.LogoHeight);
         b.Property(x => x.BrandColour).HasMaxLength(7).IsUnicode(false);
         b.Property(x => x.FooterDetails).HasMaxLength(500);
+        b.Property(x => x.SenderAddress).HasMaxLength(320);
+        b.Property(x => x.SenderName).HasMaxLength(Tenant.SenderNameLength);
+        b.Property(x => x.SendsAsSender);
+        b.Property(x => x.SenderTestedAt);
+        b.Property(x => x.SenderProblem).HasMaxLength(Tenant.SenderProblemLength);
         // Slugs form reply addresses, so two tenants can never share one. (Empty = set before slugs existed.)
         b.HasIndex(x => x.Slug).IsUnique().HasFilter("[Slug] <> ''");
     }
@@ -181,11 +186,38 @@ internal sealed class MailoutReplyConfiguration : IEntityTypeConfiguration<Mailo
         b.Property(x => x.Subject).HasMaxLength(1000);
         b.Property(x => x.Body);
         b.Property(x => x.ReceivedAt);
+        b.Property(x => x.HandledAt);
+        b.Property(x => x.SetAsideBy).HasMaxLength(320);
+        b.Ignore(x => x.Waiting);
         b.HasIndex(x => x.MailoutId);
         b.HasOne<Mailout>().WithMany().HasForeignKey(x => x.MailoutId).OnDelete(DeleteBehavior.Restrict);
         b.HasOne<MailoutRecipient>().WithMany().HasForeignKey(x => x.RecipientId).OnDelete(DeleteBehavior.Restrict);
         b.HasOne<Party>().WithMany().HasForeignKey(x => x.PartyId).OnDelete(DeleteBehavior.Restrict);
         b.HasOne<InboundMessage>().WithMany().HasForeignKey(x => x.InboundMessageId).OnDelete(DeleteBehavior.Restrict);
+    }
+}
+
+internal sealed class MailoutAnswerConfiguration : IEntityTypeConfiguration<MailoutAnswer>
+{
+    public void Configure(EntityTypeBuilder<MailoutAnswer> b)
+    {
+        b.MapTenantOwned();
+        b.Property(x => x.ToAddress).HasMaxLength(320);
+        b.Property(x => x.Body);
+        b.Property(x => x.Signature).HasMaxLength(StaffSignature.Length + 400);
+        b.Property(x => x.Author).HasMaxLength(320);
+        b.Property(x => x.CreatedAt);
+        b.Property(x => x.Status).AsString();
+        b.Property(x => x.StatusAt);
+        b.Property(x => x.Attempts);
+        b.Property(x => x.ProviderMessageId).HasMaxLength(100);
+        b.Property(x => x.Note).HasMaxLength(500);
+        b.HasIndex(x => x.MailoutId);
+        b.HasIndex("TenantId", nameof(MailoutAnswer.Status));
+        b.HasOne<Mailout>().WithMany().HasForeignKey(x => x.MailoutId).OnDelete(DeleteBehavior.Restrict);
+        b.HasOne<MailoutRecipient>().WithMany().HasForeignKey(x => x.RecipientId).OnDelete(DeleteBehavior.Restrict);
+        b.HasOne<MailoutReply>().WithMany().HasForeignKey(x => x.ReplyId).OnDelete(DeleteBehavior.Restrict);
+        b.HasOne<Party>().WithMany().HasForeignKey(x => x.PartyId).OnDelete(DeleteBehavior.Restrict);
     }
 }
 

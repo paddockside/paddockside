@@ -143,7 +143,7 @@ public sealed class MailoutRecipient
     }
 }
 
-/// <summary>A reply to a mailout, from the address it was sent from: shown under the mailout for staff.</summary>
+/// <summary>A reply to a mailout, from the address it was sent from: shown on the mailout's page, or its social event's, until handled.</summary>
 public sealed class MailoutReply
 {
     /// <summary>For EF Core materialisation.</summary>
@@ -181,6 +181,104 @@ public sealed class MailoutReply
     public string Body { get; }
 
     public DateTimeOffset ReceivedAt { get; }
+
+    /// <summary>When staff answered it, or said it needs none; null while it waits.</summary>
+    public DateTimeOffset? HandledAt { get; private set; }
+
+    /// <summary>Who said it needs no answer; null if it was answered.</summary>
+    public string? SetAsideBy { get; private set; }
+
+    public bool Waiting => HandledAt is null;
+
+    public void AnsweredAt(DateTimeOffset at) => HandledAt ??= at;
+
+    public void SetAside(string by, DateTimeOffset at)
+    {
+        if (HandledAt is not null) return;
+        (HandledAt, SetAsideBy) = (at, by);
+    }
+}
+
+/// <summary>
+/// Staff's answer to someone who replied to a mailout or an invitation (David, 25 Nov 2026): one email to the address they
+/// wrote from. It carries the same reply address as the mailout did, so what they write next joins the conversation.
+/// </summary>
+public sealed class MailoutAnswer
+{
+    public const int MaxAttempts = 10;
+
+    /// <summary>For EF Core materialisation.</summary>
+    private MailoutAnswer() => (ToAddress, Body, Signature, Author) = (null!, null!, null!, null!);
+
+    public MailoutAnswer(MailoutRecipient recipient, MailoutReply answering, string body, string signature, string author, DateTimeOffset at)
+    {
+        if (answering.RecipientId != recipient.Id) throw new DomainException("That reply is from someone else.");
+        if (string.IsNullOrWhiteSpace(body)) throw new DomainException("Write your answer first.");
+        if (body.Length > Mailout.BodyLength) throw new DomainException("That answer is too long.");
+        TenantId = recipient.TenantId;
+        MailoutId = recipient.MailoutId;
+        RecipientId = recipient.Id;
+        PartyId = recipient.PartyId;
+        ReplyId = answering.Id;
+        ToAddress = answering.FromAddress;
+        Body = body.Trim();
+        Signature = signature;
+        Author = author;
+        CreatedAt = StatusAt = at;
+    }
+
+    public Guid Id { get; } = Guid.CreateVersion7();
+
+    public Guid TenantId { get; }
+
+    public Guid MailoutId { get; }
+
+    public Guid RecipientId { get; }
+
+    public Guid PartyId { get; }
+
+    /// <summary>The reply it answers: the email joins that one's thread in their mail app.</summary>
+    public Guid ReplyId { get; }
+
+    public string ToAddress { get; }
+
+    public string Body { get; }
+
+    public string Signature { get; }
+
+    /// <summary>The member of staff.</summary>
+    public string Author { get; }
+
+    public DateTimeOffset CreatedAt { get; }
+
+    public MailoutRecipientStatus Status { get; private set; } = MailoutRecipientStatus.Queued;
+
+    public DateTimeOffset StatusAt { get; private set; }
+
+    public int Attempts { get; private set; }
+
+    public string? ProviderMessageId { get; private set; }
+
+    /// <summary>Why it didn't go, or bounced.</summary>
+    public string? Note { get; private set; }
+
+    public void MarkSent(string providerMessageId, DateTimeOffset at) =>
+        (Status, ProviderMessageId, Note, StatusAt) = (MailoutRecipientStatus.Sent, providerMessageId, null, at);
+
+    public void RecordFailedAttempt(string error, bool permanent, DateTimeOffset at)
+    {
+        Attempts++;
+        Note = error.Length > 500 ? error[..500] : error;
+        if (permanent || Attempts >= MaxAttempts) (Status, StatusAt) = (MailoutRecipientStatus.Skipped, at);
+    }
+
+    /// <summary>What the provider reported; only ever forward, as for the mailout itself.</summary>
+    public void Record(MailoutRecipientStatus status, DateTimeOffset at, string? note = null)
+    {
+        if (status <= Status && status != MailoutRecipientStatus.Bounced) return;
+        (Status, StatusAt) = (status, at);
+        if (note is not null) Note = note;
+    }
 }
 
 /// <summary>

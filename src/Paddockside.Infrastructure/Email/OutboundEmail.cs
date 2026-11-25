@@ -141,6 +141,7 @@ public static class OutboundQueue
 public sealed class EmailDispatcher(
     TenantScopedDb tenants,
     IEmailSender sender,
+    TenantMailer mailer,
     OwnerEmailRenderer renderer,
     IMediaStore files,
     IOptions<EmailOptions> options,
@@ -164,6 +165,8 @@ public sealed class EmailDispatcher(
         if (MailoutsEnabled)
             foreach (var tenantId in await tenants.TenantsWithQueuedMailoutsAsync(20, cancellationToken))
                 accepted += await DispatchMailoutsAsync(tenantId, cancellationToken);
+        foreach (var tenantId in await tenants.TenantsWithQueuedMailoutAnswersAsync(20, cancellationToken))
+            accepted += await DispatchAnswersAsync(tenantId, cancellationToken);
         return accepted;
     }
 
@@ -171,6 +174,7 @@ public sealed class EmailDispatcher(
     public async Task<bool> HasQueuedAsync(CancellationToken cancellationToken) =>
         (await tenants.TenantsWithQueuedEmailAsync(1, cancellationToken)).Count > 0
         || (InvitationsEnabled && (await tenants.TenantsWithQueuedInvitationsAsync(1, cancellationToken)).Count > 0)
+        || (await tenants.TenantsWithQueuedMailoutAnswersAsync(1, cancellationToken)).Count > 0
         || (MailoutsEnabled && (await tenants.TenantsWithQueuedMailoutsAsync(1, cancellationToken)).Count > 0);
 
     /// <summary>Invitations carry a portal link, so they wait until the portal address is configured.</summary>
@@ -215,7 +219,7 @@ public sealed class EmailDispatcher(
                 ? Invitation(social, options.Value.PortalBaseUrl!, tenant.Slug, recipient.Token)
                 : null;
             var rendered = renderer.RenderMailout(tenant, mailout, party, unsubscribe, rsvp);
-            var result = await sender.SendAsync(new OutboundEmail(options.Value.FromAddress, Senders.For(tenant.Name), contact.Value, party.DisplayName, replyTo,
+            var result = await mailer.SendAsync(tenant, new OutboundEmail(options.Value.FromAddress, Senders.For(tenant.Name), contact.Value, party.DisplayName, replyTo,
                 rendered.Subject, rendered.Html, rendered.Text,
                 new Dictionary<string, string> { ["tenantId"] = tenant.Id.ToString(), ["mailoutRecipientId"] = recipient.Id.ToString() },
                 TrackOpens: true, Broadcast: true,
@@ -242,6 +246,70 @@ public sealed class EmailDispatcher(
 
         await db.SaveChangesAsync(cancellationToken);
         return accepted;
+    }
+
+    /// <summary>
+    /// Staff's answers to people who replied to a mailout or an invitation: one email each, not a mailout, so it goes to
+    /// them even if they've unsubscribed (they wrote to us), threaded under theirs in their mail app, and with the mailout's
+    /// own reply address so what they write next joins the conversation.
+    /// </summary>
+    private async Task<int> DispatchAnswersAsync(Guid tenantId, CancellationToken cancellationToken)
+    {
+        await using var db = tenants.For(tenantId);
+        var queued = await db.MailoutAnswers.Where(a => a.Status == MailoutRecipientStatus.Queued).OrderBy(a => a.CreatedAt).Take(BatchSize).ToListAsync(cancellationToken);
+        if (queued.Count == 0) return 0;
+
+        var tenant = await db.Tenants.SingleAsync(cancellationToken);
+        var recipientIds = queued.Select(a => a.RecipientId).ToList();
+        var recipients = await db.MailoutRecipients.Where(r => recipientIds.Contains(r.Id)).ToDictionaryAsync(r => r.Id, cancellationToken);
+        var mailoutIds = queued.Select(a => a.MailoutId).Distinct().ToList();
+        var mailouts = await db.Mailouts.Where(m => mailoutIds.Contains(m.Id)).ToDictionaryAsync(m => m.Id, cancellationToken);
+        var partyIds = queued.Select(a => a.PartyId).ToList();
+        var parties = await db.Parties.Where(p => partyIds.Contains(p.Id)).ToDictionaryAsync(p => p.Id, cancellationToken);
+        var replyIds = queued.Select(a => a.ReplyId).ToList();
+        var originals = await db.MailoutReplies.Where(r => replyIds.Contains(r.Id))
+            .Join(db.InboundMessages, r => r.InboundMessageId, m => m.Id, (r, m) => new { r.Id, r.Subject, m.Headers }).ToDictionaryAsync(x => x.Id, cancellationToken);
+
+        var accepted = 0;
+        foreach (var answer in queued)
+        {
+            var now = clock.GetUtcNow();
+            var party = parties[answer.PartyId];
+            var original = originals[answer.ReplyId];
+            var rendered = renderer.RenderMailoutAnswer(tenant, mailouts[answer.MailoutId], original.Subject, answer, party);
+            var thread = MessageIdOf(original.Headers) is { } id ? new Dictionary<string, string> { ["In-Reply-To"] = id, ["References"] = id } : null;
+            var result = await mailer.SendAsync(tenant, new OutboundEmail(options.Value.FromAddress, Senders.For(tenant.Name), answer.ToAddress, party.DisplayName,
+                $"m-{recipients[answer.RecipientId].Token}@{tenant.Slug}.{options.Value.InboundDomain}", rendered.Subject, rendered.Html, rendered.Text,
+                new Dictionary<string, string> { ["tenantId"] = tenant.Id.ToString(), ["mailoutAnswerId"] = answer.Id.ToString() }, Headers: thread), cancellationToken);
+
+            if (result.Accepted) { answer.MarkSent(result.ProviderMessageId!, now); accepted++; continue; }
+            answer.RecordFailedAttempt(result.Error ?? "Not accepted", result.PermanentFailure, now);
+            if (result.PermanentFailure) party.MarkUndeliverable(answer.ToAddress, now);
+        }
+
+        await db.SaveChangesAsync(cancellationToken);
+        return accepted;
+    }
+
+    /// <summary>The Message-ID of an email as it arrived, to thread an answer under it; null if it had none we can repeat.</summary>
+    private static string? MessageIdOf(string headers)
+    {
+        try
+        {
+            using var json = System.Text.Json.JsonDocument.Parse(headers);
+            foreach (var header in json.RootElement.EnumerateArray())
+            {
+                if (!string.Equals(header.GetProperty("Name").GetString(), "Message-ID", StringComparison.OrdinalIgnoreCase)) continue;
+                var value = header.GetProperty("Value").GetString()?.Trim();
+                return value is { Length: > 2 and < 500 } && value[0] == '<' && value[^1] == '>' && !value.Any(c => char.IsControl(c) || char.IsWhiteSpace(c)) ? value : null;
+            }
+        }
+        catch (Exception ex) when (ex is System.Text.Json.JsonException or KeyNotFoundException or InvalidOperationException)
+        {
+            // Not headers we can read: the answer simply starts its own thread.
+        }
+
+        return null;
     }
 
     /// <summary>A social event invitation's details and this recipient's own reply links (Rsvp.Link).</summary>
@@ -359,7 +427,7 @@ public sealed class EmailDispatcher(
                     media.GetValueOrDefault(message.Id),
                     portal is not null && message.Prompt is not null ? AnswerByEmail.Link(portal, tenant.Slug, address.Token) : null);
             }
-            var result = await sender.SendAsync(new OutboundEmail(
+            var result = await mailer.SendAsync(tenant, new OutboundEmail(
                 options.Value.FromAddress,
                 Senders.For(tenant.Name),
                 contact.Value,
@@ -467,7 +535,7 @@ public sealed class EmailDispatcher(
             var replyTo = Inbound.HorseInboxes.Current(horse, inboxes)?.EmailAddress(tenant, options.Value.InboundDomain) ?? options.Value.FromAddress;
             var rendered = renderer.RenderInvitation(tenant, horse, party, link);
             // No open-tracking pixel on anything carrying a sign-in link: a hidden tracker there reads as phishing.
-            var result = await sender.SendAsync(new OutboundEmail(options.Value.FromAddress, Senders.For(tenant.Name), contact.Value, party.DisplayName, replyTo,
+            var result = await mailer.SendAsync(tenant, new OutboundEmail(options.Value.FromAddress, Senders.For(tenant.Name), contact.Value, party.DisplayName, replyTo,
                 rendered.Subject, rendered.Html, rendered.Text,
                 new Dictionary<string, string> { ["tenantId"] = tenant.Id.ToString(), ["invitationId"] = invitation.Id.ToString() }, TrackOpens: false), cancellationToken);
 
