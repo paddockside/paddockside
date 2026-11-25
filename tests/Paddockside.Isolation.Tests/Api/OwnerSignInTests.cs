@@ -151,6 +151,72 @@ public sealed partial class OwnerSignInTests(IsolationDatabase db, ApiFactoryFix
     }
 
     [Fact]
+    public async Task A_used_link_still_goes_to_its_update_for_the_owner_already_signed_in_and_lets_nobody_else_in()
+    {
+        var seed = await SeedAsync();
+        using var staff = await Api.SignedInAsync(seed.TenantId, MemberRole.Coordinator);
+        await staff.PostApiAsync($"/api/events/{seed.EventId}/items",
+            new { audience = "Owners", scope = "Owners", step = (string?)null, channel = "Email", namedParties = Array.Empty<Guid>(), body = "Opened twice." });
+        await DispatchAsync();
+        string TokenFor(string name) => LinkPattern().Match(Api.Emails.Sent.Last(e => e.Email.ToName == name && e.Email.TextBody.Contains("Opened twice.")).Email.TextBody).Groups["token"].Value;
+        var token = TokenFor("Ann Owner");
+
+        using var phone = Api.Browser();
+        var first = (await (await phone.PostApiAsync("/api/client-auth/link", new { token })).Content.ReadFromJsonAsync<Signed>())!.Destination;
+        var again = await phone.PostApiAsync("/api/client-auth/link", new { token });
+        Assert.Equal(HttpStatusCode.OK, again.StatusCode);
+        Assert.Equal(first, (await again.Content.ReadFromJsonAsync<Signed>())!.Destination);
+        Assert.False(again.Headers.Contains("Set-Cookie") && string.Join(';', again.Headers.GetValues("Set-Cookie")).Contains("__Host-paddockside-device")); // not a new sign-in
+
+        // Forwarded: another owner signed in, staff, and someone not signed in are all refused.
+        using var bob = Api.Browser();
+        Assert.Equal(HttpStatusCode.OK, (await bob.PostApiAsync("/api/client-auth/link", new { token = TokenFor("Bob Owner") })).StatusCode);
+        Assert.Equal(HttpStatusCode.Gone, (await bob.PostApiAsync("/api/client-auth/link", new { token })).StatusCode);
+        Assert.Equal("Bob Owner", (await bob.GetFromJsonAsync<Session>("/api/my/session"))!.Name);
+        Assert.Equal(HttpStatusCode.Gone, (await staff.PostApiAsync("/api/client-auth/link", new { token })).StatusCode);
+        using var nobody = Api.Browser();
+        Assert.Equal(HttpStatusCode.Gone, (await nobody.PostApiAsync("/api/client-auth/link", new { token })).StatusCode);
+
+        // Signed out again, it's the sign-in page.
+        await phone.PostApiAsync("/api/auth/sign-out", new { });
+        Assert.Equal(HttpStatusCode.Gone, (await phone.PostApiAsync("/api/client-auth/link", new { token })).StatusCode);
+
+        // The sign-in email's own link, tapped twice.
+        using var laptop = Api.Browser();
+        await laptop.PostApiAsync("/api/client-auth/email", new { email = seed.AnnEmail });
+        var signIn = LatestLinkTo(seed.AnnEmail);
+        Assert.Equal(HttpStatusCode.OK, (await laptop.PostApiAsync("/api/client-auth/link", new { token = signIn })).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await laptop.PostApiAsync("/api/client-auth/link", new { token = signIn })).StatusCode);
+        Assert.Equal(HttpStatusCode.Gone, (await bob.PostApiAsync("/api/client-auth/link", new { token = signIn })).StatusCode);
+    }
+
+    [Fact]
+    public async Task A_used_link_from_another_business_they_own_with_switches_to_it()
+    {
+        var one = await SeedAsync();
+        var two = await SeedAsync(annsEmail: one.AnnEmail);
+        async Task<string> LinkFromAsync(Seed seed, string body)
+        {
+            using var staff = await Api.SignedInAsync(seed.TenantId, MemberRole.Coordinator);
+            await staff.PostApiAsync($"/api/events/{seed.EventId}/items",
+                new { audience = "Owners", scope = "Owners", step = (string?)null, channel = "Email", namedParties = Array.Empty<Guid>(), body });
+            await DispatchAsync();
+            return LinkPattern().Match(Api.Emails.Sent.Last(e => e.Email.ToAddress == one.AnnEmail && e.Email.TextBody.Contains(body)).Email.TextBody).Groups["token"].Value;
+        }
+
+        var (first, second) = (await LinkFromAsync(one, "From the first."), await LinkFromAsync(two, "From the second."));
+        using var phone = Api.Browser();
+        await phone.PostApiAsync("/api/client-auth/link", new { token = first });
+        await phone.PostApiAsync("/api/client-auth/link", new { token = second });
+        Assert.Equal(two.TenantName, (await phone.GetFromJsonAsync<Session>("/api/my/session"))!.TenantName);
+
+        var again = await phone.PostApiAsync("/api/client-auth/link", new { token = first });
+        Assert.Equal(HttpStatusCode.OK, again.StatusCode);
+        Assert.StartsWith($"/my/events/{one.EventId}", (await again.Content.ReadFromJsonAsync<Signed>())!.Destination);
+        Assert.Equal(one.TenantName, (await phone.GetFromJsonAsync<Session>("/api/my/session"))!.TenantName);
+    }
+
+    [Fact]
     public async Task An_owner_sees_only_what_is_theirs_and_none_of_the_staff_side()
     {
         var seed = await SeedAsync();
@@ -291,7 +357,7 @@ public sealed partial class OwnerSignInTests(IsolationDatabase db, ApiFactoryFix
     /// A tenant of its own. Bel Esprit, owned by Ann and Bob. Her race has a message to owners (Bob and Ann each
     /// replied), a staff note and a message to the trainer.
     /// </summary>
-    private async Task<Seed> SeedAsync(bool invite = true)
+    private async Task<Seed> SeedAsync(bool invite = true, string? annsEmail = null)
     {
         var now = DateTimeOffset.UtcNow;
         var suffix = Guid.NewGuid().ToString("N")[..8];
@@ -299,7 +365,7 @@ public sealed partial class OwnerSignInTests(IsolationDatabase db, ApiFactoryFix
         var syndicate = new HoldingEntity(tenant.Id, "Syndicate", HoldingEntityType.ManagedSyndicate);
         var ann = new Party(tenant.Id, "Ann Owner");
         var bob = new Party(tenant.Id, "Bob Owner");
-        var annEmail = $"ann-{suffix}@owners.test";
+        var annEmail = annsEmail ?? $"ann-{suffix}@owners.test";
         var annMobile = $"+614{System.Security.Cryptography.RandomNumberGenerator.GetInt32(0, 100_000_000):D8}"; // her own number in every seed
         ann.AddEmail(annEmail);
         ann.AddMobile(annMobile);

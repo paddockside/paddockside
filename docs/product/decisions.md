@@ -167,6 +167,7 @@ Also decided:
 **P72. On a phone or tablet, staff have Today and Horses always showing and everything else under one Menu button, which carries the Pending count.** One row, so the page starts near the top. Staff only: design-system.md §2.0's bottom bar for owners is unchanged.
 **P73. A business can have a square logo as well as its wide one, used wherever a wide one won't fit.** The top of a phone for owners and staff, the staff rail, and beside updates from the business. Emails keep the wide logo; without a square one, initials. Not the home-screen icon yet (design-system.md §2.2).
 **P74. Owners never see a member of staff's email address in the portal.** Staff who've set no name are the business there, as already in emails.
+**P75. A used or expired link still goes to its update on a device where the owner it was sent to is already signed in.** It signs nobody in: anyone else, and that owner signed out, gets the sign-in page as before.
 
 ---
 

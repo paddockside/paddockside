@@ -39,7 +39,7 @@ Default and only method for the Client class in v1.
 
 - **Magic link by email**, valid 15 minutes, single use, bound to the browser that requested it where possible (a cookie set at request time; if absent, fall back to a 6-digit code shown alongside so the link can be opened on another device).
 - **6-digit code by SMS** as the alternative, valid 10 minutes, five attempts then a cool-down.
-- **Notification deep links** carry a short-lived signed token that opens the exact stream item *and* signs the person in if they have no session, because "tap the acceptance notification, see the acceptance" is the whole experience on a phone. Tokens in notifications are single-use and expire in 7 days; a used or expired one lands on the plain sign-in page with the destination remembered.
+- **Notification deep links** carry a short-lived signed token that opens the exact stream item *and* signs the person in if they have no session, because "tap the acceptance notification, see the acceptance" is the whole experience on a phone. Tokens in notifications are single-use and expire in 7 days; a used or expired one lands on the plain sign-in page with the destination remembered, unless the owner it was sent to is already signed in on that device: then it goes straight to the destination (P75).
 - **Sessions** for clients are long: 90 days on a device they have used before, refreshed on activity. The cost of re-authenticating an owner is high (they stop reading), and the data they can reach is their own horses.
 - **Passkeys** are a v1.1 addition, not v1; the flow above is designed so a passkey simply replaces the "send me a code" step.
 

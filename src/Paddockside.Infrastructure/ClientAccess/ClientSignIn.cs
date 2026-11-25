@@ -13,7 +13,8 @@ namespace Paddockside.Infrastructure.ClientAccess;
 public sealed record ClientSignInResult(Person Person, Guid TenantId, Guid PartyId, string Destination);
 
 /// <summary>Why a link or code did not work, in words an owner can act on.</summary>
-public sealed record ClientSignInFailure(string Message, string? ReturnPath = null);
+/// <param name="Spent">A link that was one of ours, used or expired: it signs nobody in.</param>
+public sealed record ClientSignInFailure(string Message, string? ReturnPath = null, SignInToken? Spent = null);
 
 /// <summary>
 /// Passwordless sign-in for owners (identity-access.md §4.1): an emailed link (15 minutes, single use) with a code
@@ -155,11 +156,24 @@ public sealed class ClientSignIn(
         if (!token.IsUsable(now))
             return new ClientSignInFailure(token.UsedAt is not null
                 ? "That link has already been used. Ask for a new one below and we'll take you straight there."
-                : "That link has expired. Ask for a new one below and we'll take you straight there.", token.ReturnPath);
+                : "That link has expired. Ask for a new one below and we'll take you straight there.", token.ReturnPath, token);
 
         token.UsedAt = now;
         await identity.SaveChangesAsync(cancellationToken);
         return await CompleteAsync(token, cancellationToken);
+    }
+
+    /// <summary>
+    /// Whether the owner already signed in here is the one a used or expired link was for: if so, where they act in its
+    /// business, so the link can still take them where it goes. It gives no access they don't have.
+    /// </summary>
+    public async Task<(Guid TenantId, Guid PartyId)?> AlreadyInAsync(SignInToken spent, Guid personId, string? email, Guid tenantId, Guid partyId, CancellationToken cancellationToken)
+    {
+        // A link asked for on the sign-in page is for an address; one in an update is for an owner in one business.
+        if (spent is not { TenantId: { } linkTenant, PartyId: { } linkParty })
+            return spent.Purpose == SignInTokenPurpose.EmailLink && email is not null && string.Equals(spent.Email, email, StringComparison.OrdinalIgnoreCase) ? (tenantId, partyId) : null;
+        if (linkTenant == tenantId && linkParty == partyId) return (tenantId, partyId);
+        return await PartyInTenantAsync(personId, linkTenant, cancellationToken) == linkParty ? (linkTenant, linkParty) : null;
     }
 
     /// <summary>A code typed into the browser that asked for it (from the email or the text).</summary>
