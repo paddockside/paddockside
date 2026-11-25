@@ -34,7 +34,10 @@
                         <a href="my/horses/@_page.HorseId" class="underline underline-offset-4">@_page.Horse</a>
                     </nav>
                     <h1 class="text-title font-heading leading-tight sm:text-heading">@(_page.Heading ?? $"{_page.Horse}: {_page.Event.Title}")</h1>
-                    <p class="text-text-muted">@Detail</p>
+                    @if ((_page.Glance ?? []).Count > 0 || _page.Heading?.EndsWith(_page.Event.Title, StringComparison.Ordinal) == false)
+                    {
+                        <p class="text-text-muted">@Detail</p>
+                    }
                 </div>
             </div>
 
@@ -60,47 +63,53 @@
 
         <aside class="grid grid-cols-[minmax(0,1fr)] gap-6 rounded-card border border-border-subtle bg-surface-raised px-6 py-6 lg:sticky lg:top-6 lg:col-start-2 lg:row-span-3 lg:row-start-1"
                aria-label="About this event">
-            <section class="grid gap-3">
-                <h2 class="@SideHeading">@(_page.GlanceTitle ?? "At a glance")</h2>
-                <dl class="grid grid-cols-[90px_minmax(0,1fr)] gap-x-3 gap-y-2">
-                    <dt class="text-text-muted">When</dt>
-                    <dd class="font-strong">@_page.Event.KeyDate</dd>
-                    @foreach (var f in _page.Glance ?? [])
-                    {
-                        <dt class="text-text-muted">@f.Label</dt>
-                        <dd>@f.Value</dd>
-                    }
-                    @if (_page.RaceDay is { } raceDay)
-                    {
-                        @if (raceDay.Gate is not null)
+            @if (HasGlance)
+            {
+                <section class="grid gap-3">
+                    <h2 class="@SideHeading">@(_page.GlanceTitle ?? "At a glance")</h2>
+                    <dl class="grid grid-cols-[90px_minmax(0,1fr)] gap-x-3 gap-y-2">
+                        @if (HasDate)
                         {
-                            <dt class="text-text-muted">Gate</dt>
-                            <dd>@raceDay.Gate</dd>
+                            <dt class="text-text-muted">When</dt>
+                            <dd class="font-strong">@_page.Event.KeyDate</dd>
                         }
-                        @if (raceDay.Dining is not null)
+                        @foreach (var f in _page.Glance ?? [])
                         {
-                            <dt class="text-text-muted">Dining</dt>
-                            <dd>@raceDay.Dining</dd>
+                            <dt class="text-text-muted">@f.Label</dt>
+                            <dd>@f.Value</dd>
                         }
-                        @if (raceDay.Note is not null)
+                        @if (_page.RaceDay is { } raceDay)
                         {
-                            <dt class="text-text-muted">Also</dt>
-                            <dd>@raceDay.Note</dd>
-                        }
-                    }
-                    @if (_page.Tickets is { } tickets)
-                    {
-                        <dt class="text-text-muted">Tickets</dt>
-                        <dd class="grid gap-1">
-                            <span class="font-strong @(tickets.Confirmed ? "text-action-primary-bg" : null)">@tickets.Line</span>
-                            @if (tickets.Note is not null)
+                            @if (raceDay.Gate is not null)
                             {
-                                <span class="text-small text-text-muted">@tickets.Note</span>
+                                <dt class="text-text-muted">Gate</dt>
+                                <dd>@raceDay.Gate</dd>
                             }
-                        </dd>
-                    }
-                </dl>
-            </section>
+                            @if (raceDay.Dining is not null)
+                            {
+                                <dt class="text-text-muted">Dining</dt>
+                                <dd>@raceDay.Dining</dd>
+                            }
+                            @if (raceDay.Note is not null)
+                            {
+                                <dt class="text-text-muted">Also</dt>
+                                <dd>@raceDay.Note</dd>
+                            }
+                        }
+                        @if (_page.Tickets is { } tickets)
+                        {
+                            <dt class="text-text-muted">Tickets</dt>
+                            <dd class="grid gap-1">
+                                <span class="font-strong @(tickets.Confirmed ? "text-action-primary-bg" : null)">@tickets.Line</span>
+                                @if (tickets.Note is not null)
+                                {
+                                    <span class="text-small text-text-muted">@tickets.Note</span>
+                                }
+                            </dd>
+                        }
+                    </dl>
+                </section>
+            }
 
             @if (_page.Share is { } share)
             {
@@ -152,8 +161,8 @@
                         </div>
                         <div class="grid min-w-0 gap-2 pb-6 pt-3">
                             <p class="text-small text-text-muted sm:hidden">@item.At</p>
-                            <div class="rounded-card @(target ? "ring-4 ring-focus ring-offset-4 ring-offset-surface-default" : null)">
-                                <OwnerItemCard Item="item" TenantName="@TenantName" ViewerName="@Session.Current?.Name" Busy="@(_answering == item.Id)"
+                            <div class="rounded-card @(target ? "ring-2 ring-focus" : null)">
+                                <OwnerItemCard Item="item" TenantName="@TenantName" TenantMark="@Session.Current?.TenantSquareLogoUrl" Dated="false" ViewerName="@Session.Current?.Name" Busy="@(_answering == item.Id)"
                                                AnswerError="@_answerError.GetValueOrDefault(item.Id)" OnAnswer="answer => AnswerAsync(item, answer)">
                                     @if (item.CanReply)
                                     {
@@ -173,7 +182,7 @@
             </ol>
         </section>
 
-        <section id="contact" class="sticky bottom-[calc(64px+env(safe-area-inset-bottom))] z-10 grid gap-2 rounded-t-card border border-b-0 border-border-subtle bg-surface-raised p-4 sm:px-[22px] lg:bottom-0 lg:col-start-1"
+        <section id="contact" class="sticky bottom-[calc(64px+env(safe-area-inset-bottom))] z-10 grid gap-2 rounded-card border border-border-subtle bg-surface-raised p-4 sm:px-[22px] lg:bottom-0 lg:col-start-1"
                  aria-label="Contact @TenantName">
             @if (_contactSent)
             {
@@ -183,8 +192,8 @@
             }
             <form class="flex flex-wrap items-end gap-3" @onsubmit="ContactAsync" @onsubmit:preventDefault>
                 <label for="contact-body" class="sr-only">Your message to @TenantName about @_page.Horse</label>
-                <textarea id="contact-body" rows="1" class="input min-h-[56px] min-w-0 flex-1 basis-[14rem] rounded-card py-3"
-                          @bind="_contactDraft" placeholder="@($"Write to {TenantName} about {_page.Horse}…")"></textarea>
+                <textarea id="contact-body" rows="1" class="input min-h-[56px] min-w-0 flex-1 basis-[10rem] rounded-card py-3"
+                          @bind="_contactDraft" placeholder="Write to the team…"></textarea>
                 <button type="submit" class="btn-primary min-h-[56px]" disabled="@_contacting">Send</button>
             </form>
             @if (_contactError is not null)
@@ -217,6 +226,11 @@
     /// <summary>The race and its facts on one line: "Randwick, Race 6 · Barrier 9 · Jockey T. Berry".</summary>
     private string Detail => string.Join(" · ", new[] { _page!.Event.Title }
         .Concat((_page.Glance ?? []).Take(3).Select(f => f.Value.Length > 0 && char.IsDigit(f.Value[0]) ? $"{f.Label} {f.Value}" : f.Value)));
+
+    /// <summary>General updates have no day of their own.</summary>
+    private bool HasDate => !string.IsNullOrWhiteSpace(_page!.Event.KeyDate);
+
+    private bool HasGlance => HasDate || (_page!.Glance ?? []).Count > 0 || _page.RaceDay is not null || _page.Tickets is not null;
 
     /// <summary>"Thursday 10 October, 9:12 am" as two lines for the "when" column.</summary>
     private static (string Day, string? Time) When(string at)

@@ -37,12 +37,16 @@ public static class OperatorEmailEndpoints
         });
         ops.MapPut("/look", (Guid id, Branding.LookRequest request, ClaimsPrincipal user, TenantScopedDb tenants, AuditLog audit, CancellationToken ct) =>
             ChangeAsync(id, user, tenants, audit, "Changed the colour or business details on emails", db => Branding.SaveLookAsync(db, request, ct), ct));
-        ops.MapPost("/logo", (Guid id, HttpRequest request, ClaimsPrincipal user, TenantScopedDb tenants, IMediaStore store, AuditLog audit, ILoggerFactory loggers, CancellationToken ct) =>
-                ChangeAsync(id, user, tenants, audit, "Uploaded a logo", db => Branding.SaveLogoAsync(db, request, store, loggers.CreateLogger("Branding"), ct), ct))
-            .WithMetadata(new Microsoft.AspNetCore.Mvc.RequestSizeLimitAttribute(Pictures.MaxLogoBytes + 64 * 1024))
-            .DisableAntiforgery(); // the API's own request header guards unsafe requests (RequireApiRequestHeader)
-        ops.MapPost("/logo/remove", (Guid id, ClaimsPrincipal user, TenantScopedDb tenants, AuditLog audit, CancellationToken ct) =>
-            ChangeAsync(id, user, tenants, audit, "Removed the logo", db => Branding.RemoveLogoAsync(db, ct), ct));
+        foreach (var square in new[] { false, true })
+        {
+            var (logo, name) = square ? ("/square-logo", "square logo") : ("/logo", "logo");
+            ops.MapPost(logo, (Guid id, HttpRequest request, ClaimsPrincipal user, TenantScopedDb tenants, IMediaStore store, AuditLog audit, ILoggerFactory loggers, CancellationToken ct) =>
+                    ChangeAsync(id, user, tenants, audit, $"Uploaded a {name}", db => Branding.SaveLogoAsync(db, request, store, loggers.CreateLogger("Branding"), ct, square), ct))
+                .WithMetadata(new Microsoft.AspNetCore.Mvc.RequestSizeLimitAttribute(Pictures.MaxLogoBytes + 64 * 1024))
+                .DisableAntiforgery(); // the API's own request header guards unsafe requests (RequireApiRequestHeader)
+            ops.MapPost($"{logo}/remove", (Guid id, ClaimsPrincipal user, TenantScopedDb tenants, AuditLog audit, CancellationToken ct) =>
+                ChangeAsync(id, user, tenants, audit, $"Removed the {name}", db => Branding.RemoveLogoAsync(db, ct, square), ct));
+        }
         ops.MapGet("/samples", Samples);
         ops.MapPost("/sample", Sample);
         ops.MapPost("/preview", Preview);

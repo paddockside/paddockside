@@ -11,7 +11,7 @@
     is wider, for its side panel.
 *@
 <div class="grid min-h-screen grid-cols-[minmax(0,1fr)] grid-rows-[auto_1fr_auto] bg-surface-default text-body-owner">
-    <AppHeader Side="Side.Owner" TenantName="@Session.Current?.TenantName" LogoUrl="@Session.Current?.TenantLogoUrl"
+    <AppHeader Side="Side.Owner" TenantName="@Session.Current?.TenantName" LogoUrl="@Session.Current?.TenantLogoUrl" SquareLogoUrl="@Session.Current?.TenantSquareLogoUrl"
                OtherTenants="OtherTenants" OnSwitchTenant="Switch">
         <Actions>
             @if (Session.Current is { } me)

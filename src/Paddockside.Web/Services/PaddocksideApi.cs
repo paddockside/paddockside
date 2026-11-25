@@ -10,7 +10,7 @@ public sealed record EnrolmentDetails(string SharedKey, string AuthenticatorUri,
 
 public sealed record RecoveryCodes(IReadOnlyList<string> Codes);
 
-public sealed record SessionInfo(string Email, string TenantName, string Role, bool IsOperator = false, string? SupportUntil = null);
+public sealed record SessionInfo(string Email, string TenantName, string Role, bool IsOperator = false, string? SupportUntil = null, string? SquareLogoUrl = null);
 
 /// <param name="Status">Where it's up to now; null until staff first set it.</param>
 /// <param name="Stale">Unchanged for four weeks: worth checking.</param>
@@ -224,7 +224,8 @@ public sealed record MailoutAttachmentView(Guid Id, string FileName, string Size
 public sealed record SignatureView(string Text);
 
 /// <summary>How a business's emails look; a null colour is Paddockside's green.</summary>
-public sealed record BrandView(string Name, string? LogoUrl, int? LogoWidth, int? LogoHeight, string? Colour, string? Footer, string StandardColour);
+public sealed record BrandView(string Name, string? LogoUrl, int? LogoWidth, int? LogoHeight, string? Colour, string? Footer, string StandardColour,
+    string? SquareLogoUrl = null);
 
 public sealed record LogoSaved(BrandView Brand, string? Warning);
 
@@ -377,7 +378,8 @@ public sealed record MyInvitation(Guid Id, string Title, string Kind, string Whe
 
 public sealed record MyInvitationPage(MyInvitation Event, int Places, int MostPlaces, string? Note, string? Message, bool Full, bool Emailed);
 
-public sealed record OwnerSession(string Name, string? Email, string? Mobile, string TenantName, string? TenantLogoUrl, List<OwnerTenant> Tenants);
+public sealed record OwnerSession(string Name, string? Email, string? Mobile, string TenantName, string? TenantLogoUrl, List<OwnerTenant> Tenants,
+    string? TenantSquareLogoUrl = null);
 
 public sealed record OwnerHorse(Guid Id, string Name, string? SexAge, string? Pedigree, string? Next, string LastUpdate, int Unread,
     string? Status = null, string? StatusShort = null, string? StatusSet = null);
@@ -750,16 +752,16 @@ public sealed class PaddocksideApi(HttpClient http)
 
     public Task<ApiResult<BrandView>> SaveEmailLookAsync(string path, string? colour, string? footer) => PutAsync<BrandView>($"{path}/look", new { colour, footer });
 
-    public async Task<ApiResult<LogoSaved>> UploadLogoAsync(string path, Microsoft.AspNetCore.Components.Forms.IBrowserFile file, long maxBytes)
+    public async Task<ApiResult<LogoSaved>> UploadLogoAsync(string path, Microsoft.AspNetCore.Components.Forms.IBrowserFile file, long maxBytes, bool square = false)
     {
         using var form = new MultipartFormDataContent();
         var content = new StreamContent(file.OpenReadStream(maxBytes));
         content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(string.IsNullOrEmpty(file.ContentType) ? "application/octet-stream" : file.ContentType);
         form.Add(content, "file", file.Name);
-        return await SendContentAsync<LogoSaved>(HttpMethod.Post, $"{path}/logo", form);
+        return await SendContentAsync<LogoSaved>(HttpMethod.Post, $"{path}/{(square ? "square-logo" : "logo")}", form);
     }
 
-    public Task<ApiResult<BrandView>> RemoveLogoAsync(string path) => PostAsync<BrandView>($"{path}/logo/remove", new { });
+    public Task<ApiResult<BrandView>> RemoveLogoAsync(string path, bool square = false) => PostAsync<BrandView>($"{path}/{(square ? "square-logo" : "logo")}/remove", new { });
 
     public Task<ApiResult<EmailSampleView>> EmailSampleAsync(string path, string key, string? colour, string? footer) =>
         PostAsync<EmailSampleView>($"{path}/sample", new { key, colour, footer });

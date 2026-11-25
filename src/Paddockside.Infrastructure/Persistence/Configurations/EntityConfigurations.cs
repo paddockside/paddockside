@@ -24,6 +24,7 @@ internal sealed class TenantConfiguration : IEntityTypeConfiguration<Tenant>
         b.Property(x => x.LogoUrl).HasMaxLength(500);
         b.Property(x => x.LogoWidth);
         b.Property(x => x.LogoHeight);
+        b.Property(x => x.SquareLogoUrl).HasMaxLength(500);
         b.Property(x => x.BrandColour).HasMaxLength(7).IsUnicode(false);
         b.Property(x => x.FooterDetails).HasMaxLength(500);
         b.Property(x => x.SenderAddress).HasMaxLength(320);

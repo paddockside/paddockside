@@ -8,8 +8,17 @@
 *@
 <header class="relative z-30 border-b border-border-subtle bg-surface-default" @onkeydown="Key">
     <div class="flex min-w-0 items-center justify-between gap-2 bg-surface-default px-4 py-2 sm:gap-3 sm:px-6">
-        <span aria-hidden="true" class="grid size-[40px] shrink-0 place-items-center min-[360px]:hidden rounded-control bg-action-secondary-bg font-heading text-text-primary sm:grid">@Monogram</span>
-        <span class="line-clamp-2 min-w-0 flex-1 break-words text-small font-heading leading-tight max-[359px]:sr-only sm:text-title">@Me.TenantName</span>
+        @* On a phone there's room for one or the other: the square logo if there is one, otherwise the name (initials on the narrowest). *@
+        @if (Me.SquareLogoUrl is { } logo)
+        {
+            <img src="@logo" alt="" class="size-[40px] shrink-0 rounded-control" />
+            <span class="line-clamp-2 min-w-0 flex-1 break-words text-small font-heading leading-tight max-[639px]:sr-only sm:text-title">@Me.TenantName</span>
+        }
+        else
+        {
+            <span aria-hidden="true" class="grid size-[40px] shrink-0 place-items-center min-[360px]:hidden rounded-control bg-action-secondary-bg font-heading text-text-primary sm:grid">@Monogram</span>
+            <span class="line-clamp-2 min-w-0 flex-1 break-words text-small font-heading leading-tight max-[359px]:sr-only sm:text-title">@Me.TenantName</span>
+        }
 
         <nav aria-label="Main" class="flex shrink-0 items-center">
             @foreach (var link in StaffNav.First)

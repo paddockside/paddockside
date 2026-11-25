@@ -12,12 +12,16 @@
         }
         else
         {
+            @* The name is right beside it as text, so the image is decorative. Square on a phone when there is one. *@
+            @if (SquareLogoUrl is not null)
+            {
+                <img src="@SquareLogoUrl" alt="" class="size-[40px] shrink-0 rounded-control @(LogoUrl is null ? null : "sm:hidden")" />
+            }
             @if (LogoUrl is not null)
             {
-                @* The name is right beside it as text, so the image is decorative. *@
-                <img src="@LogoUrl" alt="" class="h-[40px] max-w-[160px] object-contain" />
+                <img src="@LogoUrl" alt="" class="h-[40px] max-w-[160px] object-contain @(SquareLogoUrl is null ? null : "hidden sm:block")" />
             }
-            else
+            else if (SquareLogoUrl is null)
             {
                 <span class="grid size-[40px] shrink-0 place-items-center rounded-control font-heading @(Side == Side.Owner ? "bg-action-primary-bg text-action-primary-fg" : "bg-action-secondary-bg text-text-primary")" aria-hidden="true">@Monogram</span>
             }
@@ -64,6 +68,9 @@
 
     /// <summary>The tenant's logo; without one, a monogram stands in.</summary>
     [Parameter] public string? LogoUrl { get; set; }
+
+    /// <summary>The logo as a square, for a phone; the wide one is used there without it.</summary>
+    [Parameter] public string? SquareLogoUrl { get; set; }
 
     /// <summary>The person's other memberships. Empty for almost everyone, and then no switcher is shown.</summary>
     [Parameter] public IReadOnlyList<TenantOption> OtherTenants { get; set; } = [];

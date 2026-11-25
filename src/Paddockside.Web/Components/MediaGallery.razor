@@ -36,7 +36,8 @@
         {
             <figure class="grid gap-1">
                 <video controls preload="metadata" playsinline class="max-h-[480px] w-full rounded-control bg-surface-sunken">
-                    <source src="@Url(video)" type="@(video.ContentType == "video/quicktime" ? "video/mp4" : video.ContentType)" />
+                    @* From a thousandth of a second in: an iPhone then shows that picture, not an empty box, before it's played. *@
+                    <source src="@(Url(video) + "#t=0.001")" type="@(video.ContentType == "video/quicktime" ? "video/mp4" : video.ContentType)" />
                 </video>
                 <figcaption class="text-small text-text-muted">
                     @Size(video) · <a href="@Url(video, download: true)" class="underline underline-offset-4">Download the video</a>

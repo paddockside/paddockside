@@ -66,7 +66,7 @@ public static class AuthEndpoints
     public sealed record RecoveryCodes(IReadOnlyList<string> Codes);
 
     /// <param name="SupportUntil">Set while an operator is inside the tenant on a support session: when it ends.</param>
-    public sealed record SessionInfo(string Email, string TenantName, string Role, bool IsOperator, string? SupportUntil = null);
+    public sealed record SessionInfo(string Email, string TenantName, string Role, bool IsOperator, string? SupportUntil = null, string? SquareLogoUrl = null);
 
     private static IResult SignInFailed() =>
         Results.Problem(statusCode: StatusCodes.Status401Unauthorized, title: "That did not match. Check your details and try again.");
@@ -250,7 +250,8 @@ public static class AuthEndpoints
             tenant.Name,
             user.FindFirstValue(SessionClaims.Role)!,
             user.FindFirstValue(SessionClaims.Operator) == "true" && !user.HasClaim(SessionClaims.KeptPhone, "true"),
-            supportUntil is { } until ? Formatting.Words.Time(until) : null));
+            supportUntil is { } until ? Formatting.Words.Time(until) : null,
+            tenant.SquareLogoUrl));
     }
 
     public sealed record StaffTenantOption(Guid Id, string Name, string Role, bool Current);

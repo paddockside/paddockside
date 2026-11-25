@@ -43,6 +43,29 @@
         </div>
 
         <div class="grid gap-2">
+            <span class="font-strong">Square logo</span>
+            <div class="flex flex-wrap items-center gap-3">
+                @if (_brand.SquareLogoUrl is not null)
+                {
+                    <img src="@_brand.SquareLogoUrl" alt="@($"{_brand.Name} square logo")" class="size-[64px] rounded-control border border-border-subtle" />
+                }
+                <label class="btn-secondary cursor-pointer focus-within:outline focus-within:outline-2 focus-within:outline-offset-2 @(_busy ? "opacity-70" : null)">
+                    @(_brand.SquareLogoUrl is null ? "Upload a square logo" : "Change the square logo")
+                    <InputFile class="sr-only" accept="image/png,image/jpeg" OnChange="UploadSquareAsync" disabled="@_busy" />
+                </label>
+                @if (_brand.SquareLogoUrl is not null)
+                {
+                    <button type="button" class="btn-link" disabled="@_busy" @onclick="RemoveSquareAsync">Remove it</button>
+                }
+            </div>
+            <span class="text-small text-text-muted">A symbol or initials, for where the wide logo won't fit: the top of a phone, the staff menu, and beside updates from the business. PNG or JPG, up to 5 MB, ideally at least 512 pixels each way. Without one, the business's initials show. Emails keep the logo above.</span>
+            @if (_squareWarning is not null)
+            {
+                <p class="rounded-control bg-status-warning-bg px-4 py-3 text-status-warning-fg" role="status">@_squareWarning</p>
+            }
+        </div>
+
+        <div class="grid gap-2">
             <label for="look-colour" class="font-strong">Colour</label>
             <div class="flex flex-wrap items-center gap-3">
                 <input id="look-colour" type="color" class="h-[48px] w-[72px] cursor-pointer rounded-control border border-border-strong bg-surface-raised p-1" value="@(_colour ?? _brand.StandardColour)" @onchange="ColourAsync" />
@@ -100,6 +123,9 @@
 
     [Parameter, EditorRequired] public BrandView Brand { get; set; } = null!;
 
+    /// <summary>A square logo was uploaded or removed: what shows it elsewhere on the page can catch up.</summary>
+    [Parameter] public EventCallback OnSquareLogo { get; set; }
+
     /// <summary>The samples to choose from; a few kinds unless more are given.</summary>
     [Parameter] public IReadOnlyList<(string Key, string Label)> Choices { get; set; } =
         [("update", "Update from staff"), ("barrier", "Barrier draw"), ("photos", "Photos"), ("tickets", "Owners tickets question"), ("invitation", "Social event invitation"), ("mailout", "Mailout"), ("signin", "Sign-in link and code")];
@@ -115,6 +141,7 @@
     private string? _error;
     private string? _notice;
     private string? _warning;
+    private string? _squareWarning;
     private bool _busy;
 
     private bool Changed => _colour != _brand.Colour || (_footer ?? "").Trim() != (_brand.Footer ?? "");
@@ -124,7 +151,7 @@
     protected override async Task OnParametersSetAsync()
     {
         if (_shown == Path) return; // a re-render of the page around it keeps what's being typed
-        (_shown, _brand, _colour, _footer, _error, _notice, _warning, _html) = (Path, Brand, Brand.Colour, Brand.Footer, null, null, null, null);
+        (_shown, _brand, _colour, _footer, _error, _notice, _warning, _squareWarning, _html) = (Path, Brand, Brand.Colour, Brand.Footer, null, null, null, null, null);
         await SampleAsync();
     }
 
@@ -195,6 +222,26 @@
         if (!result.Succeeded) { _error = result.Error; return; }
         (_brand, _notice) = (result.Value!, "Removed. Emails show the business's name instead.");
         await SampleAsync();
+    });
+
+    private Task UploadSquareAsync(InputFileChangeEventArgs e) => Run(async () =>
+    {
+        _squareWarning = null;
+        if (e.File.Size > MaxBytes) { _error = "That file is too big: the most is 5 MB."; return; }
+        var result = await Api.UploadLogoAsync(Path, e.File, MaxBytes, square: true);
+        if (!result.Succeeded) { _error = result.Error; return; }
+        (_brand, _squareWarning) = (result.Value!.Brand, result.Value.Warning);
+        _notice = "The square logo is saved.";
+        await OnSquareLogo.InvokeAsync();
+    });
+
+    private Task RemoveSquareAsync() => Run(async () =>
+    {
+        _squareWarning = null;
+        var result = await Api.RemoveLogoAsync(Path, square: true);
+        if (!result.Succeeded) { _error = result.Error; return; }
+        (_brand, _notice) = (result.Value!, "Removed. The business's initials show instead.");
+        await OnSquareLogo.InvokeAsync();
     });
 
     private const long MaxBytes = 5L * 1024 * 1024;

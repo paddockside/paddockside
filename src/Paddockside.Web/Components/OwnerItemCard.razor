@@ -28,7 +28,10 @@ else if (Item.Mine)
         <div class="grid min-w-0 flex-1 gap-1">
             <p class="flex flex-wrap items-baseline gap-x-2">
                 <span class="font-heading">@(Preview ? "They wrote" : "You wrote") to @TenantName</span>
-                <span class="text-small text-text-muted">@Item.At</span>
+                @if (Dated)
+                {
+                    <span class="text-small text-text-muted">@Item.At</span>
+                }
             </p>
             <p class="whitespace-pre-line break-words">@Item.Body</p>
             <p class="text-small font-strong text-action-primary-bg">@TenantName has @(Preview ? "their" : "your") message</p>
@@ -39,13 +42,23 @@ else
 {
     <article class="grid gap-4 rounded-card border border-border-subtle bg-surface-raised px-4 py-4 sm:px-6 sm:py-[22px]">
         <header class="flex items-center gap-3">
-            @Avatar(Item.Author ?? TenantName, mine: false)
+            @if (Item.Author is null && TenantMark is not null)
+            {
+                <img src="@TenantMark" alt="" class="size-[40px] shrink-0 rounded-control" />
+            }
+            else
+            {
+                @Avatar(Item.Author ?? TenantName, mine: false)
+            }
             <div class="grid min-w-0">
                 <p class="flex flex-wrap items-center gap-2">
                     <span class="font-heading">@(Item.Title ?? $"Update from {Item.Author ?? TenantName}")</span>
                     @NewBadge
                 </p>
-                <p class="text-small text-text-muted">@(Item.Author is null || Item.Author == TenantName ? TenantName : $"{Item.Author}, {TenantName}") · @Item.At</p>
+                @if (Byline is { Length: > 0 } byline)
+                {
+                    <p class="text-small text-text-muted">@byline</p>
+                }
             </div>
         </header>
 
@@ -120,6 +133,12 @@ else
     /// <summary>Staff looking as this owner: nothing can be answered or sent.</summary>
     [Parameter] public bool Preview { get; set; }
 
+    /// <summary>The business's square logo, for what comes from the business rather than one of its people.</summary>
+    [Parameter] public string? TenantMark { get; set; }
+
+    /// <summary>Says when it was; false where the page around it does.</summary>
+    [Parameter] public bool Dated { get; set; } = true;
+
     /// <summary>The owner's own name, for their avatar's initials.</summary>
     [Parameter] public string? ViewerName { get; set; }
 
@@ -131,6 +150,13 @@ else
 
     /// <summary>Under a message: the owner's reply box.</summary>
     [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    /// <summary>Who it's from and when, leaving out what the heading or the page has just said.</summary>
+    private string Byline => string.Join(" · ", new[]
+    {
+        Item.Author is { } author && author != TenantName ? $"{author}, {TenantName}" : Item.Title is null ? null : TenantName,
+        Dated ? Item.At : null,
+    }.Where(part => part is not null));
 
     /// <summary>"Acceptance — Randwick R6, 1400 m · Barrier 9 · Jockey T. Berry": a bare number gets its label.</summary>
     private string FactLine

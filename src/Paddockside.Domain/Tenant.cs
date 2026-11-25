@@ -40,6 +40,12 @@ public sealed class Tenant
     public int? LogoHeight { get; private set; }
 
     /// <summary>
+    /// The logo as a square, for where a wide one won't fit: the top of a phone, the staff rail, beside an update (David,
+    /// 26 Nov 2026). Optional; on the app's own address, like <see cref="LogoUrl"/>.
+    /// </summary>
+    public string? SquareLogoUrl { get; private set; }
+
+    /// <summary>
     /// The colour of the band and buttons in the tenant's emails, as six hex digits after a #, or null for Paddockside's green (David, 25 Nov
     /// 2026). Emails only: the portal and console keep one look (P48).
     /// </summary>
@@ -134,6 +140,14 @@ public sealed class Tenant
         if (string.IsNullOrWhiteSpace(url) || width < 1 || height < 1) throw new DomainException("A logo needs a picture.");
         (LogoUrl, LogoWidth, LogoHeight) = (url, width, height);
     }
+
+    public void SetSquareLogo(string url)
+    {
+        if (string.IsNullOrWhiteSpace(url)) throw new DomainException("A logo needs a picture.");
+        SquareLogoUrl = url;
+    }
+
+    public void RemoveSquareLogo() => SquareLogoUrl = null;
 
     public void RemoveLogo() => (LogoUrl, LogoWidth, LogoHeight) = (null, null, null);
 

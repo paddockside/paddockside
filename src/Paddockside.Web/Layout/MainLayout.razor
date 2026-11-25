@@ -16,7 +16,14 @@
     {
         <aside class="sticky top-0 hidden h-screen flex-col overflow-y-auto bg-rail-bg px-[14px] py-[20px] text-rail-fg lg:flex" aria-label="Staff console">
             <div class="flex items-center gap-3 px-2 pb-4">
-                <span class="grid size-[40px] shrink-0 place-items-center rounded-control bg-surface-raised font-heading text-action-primary-bg" aria-hidden="true">@Monogram(me.TenantName)</span>
+                @if (me.SquareLogoUrl is { } logo)
+                {
+                    <img src="@logo" alt="" class="size-[40px] shrink-0 rounded-control" />
+                }
+                else
+                {
+                    <span class="grid size-[40px] shrink-0 place-items-center rounded-control bg-surface-raised font-heading text-action-primary-bg" aria-hidden="true">@Monogram(me.TenantName)</span>
+                }
                 <span class="grid leading-tight">
                     <span class="font-heading">@me.TenantName</span>
                     <span class="text-small text-rail-muted">Staff console</span>

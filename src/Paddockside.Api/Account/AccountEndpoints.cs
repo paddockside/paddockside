@@ -28,9 +28,15 @@ public static class AccountEndpoints
         account.MapGet("/", Get);
         account.MapPut("/name", SaveName);
         account.MapPut("/look", SaveLook);
-        account.MapPost("/logo", SaveLogo).WithMetadata(new Microsoft.AspNetCore.Mvc.RequestSizeLimitAttribute(Pictures.MaxLogoBytes + 64 * 1024))
-            .DisableAntiforgery(); // the API's own request header guards unsafe requests (RequireApiRequestHeader)
-        account.MapPost("/logo/remove", RemoveLogo);
+        foreach (var square in new[] { false, true })
+        {
+            var logo = square ? "/square-logo" : "/logo";
+            account.MapPost(logo, (HttpRequest request, ClaimsPrincipal user, PaddocksideDbContext db, IMediaStore store, AuditLog audit, ILoggerFactory loggers, CancellationToken ct) =>
+                    SaveLogo(request, user, db, store, audit, loggers, square, ct))
+                .WithMetadata(new Microsoft.AspNetCore.Mvc.RequestSizeLimitAttribute(Pictures.MaxLogoBytes + 64 * 1024))
+                .DisableAntiforgery(); // the API's own request header guards unsafe requests (RequireApiRequestHeader)
+            account.MapPost($"{logo}/remove", (ClaimsPrincipal user, PaddocksideDbContext db, AuditLog audit, CancellationToken ct) => RemoveLogo(user, db, audit, square, ct));
+        }
         account.MapPost("/sample", (Branding.SampleRequest request, PaddocksideDbContext db, OwnerEmailRenderer renderer, IOptions<EmailOptions> options, HttpRequest http,
             TimeProvider clock, CancellationToken ct) => Branding.SampleAsync(db, request, renderer, Branding.BaseUrl(options.Value, http), clock, ct));
     }
@@ -80,16 +86,16 @@ public static class AccountEndpoints
     }
 
     private static async Task<IResult> SaveLogo(HttpRequest request, ClaimsPrincipal user, PaddocksideDbContext db, IMediaStore store, AuditLog audit,
-        ILoggerFactory loggers, CancellationToken cancellationToken)
+        ILoggerFactory loggers, bool square, CancellationToken cancellationToken)
     {
         if (!IsAdmin(user)) return AdminsOnly();
-        return await Recorded(await Branding.SaveLogoAsync(db, request, store, loggers.CreateLogger("Branding"), cancellationToken), "Uploaded a logo", db, audit, cancellationToken);
+        return await Recorded(await Branding.SaveLogoAsync(db, request, store, loggers.CreateLogger("Branding"), cancellationToken, square), square ? "Uploaded a square logo" : "Uploaded a logo", db, audit, cancellationToken);
     }
 
-    private static async Task<IResult> RemoveLogo(ClaimsPrincipal user, PaddocksideDbContext db, AuditLog audit, CancellationToken cancellationToken)
+    private static async Task<IResult> RemoveLogo(ClaimsPrincipal user, PaddocksideDbContext db, AuditLog audit, bool square, CancellationToken cancellationToken)
     {
         if (!IsAdmin(user)) return AdminsOnly();
-        return await Recorded(await Branding.RemoveLogoAsync(db, cancellationToken), "Removed the logo", db, audit, cancellationToken);
+        return await Recorded(await Branding.RemoveLogoAsync(db, cancellationToken, square), square ? "Removed the square logo" : "Removed the logo", db, audit, cancellationToken);
     }
 
     private static async Task<IResult> Recorded(IResult result, string what, PaddocksideDbContext db, AuditLog audit, CancellationToken cancellationToken)

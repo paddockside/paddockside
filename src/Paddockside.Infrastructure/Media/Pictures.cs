@@ -14,6 +14,9 @@ public static class Pictures
     /// <summary>The box a logo is shown in at the top of an email.</summary>
     public const int LogoWidth = 220, LogoHeight = 72;
 
+    /// <summary>The most pixels a square logo is kept at: enough for any screen.</summary>
+    public const int SquareSide = 512;
+
     /// <summary>The largest logo file accepted.</summary>
     public const long MaxLogoBytes = 5L * 1024 * 1024;
 
@@ -45,6 +48,36 @@ public static class Pictures
         return new PreparedLogo(data.ToArray(), width, height,
             VeryLight(source, area) ? "This logo is very light, so it's hard to see on the white at the top of an email. Upload the version for a white background if there is one."
             : area.Width < LogoWidth && area.Height < LogoHeight ? "This logo is small, so it may look soft on a phone. A larger file would be sharper."
+            : null);
+    }
+
+    /// <summary>
+    /// A PNG or JPG as a square logo: its empty edges trimmed, the whole of it kept, on white (or its own colour) so it
+    /// shows on any background. Null if it isn't one.
+    /// </summary>
+    public static PreparedLogo? SquareLogo(byte[] file)
+    {
+        using var source = Decode(file, MaxLogoPixels, null, SKEncodedImageFormat.Png, SKEncodedImageFormat.Jpeg);
+        if (source is null) return null;
+
+        var corner = source.GetPixel(0, 0);
+        var ownColour = corner.Alpha == 255 && (corner.Red < 245 || corner.Green < 245 || corner.Blue < 245);
+        var area = Trimmed(source);
+        var longest = Math.Max(area.Width, area.Height);
+        // Its own colour runs to the edge; anything else gets a little room, so it isn't tight against the corners.
+        var across = ownColour ? longest : (int)Math.Ceiling(longest / 0.86);
+        var side = Math.Min(SquareSide, across);
+        var (width, height) = ((float)side * area.Width / across, (float)side * area.Height / across);
+        using var surface = SKSurface.Create(new SKImageInfo(side, side, SKColorType.Rgba8888, SKAlphaType.Premul));
+        surface.Canvas.Clear(ownColour ? corner : SKColors.White);
+        using var image = SKImage.FromBitmap(source);
+        surface.Canvas.DrawImage(image, SKRect.Create(area.Left, area.Top, area.Width, area.Height), SKRect.Create((side - width) / 2, (side - height) / 2, width, height), Smooth, null);
+        using var drawn = surface.Snapshot();
+        using var data = drawn.Encode(SKEncodedImageFormat.Png, 100);
+        return new PreparedLogo(data.ToArray(), side, side,
+            VeryLight(source, area) ? "This logo is very light, so it's hard to see on white. Upload the version for a white background, or one on your own colour."
+            : Math.Min(area.Width, area.Height) * 1.6 < longest ? "This picture is a long way from square, so it will look small. A symbol or initials on their own work best."
+            : longest < SquareSide / 2 ? "This logo is small, so it may look soft on a phone. A larger file would be sharper."
             : null);
     }
 

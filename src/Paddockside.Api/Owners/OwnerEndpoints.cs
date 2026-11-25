@@ -22,7 +22,8 @@ public static class OwnerEndpoints
 {
     public sealed record TenantOption(Guid Id, string Name, bool Current);
 
-    public sealed record OwnerSession(string Name, string? Email, string? Mobile, string TenantName, string? TenantLogoUrl, IReadOnlyList<TenantOption> Tenants);
+    public sealed record OwnerSession(string Name, string? Email, string? Mobile, string TenantName, string? TenantLogoUrl, IReadOnlyList<TenantOption> Tenants,
+        string? TenantSquareLogoUrl = null);
 
     /// <param name="Status">Where the horse is at, as staff last set it: "Spelling at Riverbank Farm. Usual 6-week spell; back in work late December."</param>
     /// <param name="StatusShort">The same in a few words, for the card: "Spelling at Riverbank Farm".</param>
@@ -110,7 +111,7 @@ public static class OwnerEndpoints
             if (await other.Tenants.SingleOrDefaultAsync(cancellationToken) is { } t) options.Add(new TenantOption(t.Id, t.Name, t.Id == tenant.Id));
         }
 
-        return Results.Ok(new OwnerSession(party.DisplayName, person.Email, person.PhoneNumber, tenant.Name, tenant.LogoUrl, options.OrderBy(o => o.Name).ToList()));
+        return Results.Ok(new OwnerSession(party.DisplayName, person.Email, person.PhoneNumber, tenant.Name, tenant.LogoUrl, options.OrderBy(o => o.Name).ToList(), tenant.SquareLogoUrl));
     }
 
     /// <summary>A person who owns with more than one tenant moves between them; the session changes, not the URL.</summary>
@@ -237,6 +238,7 @@ public static class OwnerEndpoints
 
         var summary = HorseEndpoints.Summarise(e, visible.Select(i => i.StepCode), visible.Count == 0 ? null : visible.Max(i => i.OccurredAt), now);
         summary = summary with { Steps = summary.Steps.Where(s => s.ClientVisible).ToList(), Unread = visible.Count(i => IsUnread(i, party.Id, read)) };
+        if (e.Standing) summary = summary with { KeyDate = "" }; // general updates have no day of their own
 
         var page = new OwnerEventPage(summary, horse.Id, horse.Name, visible
             .OrderByDescending(i => i.OccurredAt)
@@ -559,10 +561,11 @@ public static class OwnerEndpoints
     private static bool HoldsLiveInterest(Horse horse, Guid partyId) =>
         horse.CurrentManagementPeriod is { } period && horse.Interests.Any(i => i.PartyId == partyId && i.ManagementPeriodId == period.Id && i.IsActive);
 
-    /// <summary>Who wrote it, as an owner may see it: another owner is never named.</summary>
+    /// <summary>Who wrote it, as an owner may see it: another owner is never named, and staff who've set no name are the business, never an address.</summary>
     private static string? AuthorFor(StreamItem item, Guid partyId) =>
         item.Kind == StreamItemKind.Fact ? item.Source
         : item.AuthorPartyId is { } author && author != partyId ? "Another owner"
+        : item.AuthorName is { } name && name.Contains('@') ? null
         : item.AuthorName;
 
     /// <summary>Words owners use (design-system.md §2.0), not "fact" and "stream item".</summary>

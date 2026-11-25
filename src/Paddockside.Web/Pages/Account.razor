@@ -54,7 +54,7 @@
         {
             <section class="card grid grid-cols-[minmax(0,1fr)] gap-4" aria-labelledby="emails-heading">
                 <h2 id="emails-heading">How your emails look</h2>
-                <EmailLook Path="api/account" Brand="_account.Brand" />
+                <EmailLook Path="api/account" Brand="_account.Brand" OnSquareLogo="ShowSquareLogoAsync" />
             </section>
         }
     }
@@ -85,6 +85,9 @@
         else _error = result.Error;
         _phones = (await Api.MyPhonesAsync()).Value;
     }
+
+    /// <summary>The menu shows it straight away.</summary>
+    private async Task ShowSquareLogoAsync() => await Session.RefreshAsync();
 
     private async Task SignOutPhoneAsync(PhoneView phone)
     {

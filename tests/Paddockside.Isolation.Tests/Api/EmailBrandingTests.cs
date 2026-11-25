@@ -17,7 +17,9 @@ namespace Paddockside.Isolation.Tests.Api;
 /// </summary>
 public sealed partial class OwnerSignInTests
 {
-    private sealed record Brand(string Name, string? LogoUrl, int? LogoWidth, int? LogoHeight, string? Colour, string? Footer);
+    private sealed record Brand(string Name, string? LogoUrl, int? LogoWidth, int? LogoHeight, string? Colour, string? Footer, string? SquareLogoUrl = null);
+
+    private sealed record Marked(string? SquareLogoUrl, string? TenantSquareLogoUrl);
 
     private sealed record SavedLogo(Brand Brand, string? Warning);
 
@@ -108,6 +110,72 @@ public sealed partial class OwnerSignInTests
 
         var removed = (await (await admin.PostApiAsync("/api/account/logo/remove", new { })).Content.ReadFromJsonAsync<Brand>())!;
         Assert.Null(removed.LogoUrl);
+    }
+
+    [Fact]
+    public async Task A_square_logo_is_kept_beside_the_wide_one_and_staff_and_owners_are_shown_it()
+    {
+        var seed = await SeedAsync();
+        using var admin = await Api.SignedInAsync(seed.TenantId, MemberRole.TenantAdmin);
+        using var staff = await Api.SignedInAsync(seed.TenantId, MemberRole.Coordinator);
+        Assert.Null((await staff.GetFromJsonAsync<Marked>("/api/auth/me"))!.SquareLogoUrl);
+        var wide = (await (await admin.PostFormApiAsync("/api/account/logo", LogoForm(Picture(1200, 400, SKEncodedImageFormat.Png, SKColors.Navy, SKColors.DarkGreen)))).Content.ReadFromJsonAsync<SavedLogo>())!;
+
+        // Clear edges become white, with a little room round it; square, and no bigger than it's ever shown.
+        var saved = (await (await admin.PostFormApiAsync("/api/account/square-logo", LogoForm(Picture(1000, 1000, SKEncodedImageFormat.Png, SKColors.Navy, SKColors.DarkGreen, margin: 100))))
+            .Content.ReadFromJsonAsync<SavedLogo>())!;
+        Assert.Null(saved.Warning);
+        Assert.Equal(wide.Brand.LogoUrl, saved.Brand.LogoUrl);
+        Assert.NotEqual(saved.Brand.LogoUrl, saved.Brand.SquareLogoUrl);
+        using var anyone = Api.CreateClient(new() { BaseAddress = new Uri("https://localhost"), AllowAutoRedirect = false });
+        using (var stored = SKBitmap.Decode(await anyone.GetByteArrayAsync(saved.Brand.SquareLogoUrl)))
+        {
+            Assert.Equal((512, 512), (stored.Width, stored.Height));
+            Assert.Equal(SKColors.White, stored.GetPixel(5, 5));
+            Assert.Equal(SKColors.Navy, stored.GetPixel(60, 256));
+        }
+
+        // Its own colour runs to the edge.
+        var own = (await (await admin.PostFormApiAsync("/api/account/square-logo", LogoForm(Picture(600, 600, SKEncodedImageFormat.Png, SKColors.Navy, SKColors.DarkGreen)))).Content.ReadFromJsonAsync<SavedLogo>())!;
+        using (var stored = SKBitmap.Decode(await anyone.GetByteArrayAsync(own.Brand.SquareLogoUrl))) Assert.Equal(SKColors.Navy, stored.GetPixel(0, 256));
+
+        // A wide one is kept whole, and they're told it'll look small.
+        var long_ = (await (await admin.PostFormApiAsync("/api/account/square-logo", LogoForm(Picture(1200, 300, SKEncodedImageFormat.Png, SKColors.Navy, SKColors.DarkGreen, margin: 10)))).Content.ReadFromJsonAsync<SavedLogo>())!;
+        Assert.Contains("long way from square", long_.Warning);
+
+        Assert.Equal(long_.Brand.SquareLogoUrl, (await staff.GetFromJsonAsync<Marked>("/api/auth/me"))!.SquareLogoUrl);
+        using var ann = await SignInAsync(seed.AnnEmail);
+        Assert.Equal(long_.Brand.SquareLogoUrl, (await ann.GetFromJsonAsync<Marked>("/api/my/session"))!.TenantSquareLogoUrl);
+
+        // Not a picture; not staff's to change; another business's is its own.
+        Assert.Equal(HttpStatusCode.BadRequest, (await admin.PostFormApiAsync("/api/account/square-logo", LogoForm("<html>not a picture</html>"u8.ToArray()))).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await staff.PostFormApiAsync("/api/account/square-logo", LogoForm(Picture(300, 300, SKEncodedImageFormat.Png, SKColors.Navy, SKColors.Navy)))).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await staff.PostApiAsync("/api/account/square-logo/remove", new { })).StatusCode);
+        using var other = await Api.SignedInAsync(db.A.TenantId, MemberRole.TenantAdmin);
+        Assert.Null((await other.GetFromJsonAsync<Account>("/api/account"))!.Brand.SquareLogoUrl);
+
+        var removed = (await (await admin.PostApiAsync("/api/account/square-logo/remove", new { })).Content.ReadFromJsonAsync<Brand>())!;
+        Assert.Null(removed.SquareLogoUrl);
+        Assert.Equal(wide.Brand.LogoUrl, removed.LogoUrl); // the wide one stays
+    }
+
+    [Fact]
+    public async Task The_portal_never_shows_owners_a_staff_email_address()
+    {
+        var seed = await SeedAsync();
+        using var staff = await Api.SignedInAsync(seed.TenantId, MemberRole.Coordinator);
+        using var ann = await SignInAsync(seed.AnnEmail);
+        Task<HttpResponseMessage> PostAsync(string body) => staff.PostApiAsync($"/api/events/{seed.EventId}/items",
+            new { audience = "Owners", scope = "Owners", step = (string?)null, channel = "Portal", namedParties = Array.Empty<Guid>(), body });
+
+        Assert.True((await PostAsync("No name set.")).IsSuccessStatusCode);
+        var page = await ann.GetStringAsync($"/api/my/events/{seed.EventId}");
+        Assert.Contains("No name set.", page);
+        Assert.DoesNotContain("@", System.Text.Json.JsonDocument.Parse(page).RootElement.GetProperty("items").ToString());
+
+        await staff.PutApiAsync("/api/account/name", new { name = "Robin Sample" });
+        Assert.True((await PostAsync("Name set.")).IsSuccessStatusCode);
+        Assert.Contains("Robin Sample", await ann.GetStringAsync($"/api/my/events/{seed.EventId}"));
     }
 
     [Fact]

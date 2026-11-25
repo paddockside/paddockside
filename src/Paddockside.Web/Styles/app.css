@@ -59,6 +59,11 @@
     @apply outline outline-[3px] outline-offset-2 outline-focus;
   }
 
+  /* Moved to by the app, not by the keyboard: the page's heading when it opens, an update a link leads to. */
+  h1:focus-visible, li[tabindex='-1']:focus-visible {
+    outline: none;
+  }
+
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after {
       transition: none !important;

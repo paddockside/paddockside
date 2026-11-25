@@ -15,7 +15,8 @@ namespace Paddockside.Api.Account;
 /// </summary>
 public static class Branding
 {
-    public sealed record BrandView(string Name, string? LogoUrl, int? LogoWidth, int? LogoHeight, string? Colour, string? Footer, string StandardColour);
+    public sealed record BrandView(string Name, string? LogoUrl, int? LogoWidth, int? LogoHeight, string? Colour, string? Footer, string StandardColour,
+        string? SquareLogoUrl = null);
 
     public sealed record LogoSaved(BrandView Brand, string? Warning);
 
@@ -26,7 +27,7 @@ public static class Branding
 
     public sealed record SampleView(string Subject, string Html);
 
-    public static BrandView View(Tenant t) => new(t.Name, t.LogoUrl, t.LogoWidth, t.LogoHeight, t.BrandColour, t.FooterDetails, EmailPalette.Standard);
+    public static BrandView View(Tenant t) => new(t.Name, t.LogoUrl, t.LogoWidth, t.LogoHeight, t.BrandColour, t.FooterDetails, EmailPalette.Standard, t.SquareLogoUrl);
 
     public static async Task<IResult> SaveLookAsync(PaddocksideDbContext db, LookRequest request, CancellationToken cancellationToken)
     {
@@ -45,10 +46,10 @@ public static class Branding
     }
 
     /// <summary>
-    /// A new logo, from a multipart form's <c>file</c>. Each upload has an address of its own, so emails already sent keep
+    /// A new logo, wide or square, from a multipart form's <c>file</c>. Each upload has an address of its own, so emails already sent keep
     /// the logo they went out with.
     /// </summary>
-    public static async Task<IResult> SaveLogoAsync(PaddocksideDbContext db, HttpRequest request, IMediaStore store, ILogger logger, CancellationToken cancellationToken)
+    public static async Task<IResult> SaveLogoAsync(PaddocksideDbContext db, HttpRequest request, IMediaStore store, ILogger logger, CancellationToken cancellationToken, bool square = false)
     {
         if (!request.HasFormContentType) return Problem("Choose the logo file.");
         var form = await new FormFeature(request, new FormOptions { MultipartBodyLengthLimit = Pictures.MaxLogoBytes + 64 * 1024 }).ReadFormAsync(cancellationToken);
@@ -61,7 +62,7 @@ public static class Branding
             await file.CopyToAsync(read, cancellationToken);
             try
             {
-                logo = Pictures.Logo(read.ToArray());
+                logo = square ? Pictures.SquareLogo(read.ToArray()) : Pictures.Logo(read.ToArray());
             }
             catch (Exception ex) when (ex is TypeInitializationException or DllNotFoundException)
             {
@@ -70,21 +71,23 @@ public static class Branding
             }
         }
 
-        if (logo is null) return Problem("That isn't a PNG or JPG picture. Email programs don't show other kinds (an SVG or PDF logo needs saving as a PNG).");
+        if (logo is null) return Problem("That isn't a PNG or JPG picture. Other kinds don't show everywhere (an SVG or PDF logo needs saving as a PNG).");
 
         var tenant = await db.Tenants.SingleAsync(cancellationToken);
         var id = Guid.NewGuid();
         using (var png = new MemoryStream(logo.Png))
             await store.SaveAsync(LogoBlob(tenant.Id, id), png, "image/png", cancellationToken);
-        tenant.SetLogo($"/brand/{tenant.Id}/{id}.png", logo.Width, logo.Height);
+        if (square) tenant.SetSquareLogo($"/brand/{tenant.Id}/{id}.png");
+        else tenant.SetLogo($"/brand/{tenant.Id}/{id}.png", logo.Width, logo.Height);
         await db.SaveChangesAsync(cancellationToken);
         return Results.Ok(new LogoSaved(View(tenant), logo.Warning));
     }
 
-    public static async Task<IResult> RemoveLogoAsync(PaddocksideDbContext db, CancellationToken cancellationToken)
+    public static async Task<IResult> RemoveLogoAsync(PaddocksideDbContext db, CancellationToken cancellationToken, bool square = false)
     {
         var tenant = await db.Tenants.SingleAsync(cancellationToken);
-        tenant.RemoveLogo();
+        if (square) tenant.RemoveSquareLogo();
+        else tenant.RemoveLogo();
         await db.SaveChangesAsync(cancellationToken);
         return Results.Ok(View(tenant));
     }
