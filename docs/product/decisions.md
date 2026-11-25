@@ -157,6 +157,7 @@ Also decided:
 **P62. An owner is chosen from the tenant's clients, never typed in.** Adding an owner, and passing a share on, look up clients only; someone new is added in Clients first. Stops one person becoming two.
 **P63. A horse's trainer, vet or club can be made a client too, by staff, and then given a share.** They stay the horse's contact; nothing is sent by it.
 **P64. Part or all of a share can go back to the house when it is passed on, not only when an owner leaves.**
+**P65. Being known isn't being a client.** Someone staff only reply to stays out of Clients (and prospect mailouts) until staff add them. Clients are owners past and present, people on a list, and people added by staff or an import.
 
 ---
 

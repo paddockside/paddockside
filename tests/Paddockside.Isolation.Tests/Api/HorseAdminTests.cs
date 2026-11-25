@@ -128,7 +128,7 @@ public sealed partial class OwnerSignInTests
 
     private sealed record ContactOnHorse(Guid Id, Guid PartyId, bool IsClient);
 
-    private sealed record AddedClient(Guid Id, string Name, bool WasContact);
+    private sealed record AddedClient(Guid Id, string Name, bool WasKnown);
 
     [Fact]
     public async Task A_trainer_can_be_made_a_client_and_then_own_a_share()
@@ -187,6 +187,37 @@ public sealed partial class OwnerSignInTests
         Assert.Equal(houseId, now.HouseId);
         await DispatchAsync();
         Assert.Contains(Api.Emails.Sent, e => e.Email.ToAddress == terry); // their first share: invited
+    }
+
+    [Fact]
+    public async Task Someone_only_replied_to_is_not_a_client_until_staff_add_them()
+    {
+        var seed = await SeedAsync();
+        var email = $"wendy-{Guid.NewGuid():N}@example.test";
+        Guid wendyId;
+        await using (var context = db.ContextFor(seed.TenantId))
+        {
+            var wendy = new Party(seed.TenantId, "Wendy Writer"); // as ReplyToSender saves an unknown sender
+            wendy.AddEmail(email);
+            context.Parties.Add(wendy);
+            await context.SaveChangesAsync();
+            wendyId = wendy.Id;
+        }
+
+        using var manager = await Api.SignedInAsync(seed.TenantId, MemberRole.Manager);
+        async Task<List<NewHorse>> ClientsAsync(string query) => (await manager.GetFromJsonAsync<List<NewHorse>>($"/api/clients{query}"))!;
+        Assert.DoesNotContain(await ClientsAsync(""), c => c.Id == wendyId);
+        Assert.DoesNotContain(await ClientsAsync("?status=Prospect"), c => c.Id == wendyId);
+        Assert.Contains(await ClientsAsync(""), c => c.Id == seed.AnnId); // an owner from before clients were added by hand still is one
+        Assert.Equal(HttpStatusCode.NotFound, (await manager.GetAsync($"/api/clients/{wendyId}")).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await manager.PostApiAsync($"/api/horses/{seed.HorseId}/owners/{seed.BobId}/transfer",
+            new { recipients = new[] { new { clientId = wendyId, percent = 50m } }, on = (string?)null, access = "LockedOut" })).StatusCode);
+
+        var added = (await (await manager.PostApiAsync("/api/clients", new { name = "Wendy W.", email, mobile = (string?)null, howWeKnowThem = "Asked about shares" }))
+            .Content.ReadFromJsonAsync<AddedClient>())!;
+        Assert.Equal(new AddedClient(wendyId, "Wendy Writer", true), added);
+        Assert.Contains(await ClientsAsync("?status=Prospect"), c => c.Id == wendyId);
+        Assert.Equal("Asked about shares", (await manager.GetFromJsonAsync<ClientDetail>($"/api/clients/{wendyId}"))!.HowWeKnowThem);
     }
 
     [Fact]

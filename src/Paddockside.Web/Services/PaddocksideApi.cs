@@ -230,8 +230,8 @@ public sealed record MailoutCreated(Guid Id, int Sending);
 
 public sealed record ClientListView(Guid Id, string Name, int Count);
 
-/// <param name="WasContact">Already known as a horse's trainer, vet or club; now a client too.</param>
-public sealed record ClientCreated(Guid Id, string Name = "", bool WasContact = false);
+/// <param name="WasKnown">Already known (a horse's contact, or someone staff replied to); now a client.</param>
+public sealed record ClientCreated(Guid Id, string Name = "", bool WasKnown = false);
 
 public sealed record ListChange(int Count);
 

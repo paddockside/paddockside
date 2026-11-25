@@ -37,16 +37,19 @@ public sealed class Party
     /// </summary>
     public string? HowWeKnowThem { get; private set; }
 
-    /// <summary>When staff added them as a client; null for parties that came another way (an owner added before this existed).</summary>
+    /// <summary>
+    /// When staff added them as a client, or an import did; null for parties that came another way: a horse's contact, someone
+    /// staff replied to (neither is a client), or an owner from before this existed (who is one).
+    /// </summary>
     public DateTimeOffset? AddedAt { get; private set; }
 
     /// <summary>
-    /// When staff made a horse's trainer, vet, authority or club a client as well (David, 25 Nov 2026: a trainer can own a
-    /// share). Contacts aren't clients otherwise; null for everyone who was never only a contact.
+    /// When staff made someone already known a client: a horse's trainer, vet, authority or club (a trainer can own a share),
+    /// or someone staff had only replied to (David, 25 Nov 2026). Null for everyone who was a client from the start.
     /// </summary>
     public DateTimeOffset? MadeClientAt { get; private set; }
 
-    /// <summary>A contact becomes a client too: listed with them, and can be given a share. How we know them is kept if there.</summary>
+    /// <summary>Someone already known becomes a client: listed with them, and can be given a share. How we know them is kept if there.</summary>
     public void MakeClient(string howWeKnowThem, DateTimeOffset at)
     {
         MadeClientAt ??= at;
