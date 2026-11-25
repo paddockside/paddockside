@@ -12,6 +12,7 @@ using Paddockside.Domain;
 using Paddockside.Infrastructure.Email;
 using Paddockside.Infrastructure.Identity;
 using Paddockside.Infrastructure.Persistence;
+using C = Paddockside.Infrastructure.Email.PageColours;
 
 namespace Paddockside.Api.Mailouts;
 
@@ -343,11 +344,11 @@ public static class MailoutEndpoints
         <html lang="en-AU"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
         <meta name="robots" content="noindex"><title>{{E(title)}}</title>
         <style>
-          body { margin: 0; padding: 48px 16px; background: #f6f5f1; color: #1c1f1d; font: 18px/1.5 system-ui, "Segoe UI", sans-serif; }
-          main { max-width: 480px; margin: 0 auto; background: #fff; border: 1px solid #e2e4e0; border-radius: 12px; padding: 24px; }
-          h1 { font-size: 24px; margin: 0 0 12px; } p { margin: 0 0 16px; } .note { font-size: 15px; color: #5f6663; }
-          button { min-height: 48px; padding: 0 24px; border: 0; border-radius: 10px; background: #1e5a3c; color: #fff; font: inherit; font-weight: 600; cursor: pointer; }
-          button:focus-visible { outline: 3px solid #1c1f1d; outline-offset: 2px; }
+          body { margin: 0; padding: 48px 16px; background: {{C.Background}}; color: {{C.Text}}; font: 18px/1.5 system-ui, "Segoe UI", sans-serif; }
+          main { max-width: 480px; margin: 0 auto; background: {{C.Card}}; border: 1px solid {{C.Line}}; border-radius: 12px; padding: 24px; }
+          h1 { font-size: 24px; margin: 0 0 12px; } p { margin: 0 0 16px; } .note { font-size: 15px; color: {{C.Note}}; }
+          button { min-height: 48px; padding: 0 24px; border: 0; border-radius: 10px; background: {{C.Button}}; color: {{C.OnButton}}; font: inherit; font-weight: 600; cursor: pointer; }
+          button:focus-visible { outline: 3px solid {{C.Text}}; outline-offset: 2px; }
         </style></head>
         <body><main><h1>{{E(title)}}</h1>{{body}}</main></body></html>
         """, "text/html; charset=utf-8");

@@ -17,6 +17,7 @@ public sealed class StaffInvitations(
     PaddocksideIdentityDbContext identity,
     IEmailSender email,
     OwnerEmailRenderer renderer,
+    Persistence.TenantScopedDb tenants,
     IOptions<EmailOptions> options,
     TimeProvider clock)
 {
@@ -57,7 +58,14 @@ public sealed class StaffInvitations(
         await identity.SaveChangesAsync(cancellationToken);
 
         var (label, description) = forOperator ? (OperatorRoleLabel, OperatorRoleDescription) : (MemberRoles.Label(role), MemberRoles.Describe(role));
-        var rendered = renderer.RenderStaffInvitation(tenantName, inviterName, label, description, $"{baseUrl.TrimEnd('/')}/join#{token}");
+        var brand = EmailBrand.Product;
+        if (tenantId is { } id)
+        {
+            await using var db = tenants.For(id);
+            brand = EmailBrand.Of(await db.Tenants.AsNoTracking().SingleAsync(cancellationToken));
+        }
+
+        var rendered = renderer.RenderStaffInvitation(brand, inviterName, label, description, $"{baseUrl.TrimEnd('/')}/join#{token}");
         var result = await email.SendAsync(new OutboundEmail(options.Value.FromAddress, Senders.For(tenantName), address, string.Empty, inviterName,
             rendered.Subject, rendered.Html, rendered.Text, new Dictionary<string, string> { ["purpose"] = forOperator ? "operator-invitation" : "staff-invitation" },
             TrackOpens: false), cancellationToken);

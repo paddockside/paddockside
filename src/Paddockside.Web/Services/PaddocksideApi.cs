@@ -203,6 +203,19 @@ public sealed record MailoutAttachmentView(Guid Id, string FileName, string Size
 
 public sealed record SignatureView(string Text);
 
+/// <summary>How a business's emails look; a null colour is Paddockside's green.</summary>
+public sealed record BrandView(string Name, string? LogoUrl, int? LogoWidth, int? LogoHeight, string? Colour, string? Footer, string StandardColour);
+
+public sealed record LogoSaved(BrandView Brand, string? Warning);
+
+public sealed record AccountView(string? YourName, string Email, bool CanChangeBrand, BrandView Brand);
+
+public sealed record EmailSampleView(string Subject, string Html);
+
+public sealed record EmailSampleOption(string Key, string Label, string Group);
+
+public sealed record EmailPreviewSent(int Sent, List<string> Problems);
+
 public sealed record MailoutCreated(Guid Id, int Sending);
 
 public sealed record ClientListView(Guid Id, string Name, int Count);
@@ -660,6 +673,35 @@ public sealed class PaddocksideApi(HttpClient http)
 
     public Task<ApiResult<AuditPage>> AuditAsync(string? q, string? action, string? before) =>
         GetAsync<AuditPage>($"api/audit?q={Uri.EscapeDataString(q ?? "")}&action={Uri.EscapeDataString(action ?? "")}{(before is null ? "" : $"&before={Uri.EscapeDataString(before)}")}");
+
+    // ---- Account, and how emails look (path: "api/account", or a business's in the operator console) ----------------
+
+    public Task<ApiResult<AccountView>> AccountAsync() => GetAsync<AccountView>("api/account");
+
+    public Task<ApiResult<object>> SaveYourNameAsync(string? name) => PutAsync<object>("api/account/name", new { name });
+
+    public Task<ApiResult<BrandView>> SaveEmailLookAsync(string path, string? colour, string? footer) => PutAsync<BrandView>($"{path}/look", new { colour, footer });
+
+    public async Task<ApiResult<LogoSaved>> UploadLogoAsync(string path, Microsoft.AspNetCore.Components.Forms.IBrowserFile file, long maxBytes)
+    {
+        using var form = new MultipartFormDataContent();
+        var content = new StreamContent(file.OpenReadStream(maxBytes));
+        content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(string.IsNullOrEmpty(file.ContentType) ? "application/octet-stream" : file.ContentType);
+        form.Add(content, "file", file.Name);
+        return await SendContentAsync<LogoSaved>(HttpMethod.Post, $"{path}/logo", form);
+    }
+
+    public Task<ApiResult<BrandView>> RemoveLogoAsync(string path) => PostAsync<BrandView>($"{path}/logo/remove", new { });
+
+    public Task<ApiResult<EmailSampleView>> EmailSampleAsync(string path, string key, string? colour, string? footer) =>
+        PostAsync<EmailSampleView>($"{path}/sample", new { key, colour, footer });
+
+    public Task<ApiResult<BrandView>> TenantBrandAsync(string tenantId) => GetAsync<BrandView>($"api/ops/tenants/{tenantId}/email/look");
+
+    public Task<ApiResult<List<EmailSampleOption>>> EmailSamplesAsync(string tenantId) => GetAsync<List<EmailSampleOption>>($"api/ops/tenants/{tenantId}/email/samples");
+
+    public Task<ApiResult<EmailPreviewSent>> SendEmailPreviewAsync(string tenantId, string? email, IEnumerable<string> keys) =>
+        PostAsync<EmailPreviewSent>($"api/ops/tenants/{tenantId}/email/preview", new { email, keys });
 
     // ---- Operator console ------------------------------------------------------------------------------------------
 

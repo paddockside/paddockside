@@ -909,6 +909,14 @@ namespace Paddockside.Infrastructure.Persistence.Migrations
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("datetimeoffset");
 
+                    b.Property<bool>("EmailCopyTried")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("EmailToken")
+                        .HasMaxLength(32)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(32)");
+
                     b.Property<string>("FileName")
                         .IsRequired()
                         .HasMaxLength(200)
@@ -1321,6 +1329,10 @@ namespace Paddockside.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("Id")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<string>("Name")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
                     b.Property<Guid>("PersonId")
                         .HasColumnType("uniqueidentifier");
 
@@ -1519,6 +1531,11 @@ namespace Paddockside.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("Id")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<string>("BrandColour")
+                        .HasMaxLength(7)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(7)");
+
                     b.Property<string>("FooterDetails")
                         .HasMaxLength(500)
                         .HasColumnType("nvarchar(500)");
@@ -1531,9 +1548,15 @@ namespace Paddockside.Infrastructure.Persistence.Migrations
                         .HasColumnType("bit")
                         .HasDefaultValue(true);
 
+                    b.Property<int?>("LogoHeight")
+                        .HasColumnType("int");
+
                     b.Property<string>("LogoUrl")
                         .HasMaxLength(500)
                         .HasColumnType("nvarchar(500)");
+
+                    b.Property<int?>("LogoWidth")
+                        .HasColumnType("int");
 
                     b.Property<string>("Name")
                         .IsRequired()

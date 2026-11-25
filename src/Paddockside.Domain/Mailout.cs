@@ -287,7 +287,20 @@ public sealed class StaffSignature
 
     public string Text { get; private set; }
 
+    public const int NameLength = 100;
+
+    /// <summary>The name their messages to owners are signed with ("Kate Wells"), in this business. Until it's set, the business signs.</summary>
+    public string? Name { get; private set; }
+
     public DateTimeOffset UpdatedAt { get; private set; }
+
+    public void SetName(string? name, DateTimeOffset at)
+    {
+        var trimmed = string.IsNullOrWhiteSpace(name) ? null : name.Trim();
+        if (trimmed?.Length > NameLength) throw new DomainException($"Keep your name under {NameLength} characters.");
+        if (trimmed?.Contains('@') == true) throw new DomainException("Type your name, not your email address.");
+        (Name, UpdatedAt) = (trimmed, at);
+    }
 
     public void Change(string text, DateTimeOffset at)
     {

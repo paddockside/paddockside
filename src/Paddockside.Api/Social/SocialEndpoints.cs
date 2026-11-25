@@ -276,7 +276,7 @@ public static class SocialEndpoints
               <label for="places" style="display:block;font-weight:600;margin-bottom:4px;">How many places (you and anyone coming with you)</label>
               <select id="places" name="places" style="font:inherit;min-height:44px;padding:0 12px;margin-bottom:16px;border-radius:8px;">{places}</select>
               <label for="note" style="display:block;font-weight:600;margin-bottom:4px;">Anything we should know (optional)</label>
-              <input id="note" name="note" maxlength="300" value="{E(a.Note ?? "")}" placeholder="Partner's name, dietary needs" style="font:inherit;width:100%;box-sizing:border-box;min-height:44px;padding:0 12px;margin-bottom:16px;border:1px solid #b8bdb9;border-radius:8px;">
+              <input id="note" name="note" maxlength="300" value="{E(a.Note ?? "")}" placeholder="Partner's name, dietary needs" style="font:inherit;width:100%;box-sizing:border-box;min-height:44px;padding:0 12px;margin-bottom:16px;border:1px solid {Paddockside.Infrastructure.Email.PageColours.Field};border-radius:8px;">
               <button type="submit">Send my reply</button>
             </form>
             <p class="note">From {E(tenant.Name)}. You can change your reply with this link until the day.</p>

@@ -1,0 +1,135 @@
+@inject PaddocksideApi Api
+
+@*
+    The operator console's email section (David, 25 Nov 2026): choose a business, set its logo, colour and details, and
+    send yourself a batch of sample emails in its look. The samples are made up; nothing of the business's is read.
+*@
+<section class="card grid grid-cols-[minmax(0,1fr)] gap-6" aria-labelledby="ops-emails-heading">
+    <div class="grid gap-2">
+        <h2 id="ops-emails-heading">Emails</h2>
+        <label for="email-tenant" class="font-strong">Business</label>
+        <select id="email-tenant" class="min-h-control max-w-md rounded-control border border-border-strong bg-surface-raised px-3" value="@_tenant" @onchange="ChooseAsync">
+            <option value="">Choose…</option>
+            @foreach (var t in Tenants)
+            {
+                <option value="@t.Id">@t.Name</option>
+            }
+        </select>
+    </div>
+
+    @if (_error is not null)
+    {
+        <Error Message="@_error" />
+    }
+
+    @if (_brand is not null && _samples is not null)
+    {
+        <section class="grid gap-4 rounded-control bg-surface-sunken p-4" aria-labelledby="preview-heading">
+            <h3 id="preview-heading" class="font-strong">Send a batch preview</h3>
+            <form class="grid gap-4" @onsubmit="SendAsync" @onsubmit:preventDefault>
+                <div class="grid max-w-md gap-2">
+                    <label for="preview-to" class="font-strong">Send it to</label>
+                    <input id="preview-to" type="email" autocomplete="email" class="min-h-control rounded-control border border-border-strong bg-surface-raised px-4" @bind="_to" />
+                </div>
+                <fieldset class="grid gap-4">
+                    <legend class="mb-2 font-strong">Which emails</legend>
+                    <div class="flex flex-wrap gap-4">
+                        <button type="button" class="btn-link" @onclick="All">Choose all</button>
+                        <button type="button" class="btn-link" @onclick="None">Choose none</button>
+                    </div>
+                    <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                        @foreach (var group in _samples.GroupBy(s => s.Group))
+                        {
+                            <div class="grid content-start gap-1">
+                                <span class="text-small font-strong text-text-muted">@group.Key</span>
+                                @foreach (var s in group)
+                                {
+                                    <label class="flex min-h-[32px] items-center gap-2">
+                                        <input type="checkbox" class="size-5" checked="@_keys.Contains(s.Key)" @onchange="() => Toggle(s.Key)" />
+                                        <span>@s.Label</span>
+                                    </label>
+                                }
+                            </div>
+                        }
+                    </div>
+                </fieldset>
+                <button type="submit" class="btn-primary justify-self-start" disabled="@(_busy || _keys.Count == 0)">@SendLabel</button>
+                <span class="text-small text-text-muted">Sent now, with "[Preview]" in the subject, made-up names and buttons that do nothing. It's noted in the business's audit log.</span>
+            </form>
+            @if (_notice is not null)
+            {
+                <p class="rounded-control bg-status-success-bg px-4 py-3 text-status-success-fg" role="status">@_notice</p>
+            }
+            @if (_problems.Count > 0)
+            {
+                <div class="grid gap-1 rounded-control bg-status-danger-bg px-4 py-3 text-status-danger-fg" role="alert">
+                    @foreach (var p in _problems)
+                    {
+                        <span>@p</span>
+                    }
+                </div>
+            }
+        </section>
+
+        <EmailLook Path="@Path" Brand="_brand" Choices="_choices" />
+    }
+</section>
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<TenantRow> Tenants { get; set; } = [];
+
+    private string? _tenant;
+    private BrandView? _brand;
+    private List<EmailSampleOption>? _samples;
+    private IReadOnlyList<(string Key, string Label)> _choices = [];
+    private readonly HashSet<string> _keys = [];
+    private string? _to;
+    private string? _error;
+    private string? _notice;
+    private List<string> _problems = [];
+    private bool _busy;
+
+    private string Path => $"api/ops/tenants/{_tenant}/email";
+
+    private string SendLabel => _busy ? "Sending…" : $"Send {_keys.Count} {(_keys.Count == 1 ? "email" : "emails")}";
+
+    private async Task ChooseAsync(ChangeEventArgs e)
+    {
+        (_tenant, _brand, _samples, _error, _notice, _problems) = (e.Value?.ToString(), null, null, null, null, []);
+        if (string.IsNullOrEmpty(_tenant)) return;
+        var brand = await Api.TenantBrandAsync(_tenant);
+        var samples = await Api.EmailSamplesAsync(_tenant);
+        if (!brand.Succeeded || !samples.Succeeded) { _error = brand.Error ?? samples.Error; return; }
+        (_brand, _samples) = (brand.Value, samples.Value);
+        _choices = _samples!.Select(s => (s.Key, s.Label)).ToList();
+        All();
+    }
+
+    private void All()
+    {
+        foreach (var s in _samples!) _keys.Add(s.Key);
+    }
+
+    private void None() => _keys.Clear();
+
+    private void Toggle(string key)
+    {
+        if (!_keys.Remove(key)) _keys.Add(key);
+    }
+
+    private async Task SendAsync()
+    {
+        (_busy, _error, _notice, _problems) = (true, null, null, []);
+        try
+        {
+            var result = await Api.SendEmailPreviewAsync(_tenant!, _to, _keys);
+            if (!result.Succeeded) { _error = result.Error; return; }
+            if (result.Value!.Sent > 0) _notice = $"Sent {result.Value.Sent} {(result.Value.Sent == 1 ? "email" : "emails")} to {_to}.";
+            _problems = result.Value.Problems;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}

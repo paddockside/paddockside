@@ -145,6 +145,13 @@ Also decided:
 **P56. Narrow v1 for Laurel Oak in about three months: race start and general events, email and SMS, manual facts, owner PWA, staff console; integrations and the sale/share-offer event follow go-live.** (`build-plan.md` §1)
 **P57. Build starts now; validation calls run in parallel and may reorder Sprints 4–6, not the core.**
 
+## 25 Nov 2026 — Branded emails
+
+**P58. Emails carry the tenant's logo and one brand colour (band and buttons); text on it is chosen to stay at 4.5:1. The portal and console keep one product look.** Amends P48 for emails only. A tenant admin or an operator sets them.
+**P59. A photo email shows the first photo, as a small copy at an unguessable address that needs no sign-in.** Amends P22: the copy holds only the picture (no location or camera details); originals, and everything else, still need a sign-in. Anyone an email is forwarded to can see its photo.
+**P60. Owners answer a question from the email's buttons without signing in.** Each owner's own link, for that question only, with a page that asks them to confirm. Whoever holds the email can answer for them.
+**P61. Operators can send themselves every kind of email, with made-up content, in any tenant's look.** Nothing of the tenant's is read or saved; it is in their audit log.
+
 ---
 
 ## Inherited from Laurel Oak unchanged

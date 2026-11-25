@@ -1,0 +1,11 @@
+<Project>
+  <!-- The picture library (SkiaSharp) ships a native copy for every kind of computer, hundreds of megabytes in all. Published
+       output keeps the two we run: Azure's Linux and a developer's Windows. -->
+  <Target Name="TrimPictureLibrary" AfterTargets="ComputeResolvedFilesToPublishList">
+    <ItemGroup>
+      <_PictureLibrary Include="@(ResolvedFileToPublish)" Condition="$([System.String]::Copy('%(Filename)').StartsWith('libSkiaSharp'))" />
+      <_PictureLibrary Remove="@(_PictureLibrary)" Condition="'%(Extension)' != '.pdb' And ($([System.String]::Copy('%(RelativePath)').Replace('\', '/').Contains('/linux-x64/')) Or $([System.String]::Copy('%(RelativePath)').Replace('\', '/').Contains('/win-x64/')))" />
+      <ResolvedFileToPublish Remove="@(_PictureLibrary)" />
+    </ItemGroup>
+  </Target>
+</Project>

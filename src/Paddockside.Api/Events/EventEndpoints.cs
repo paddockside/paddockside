@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
+using Paddockside.Api.Account;
 using Paddockside.Api.Formatting;
 using Paddockside.Api.Horses;
 using Paddockside.Api.Security;
@@ -317,7 +318,7 @@ public static class EventEndpoints
         }
 
         var now = clock.GetUtcNow();
-        var author = user.FindFirstValue(ClaimTypes.Email) ?? user.Identity?.Name ?? "Staff";
+        var author = await StaffNames.AuthorAsync(user, db, cancellationToken);
         if (!Enum.TryParse<StreamItemScope>(request.Scope, out var scope)) return Problem("Choose who can see it.");
 
         StreamItem item;
@@ -433,6 +434,7 @@ public static class EventEndpoints
         {
             AnswerSource.Portal => "in the portal",
             AnswerSource.ReadFromReply => "read from their reply",
+            AnswerSource.EmailButton => "from the email",
             _ => $"set by {a.RecordedBy}",
         };
     }

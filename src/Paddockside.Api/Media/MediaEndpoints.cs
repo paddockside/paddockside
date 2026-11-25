@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Net.Http.Headers;
+using Paddockside.Api.Account;
 using Paddockside.Api.Audit;
 using Paddockside.Api.Owners;
 using Paddockside.Api.Security;
@@ -17,8 +18,8 @@ namespace Paddockside.Api.Media;
 /// <summary>
 /// Photos, video and voice notes staff add to an event (data-model.md MEDIA_ASSET; build plan, sprint 3), and the one
 /// way any of it is read back: through the app, after the same access check as the item it belongs to. The media
-/// container is private; there are no public or long-lived links (P22: media is linked, not attached, and the link
-/// opens the portal).
+/// container is private; originals have no public or long-lived links (P22: media is linked, not attached, and the link
+/// opens the portal; a photo email shows a small copy of its first photo, P59).
 /// </summary>
 public static class MediaEndpoints
 {
@@ -75,7 +76,7 @@ public static class MediaEndpoints
         var horse = await db.Horses.Include(h => h.ManagementPeriods).Include(h => h.Interests).AsSplitQuery().SingleAsync(h => h.Id == e.HorseId, cancellationToken);
         var tenant = await db.Tenants.SingleAsync(cancellationToken);
         var now = clock.GetUtcNow();
-        var author = user.FindFirstValue(ClaimTypes.Email) ?? "Staff";
+        var author = await StaffNames.AuthorAsync(user, db, cancellationToken);
         var caption = form["caption"].ToString();
         if (caption.Length > 4000) return Problem("That caption is too long.");
         string? stepCode = null;
@@ -151,7 +152,7 @@ public static class MediaEndpoints
         var now = clock.GetUtcNow();
 
         var item = StreamItem.Media(horse, e, Title(assets.Select(a => a.Kind).ToList()), request.Caption, StreamItemScope.Owners, now,
-            user.FindFirstValue(ClaimTypes.Email) ?? "Staff");
+            await StaffNames.AuthorAsync(user, db, cancellationToken));
         db.StreamItems.Add(item);
         db.MediaAssets.AddRange(assets.Select((a, n) => a.ShareOn(item, now.AddMilliseconds(n))));
         var deliveries = await OutboundQueue.QueueAsync(db, tenant, horse, e, item, null, texts.IsConfigured, now, cancellationToken);

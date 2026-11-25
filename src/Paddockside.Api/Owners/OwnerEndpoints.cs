@@ -493,17 +493,7 @@ public static class OwnerEndpoints
             return Results.Problem(statusCode: StatusCodes.Status400BadRequest, title: "Choose one of the answers.");
 
         var now = clock.GetUtcNow();
-        var hadAnswer = await db.PromptAnswers.AnyAsync(a => a.StreamItemId == item.Id && a.PartyId == party.Id, cancellationToken);
-        var (_, changed) = await PromptAnswering.RecordAsync(db, item, party.Id, value, AnswerSource.Portal, party.DisplayName, now, cancellationToken);
-        if (changed)
-        {
-            var @event = item.EventId is { } eventId ? await db.Events.SingleAsync(e => e.Id == eventId, cancellationToken) : null;
-            db.StreamItems.Add(item.Reply(horse, @event, party.DisplayName, party.Id, "Portal", hadAnswer ? $"Changed my answer to {value}" : $"My answer: {value}", now));
-            // a closed event stays closed when something comes in (David, 10 Nov 2026); Today lists it
-            foreach (var delivery in await db.Deliveries.Where(d => d.StreamItemId == item.Id && d.PartyId == party.Id).ToListAsync(cancellationToken))
-                delivery.Record(DeliveryStatus.Replied, now);
-        }
-
+        await AnswerByEmailEndpoints.RecordAsync(db, item, horse, party, value, AnswerSource.Portal, "Portal", now, cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
         return Results.Ok(new OwnerPrompt(prompt.Kind.ToString(), prompt.Question, prompt.Answers, value));
     }

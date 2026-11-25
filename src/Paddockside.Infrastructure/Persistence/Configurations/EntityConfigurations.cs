@@ -22,6 +22,9 @@ internal sealed class TenantConfiguration : IEntityTypeConfiguration<Tenant>
         b.Property(x => x.HousePartyId);
         b.Property(x => x.Slug).HasMaxLength(30);
         b.Property(x => x.LogoUrl).HasMaxLength(500);
+        b.Property(x => x.LogoWidth);
+        b.Property(x => x.LogoHeight);
+        b.Property(x => x.BrandColour).HasMaxLength(7).IsUnicode(false);
         b.Property(x => x.FooterDetails).HasMaxLength(500);
         // Slugs form reply addresses, so two tenants can never share one. (Empty = set before slugs existed.)
         b.HasIndex(x => x.Slug).IsUnique().HasFilter("[Slug] <> ''");
@@ -143,6 +146,7 @@ internal sealed class StaffSignatureConfiguration : IEntityTypeConfiguration<Sta
     {
         b.MapTenantOwned();
         b.Property(x => x.Text).HasMaxLength(StaffSignature.Length);
+        b.Property(x => x.Name).HasMaxLength(StaffSignature.NameLength);
         b.Property(x => x.UpdatedAt);
         b.HasIndex("TenantId", nameof(StaffSignature.PersonId)).IsUnique();
     }
@@ -432,6 +436,8 @@ internal sealed class MediaAssetConfiguration : IEntityTypeConfiguration<MediaAs
         b.Property(x => x.ContentType).HasMaxLength(100);
         b.Property(x => x.BlobName).HasMaxLength(300);
         b.Property(x => x.Length);
+        b.Property(x => x.EmailCopyTried);
+        b.Property(x => x.EmailToken).HasMaxLength(MediaAsset.EmailTokenLength).IsUnicode(false);
         b.Property(x => x.CreatedAt);
         b.HasIndex(x => new { x.TenantId, x.StreamItemId });
         b.HasIndex(x => new { x.TenantId, x.HorseId, x.CreatedAt });

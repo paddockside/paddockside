@@ -15,6 +15,9 @@
     </PackageReference>
     <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="9.0.22" />
     <PackageReference Include="Microsoft.Extensions.Http" Version="9.0.22" />
+    <!-- Not 4.156 or 4.157: a damaged JPEG crashes the whole app there (EmailBrandingTests covers it). Check before moving up. -->
+    <PackageReference Include="SkiaSharp" Version="4.155.2" />
+    <PackageReference Include="SkiaSharp.NativeAssets.Linux.NoDependencies" Version="4.155.2" />
   </ItemGroup>
 
   <PropertyGroup>

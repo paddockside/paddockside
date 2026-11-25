@@ -1,0 +1,214 @@
+@using Microsoft.AspNetCore.Components.Forms
+@inject PaddocksideApi Api
+
+@*
+    How a business's emails look (David, 25 Nov 2026): its logo, colour and the details at the foot, beside a sample
+    email that follows every change before it is saved. On the Account page for tenant admins, and in the operator
+    console for each business (Path says which).
+*@
+<div class="grid grid-cols-[minmax(0,1fr)] gap-6 xl:grid-cols-[minmax(0,1fr)_407px]">
+    <div class="grid content-start gap-6">
+        @if (_error is not null)
+        {
+            <Error Message="@_error" />
+        }
+        @if (_notice is not null)
+        {
+            <p class="rounded-control bg-status-success-bg px-4 py-3 text-status-success-fg" role="status">@_notice</p>
+        }
+
+        <div class="grid gap-2">
+            <span class="font-strong">Logo</span>
+            @if (_brand.LogoUrl is not null)
+            {
+                <div class="grid place-items-center rounded-control border border-border-subtle bg-surface-raised p-4">
+                    <img src="@_brand.LogoUrl" alt="@($"{_brand.Name} logo")" width="@_brand.LogoWidth" height="@_brand.LogoHeight" />
+                </div>
+            }
+            <div class="flex flex-wrap gap-3">
+                <label class="btn-secondary cursor-pointer focus-within:outline focus-within:outline-2 focus-within:outline-offset-2 @(_busy ? "opacity-70" : null)">
+                    @(_brand.LogoUrl is null ? "Upload a logo" : "Change the logo")
+                    <InputFile class="sr-only" accept="image/png,image/jpeg" OnChange="UploadAsync" disabled="@_busy" />
+                </label>
+                @if (_brand.LogoUrl is not null)
+                {
+                    <button type="button" class="btn-link" disabled="@_busy" @onclick="RemoveAsync">Remove it</button>
+                }
+            </div>
+            <span class="text-small text-text-muted">PNG or JPG, up to 5 MB, ideally at least 440 pixels wide and made for a white background. Empty edges are trimmed for you. Owners also see it at the top of their portal.</span>
+            @if (_warning is not null)
+            {
+                <p class="rounded-control bg-status-warning-bg px-4 py-3 text-status-warning-fg" role="status">@_warning</p>
+            }
+        </div>
+
+        <div class="grid gap-2">
+            <label for="look-colour" class="font-strong">Colour</label>
+            <div class="flex flex-wrap items-center gap-3">
+                <input id="look-colour" type="color" class="h-[48px] w-[72px] cursor-pointer rounded-control border border-border-strong bg-surface-raised p-1" value="@(_colour ?? _brand.StandardColour)" @onchange="ColourAsync" />
+                <input aria-label="Colour as a code" class="min-h-control w-[8rem] rounded-control border border-border-strong bg-surface-raised px-4" value="@(_colour ?? _brand.StandardColour)" maxlength="7" @onchange="ColourAsync" />
+                @if (_colour is not null)
+                {
+                    <button type="button" class="btn-link" @onclick="GreenAsync">Use Paddockside's green</button>
+                }
+            </div>
+            <span class="text-small text-text-muted">For the band and the buttons. The words on it turn dark or light by themselves so they can always be read.</span>
+        </div>
+
+        <div class="grid gap-2">
+            <label for="look-footer" class="font-strong">Business details at the foot of every email</label>
+            <textarea id="look-footer" rows="3" maxlength="500" class="rounded-control border border-border-strong bg-surface-raised px-4 py-3" value="@_footer" @onchange="FooterAsync"></textarea>
+            <span class="text-small text-text-muted">Your legal name and a way to reach you, which Australian law asks for in business email: company name, address, phone.</span>
+        </div>
+
+        <button type="button" class="btn-primary justify-self-start" disabled="@(_busy || !Changed)" @onclick="SaveAsync">Save the colour and details</button>
+    </div>
+
+    <section class="grid content-start gap-3" aria-label="Sample email">
+        <div class="flex flex-wrap items-center gap-3">
+            <label for="look-sample" class="sr-only">Which email to show</label>
+            <select id="look-sample" class="min-h-control min-w-0 flex-1 rounded-control border border-border-strong bg-surface-raised px-3" value="@_key" @onchange="KeyAsync">
+                @foreach (var (key, label) in Choices)
+                {
+                    <option value="@key">@label</option>
+                }
+            </select>
+            <div class="inline-flex rounded-pill border border-border-strong p-0.5" role="group" aria-label="Size">
+                @foreach (var size in Sizes)
+                {
+                    <button type="button" aria-pressed="@(_size == size ? "true" : "false")" @onclick="() => _size = size"
+                            class="min-h-[32px] rounded-pill px-3 text-small @(_size == size ? "bg-action-primary-bg text-action-primary-fg" : null)">@size</button>
+                }
+            </div>
+        </div>
+        <div class="overflow-x-auto rounded-card border border-border-subtle bg-surface-sunken">
+            @if (_html is not null)
+            {
+                @* No scripts, no forms, nowhere to go: a picture of the email. (Same origin, or it cannot load the logo.) *@
+                <iframe sandbox="allow-same-origin" title="Sample email" srcdoc="@_html" class="block h-[720px] border-0" style="@Width"></iframe>
+            }
+        </div>
+        <span class="text-small text-text-muted">@(_subject is null ? null : $"Subject: {_subject}. ")Made-up content. Nothing is sent.</span>
+    </section>
+</div>
+
+@code {
+    private static readonly string[] Sizes = ["Phone", "Computer"];
+
+    /// <summary>The API address these are saved under: "api/account", or one business's in the operator console.</summary>
+    [Parameter, EditorRequired] public string Path { get; set; } = "";
+
+    [Parameter, EditorRequired] public BrandView Brand { get; set; } = null!;
+
+    /// <summary>The samples to choose from; a few kinds unless more are given.</summary>
+    [Parameter] public IReadOnlyList<(string Key, string Label)> Choices { get; set; } =
+        [("update", "Update from staff"), ("barrier", "Barrier draw"), ("photos", "Photos"), ("tickets", "Owners tickets question"), ("invitation", "Social event invitation"), ("mailout", "Mailout"), ("signin", "Sign-in link and code")];
+
+    private BrandView _brand = null!;
+    private string? _shown;
+    private string? _colour;
+    private string? _footer;
+    private string _key = "update";
+    private string _size = "Phone";
+    private string? _html;
+    private string? _subject;
+    private string? _error;
+    private string? _notice;
+    private string? _warning;
+    private bool _busy;
+
+    private bool Changed => _colour != _brand.Colour || (_footer ?? "").Trim() != (_brand.Footer ?? "");
+
+    private string Width => _size == "Phone" ? "width:375px;max-width:100%;margin:0 auto" : "width:720px";
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_shown == Path) return; // a re-render of the page around it keeps what's being typed
+        (_shown, _brand, _colour, _footer, _error, _notice, _warning, _html) = (Path, Brand, Brand.Colour, Brand.Footer, null, null, null, null);
+        await SampleAsync();
+    }
+
+    private async Task SampleAsync()
+    {
+        var result = await Api.EmailSampleAsync(Path, _key, _colour, _footer);
+        if (result.Succeeded) (_html, _subject) = (result.Value!.Html, result.Value.Subject);
+        else _error = result.Error;
+    }
+
+    private Task KeyAsync(ChangeEventArgs e)
+    {
+        _key = e.Value?.ToString() ?? _key;
+        return SampleAsync();
+    }
+
+    private async Task ColourAsync(ChangeEventArgs e)
+    {
+        (_error, _notice) = (null, null);
+        var typed = e.Value?.ToString()?.Trim().ToLowerInvariant() ?? "";
+        if (typed.Length == 6 && !typed.StartsWith('#')) typed = "#" + typed;
+        if (typed.Length != 7 || typed[0] != '#' || !typed.Skip(1).All(Uri.IsHexDigit))
+        {
+            _error = "Type a # and six letters or digits, or choose a colour from the picker.";
+            return;
+        }
+
+        _colour = typed == _brand.StandardColour && _brand.Colour is null ? null : typed;
+        await SampleAsync();
+    }
+
+    private Task GreenAsync()
+    {
+        (_colour, _error) = (null, null);
+        return SampleAsync();
+    }
+
+    private Task FooterAsync(ChangeEventArgs e)
+    {
+        _footer = e.Value?.ToString();
+        return SampleAsync();
+    }
+
+    private Task SaveAsync() => Run(async () =>
+    {
+        var result = await Api.SaveEmailLookAsync(Path, _colour, _footer);
+        if (!result.Succeeded) { _error = result.Error; return; }
+        (_brand, _colour, _footer) = (result.Value!, result.Value!.Colour, result.Value.Footer);
+        _notice = "Saved. Emails from now on look like this.";
+    });
+
+    private Task UploadAsync(InputFileChangeEventArgs e) => Run(async () =>
+    {
+        _warning = null;
+        if (e.File.Size > MaxBytes) { _error = "That file is too big: the most is 5 MB."; return; }
+        var result = await Api.UploadLogoAsync(Path, e.File, MaxBytes);
+        if (!result.Succeeded) { _error = result.Error; return; }
+        // Only the logo is saved here; a colour or details being typed stay as they are.
+        (_brand, _warning) = (result.Value!.Brand, result.Value.Warning);
+        _notice = "The logo is saved. Emails from now on carry it.";
+        await SampleAsync();
+    });
+
+    private Task RemoveAsync() => Run(async () =>
+    {
+        _warning = null;
+        var result = await Api.RemoveLogoAsync(Path);
+        if (!result.Succeeded) { _error = result.Error; return; }
+        (_brand, _notice) = (result.Value!, "Removed. Emails show the business's name instead.");
+        await SampleAsync();
+    });
+
+    private const long MaxBytes = 5L * 1024 * 1024;
+
+    private async Task Run(Func<Task> change)
+    {
+        (_busy, _error, _notice) = (true, null, null);
+        try
+        {
+            await change();
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}

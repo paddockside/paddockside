@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
+using Paddockside.Api.Account;
 using Paddockside.Api.Formatting;
 using Paddockside.Api.Security;
 using Paddockside.Application.Messaging;
@@ -82,7 +83,7 @@ public static class TicketEndpoints
                 title: $"That gives {state.Allocation.Given} tickets but only {state.Allocation.Available} are available. Take some off first.");
 
         var now = clock.GetUtcNow();
-        var author = user.FindFirstValue(ClaimTypes.Email) ?? "Staff";
+        var author = await StaffNames.AuthorAsync(user, db, cancellationToken);
         var told = new List<Guid>();
         foreach (var grant in state.Allocation.ToTell(state.Asked, state.Tenant.HousePartyId))
         {

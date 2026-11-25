@@ -296,6 +296,7 @@ public sealed class EmailDispatcher(
         var parties = await db.Parties.Where(p => partyIds.Contains(p.Id)).ToDictionaryAsync(p => p.Id, cancellationToken);
         var routingIds = batch.Where(d => d.RoutingAddressId != null).Select(d => d.RoutingAddressId!.Value).ToList();
         var routing = await db.RoutingAddresses.Where(r => routingIds.Contains(r.Id)).ToDictionaryAsync(r => r.Id, cancellationToken);
+        var media = await MediaAsync(db, items.Values, cancellationToken);
 
         var accepted = 0;
         var issued = new HashSet<string>();
@@ -343,8 +344,10 @@ public sealed class EmailDispatcher(
             else
             {
                 var openLink = await links.IssueDeepLinkAsync(tenant.Id, party.Id, contact.Value, message.Id, message.EventId, cancellationToken);
-                var choices = options.Value.PortalBaseUrl is { Length: > 0 } portal ? $"{portal.TrimEnd('/')}/my/me#notifications" : null;
-                rendered = renderer.Render(tenant, horse, onEvent, message, party, openLink, choices);
+                var portal = options.Value.PortalBaseUrl is { Length: > 0 } root ? root.TrimEnd('/') : null;
+                rendered = renderer.Render(tenant, horse, onEvent, message, party, openLink, portal is null ? null : $"{portal}/my/me#notifications",
+                    media.GetValueOrDefault(message.Id),
+                    portal is not null && message.Prompt is not null ? AnswerByEmail.Link(portal, tenant.Slug, address.Token) : null);
             }
             var result = await sender.SendAsync(new OutboundEmail(
                 options.Value.FromAddress,
@@ -372,6 +375,55 @@ public sealed class EmailDispatcher(
         await db.SaveChangesAsync(cancellationToken);
         logger.LogInformation("Email dispatch for tenant {TenantId}: {Accepted} of {Count} accepted.", tenantId, accepted, batch.Count);
         return accepted;
+    }
+
+    /// <summary>
+    /// What each media post in the batch shows in its email (David, 25 Nov 2026): the first photo, as a small copy at an
+    /// address of its own that needs no sign-in. Made once, and the same for every owner. A photo that can't be read, or
+    /// a fault making the copy, never holds the email up: it goes without the picture, and the button opens the post.
+    /// </summary>
+    private async Task<Dictionary<Guid, EmailMedia>> MediaAsync(PaddocksideDbContext db, IEnumerable<StreamItem> items, CancellationToken cancellationToken)
+    {
+        var ids = items.Where(i => i.Kind == StreamItemKind.Media).Select(i => i.Id).ToList();
+        var result = new Dictionary<Guid, EmailMedia>();
+        if (ids.Count == 0) return result;
+        foreach (var post in (await db.MediaAssets.Where(a => ids.Contains(a.StreamItemId)).OrderBy(a => a.CreatedAt).ToListAsync(cancellationToken)).GroupBy(a => a.StreamItemId))
+        {
+            string? url = null;
+            if (options.Value.PortalBaseUrl is { Length: > 0 } root && post.FirstOrDefault(a => a.CanShowInEmail) is { } photo
+                && (photo.EmailToken ?? await CopyForEmailAsync(db, photo, cancellationToken)) is { } token)
+                url = $"{root.TrimEnd('/')}/photo/{photo.TenantId}/{token}.jpg";
+            result[post.Key] = new EmailMedia(url, post.Select(a => a.Kind).ToList());
+        }
+
+        await db.SaveChangesAsync(cancellationToken); // the copy's address is kept even if a send below fails
+        return result;
+    }
+
+    private async Task<string?> CopyForEmailAsync(PaddocksideDbContext db, MediaAsset photo, CancellationToken cancellationToken)
+    {
+        if (photo.EmailCopyTried || photo.Length > Media.Pictures.MaxPhotoBytes) return null;
+        photo.TryEmailCopy();
+        await db.SaveChangesAsync(cancellationToken); // before the file is read: see EmailCopyTried
+        try
+        {
+            await using var original = await files.OpenReadAsync(photo.BlobName, cancellationToken);
+            if (original is null) return null;
+            using var read = new MemoryStream();
+            await original.CopyToAsync(read, cancellationToken);
+            if (Media.Pictures.ForEmail(read.ToArray()) is not { } small) return null;
+
+            var token = MediaAsset.NewEmailToken();
+            using var copy = new MemoryStream(small);
+            await files.SaveAsync(MediaAsset.EmailBlobName(photo.TenantId, token), copy, "image/jpeg", cancellationToken);
+            photo.PublishForEmail(token); // only once it's there to show
+            return token;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogError(ex, "Photo {AssetId} could not be copied for email; it goes without the picture.", photo.Id);
+            return null;
+        }
     }
 
     /// <summary>

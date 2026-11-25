@@ -145,5 +145,14 @@ public static class Rsvp
         $"{baseUrl.TrimEnd('/')}/s/{tenantSlug}/{token}?answer={Uri.EscapeDataString(answer)}";
 }
 
+/// <summary>
+/// The answer buttons on a question sent to owners (David, 25 Nov 2026): each owner's own, by their reply token. Like an
+/// invitation's, they open a page that asks them to confirm, so a mail scanner opening links answers nothing.
+/// </summary>
+public static class AnswerByEmail
+{
+    public static string Link(string baseUrl, string tenantSlug, string token) => $"{baseUrl.TrimEnd('/')}/a/{tenantSlug}/{token}";
+}
+
 /// <summary>The event an invitation is for, as the email shows it, with this recipient's three reply links.</summary>
 public sealed record RsvpBlock(string What, string When, string? Where, string ComingLink, string MaybeLink, string NotComingLink);

@@ -8,6 +8,7 @@ using Paddockside.Api.Formatting;
 using Paddockside.Api.Security;
 using Paddockside.Application.Messaging;
 using Paddockside.Domain;
+using Paddockside.Infrastructure.Email;
 using Paddockside.Infrastructure.Identity;
 using Paddockside.Infrastructure.Persistence;
 
@@ -67,7 +68,7 @@ public static class SupportSessions
     // ---- the operator's side -----------------------------------------------------------------------------------
 
     private static async Task<IResult> Request(Guid tenantId, SupportRequest request, ClaimsPrincipal user, TenantScopedDb tenants,
-        PaddocksideIdentityDbContext identity, IEmailSender email, IOptions<EmailOptions> options, AuditLog audit, TimeProvider clock, CancellationToken cancellationToken)
+        PaddocksideIdentityDbContext identity, IEmailSender email, OwnerEmailRenderer renderer, IOptions<EmailOptions> options, AuditLog audit, TimeProvider clock, CancellationToken cancellationToken)
     {
         var hours = request.Hours == 0 ? (int)SupportSession.DefaultDuration.TotalHours : request.Hours;
         if (hours is < 1 or > 24) return Results.Problem(statusCode: StatusCodes.Status400BadRequest, title: "Ask for between 1 and 24 hours.");
@@ -89,7 +90,7 @@ public static class SupportSessions
 
         await audit.RecordAsync(tenantId, "support.requested", $"{session.OperatorName} asked for {Words.Hours(hours)} of access: {session.Reason}", "SupportSession", session.Id, kind: AuditActorKind.Operator, cancellationToken: cancellationToken);
         var link = $"{options.Value.PortalBaseUrl?.TrimEnd('/')}/members";
-        await EmailAdminsAsync(identity, email, options.Value, tenantId, $"Paddockside support has asked to view {tenant.Name}",
+        await EmailAdminsAsync(identity, email, renderer, options.Value, tenantId, $"Paddockside support has asked to view {tenant.Name}",
             $"{session.OperatorName} has asked to view {tenant.Name}'s account for {Words.Hours(hours)}, to help with:\n\n{session.Reason}\n\n" +
             $"Nothing happens unless you approve it. Approve or decline it on the Members page: {link}\n\n" +
             "While it lasts they can read but not change anything, everything they look at is recorded in your audit log, and you can end it at any time.",
@@ -111,7 +112,7 @@ public static class SupportSessions
     /// both operators named, so access without them is never silent.
     /// </summary>
     private static async Task<IResult> SecondOperator(Guid tenantId, Guid id, ClaimsPrincipal user, TenantScopedDb tenants, PaddocksideIdentityDbContext identity,
-        IEmailSender email, IOptions<EmailOptions> options, AuditLog audit, TimeProvider clock, CancellationToken cancellationToken)
+        IEmailSender email, OwnerEmailRenderer renderer, IOptions<EmailOptions> options, AuditLog audit, TimeProvider clock, CancellationToken cancellationToken)
     {
         await using var db = tenants.For(tenantId);
         var session = await db.SupportSessions.SingleOrDefaultAsync(s => s.Id == id, cancellationToken);
@@ -131,7 +132,7 @@ public static class SupportSessions
             $"{OperatorName(user)} approved {session.OperatorName}'s emergency access until {Words.Moment(session.ExpiresAt!.Value)}", "SupportSession", session.Id,
             kind: AuditActorKind.Operator, cancellationToken: cancellationToken);
 
-        await EmailAdminsAsync(identity, email, options.Value, tenantId, $"Paddockside has opened emergency access to {tenant.Name}",
+        await EmailAdminsAsync(identity, email, renderer, options.Value, tenantId, $"Paddockside has opened emergency access to {tenant.Name}",
             $"We could not reach an admin at {tenant.Name}, so two of Paddockside's operators have opened emergency access to your account.\n\n" +
             $"Reason: {session.Reason}\nAsked by: {session.OperatorName}\nApproved by: {OperatorName(user)}\nUntil: {Words.Moment(session.ExpiresAt!.Value)} (Sydney time)\n\n" +
             "They can read but not change anything, and everything they look at is recorded in your audit log. " +
@@ -140,17 +141,17 @@ public static class SupportSessions
         return Results.NoContent();
     }
 
-    private static async Task EmailAdminsAsync(PaddocksideIdentityDbContext identity, IEmailSender email, EmailOptions options, Guid tenantId,
+    private static async Task EmailAdminsAsync(PaddocksideIdentityDbContext identity, IEmailSender email, OwnerEmailRenderer renderer, EmailOptions options, Guid tenantId,
         string subject, string text, string purpose, CancellationToken cancellationToken)
     {
         var admins = await (from m in identity.Memberships
                             join p in identity.Users on m.PersonId equals p.Id
                             where m.TenantId == tenantId && m.Role == MemberRole.TenantAdmin && m.Status == MembershipStatus.Active
                             select p.Email).ToListAsync(cancellationToken);
-        var html = $"<p>{System.Net.WebUtility.HtmlEncode(text).Replace("\n", "<br>")}</p>";
+        var rendered = renderer.RenderNotice(subject, text, "You are receiving this because you are an admin of this account on Paddockside.");
         foreach (var admin in admins.OfType<string>())
             await email.SendAsync(new OutboundEmail(options.FromAddress, Senders.Product, admin, string.Empty, options.FromAddress,
-                subject, html, text, new Dictionary<string, string> { ["purpose"] = purpose }, TrackOpens: false), cancellationToken);
+                rendered.Subject, rendered.Html, rendered.Text, new Dictionary<string, string> { ["purpose"] = purpose }, TrackOpens: false), cancellationToken);
     }
 
     private static async Task<IResult> OperatorList(ClaimsPrincipal user, TenantScopedDb tenants, TimeProvider clock, CancellationToken cancellationToken)

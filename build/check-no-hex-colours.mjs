@@ -18,6 +18,9 @@ const generated = new Set([
   'src/Paddockside.Design/wwwroot/tokens.css',
   'src/Paddockside.Web/wwwroot/css/app.css', // Tailwind output, built from tokens by dotnet build
   'src/Paddockside.Infrastructure/Email/EmailTokens.g.cs', // email colours, generated from tokens.json
+  // Not generated, but not design either: brand colours a tenant might type, as test input.
+  'tests/Paddockside.Isolation.Tests/Api/EmailBrandingTests.cs',
+  'tests/Paddockside.Isolation.Tests/Api/EmailPreviewTests.cs',
 ]);
 
 // #rgb, #rgba, #rrggbb or #rrggbbaa as a whole word, not an HTML entity like &#160;.

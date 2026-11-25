@@ -1,0 +1,75 @@
+@page "/account"
+@inject PaddocksideApi Api
+@inject SessionState Session
+@inject NavigationManager Navigation
+
+@* The signed-in person's own name, for everyone; how the business's emails look, for tenant admins (David, 25 Nov 2026). *@
+<PageTitle>Account · Paddockside</PageTitle>
+
+<div class="grid grid-cols-[minmax(0,1fr)] gap-6">
+    <h1>Account</h1>
+
+    @if (_error is not null)
+    {
+        <Error Message="@_error" />
+    }
+
+    @if (_account is not null)
+    {
+        <section class="card grid gap-4" aria-labelledby="you-heading">
+            <h2 id="you-heading">You</h2>
+            <form class="grid max-w-md gap-2" @onsubmit="SaveNameAsync" @onsubmit:preventDefault>
+                <label for="your-name" class="font-strong">Your name, as owners see it</label>
+                <input id="your-name" autocomplete="name" maxlength="100" class="min-h-control rounded-control border border-border-strong bg-surface-raised px-4" @bind="_name" />
+                <span class="text-small text-text-muted">Your updates are signed with it. Without it, they're signed "The team at @_account.Brand.Name". You're signed in as @_account.Email.</span>
+                <button type="submit" class="btn-primary mt-2 justify-self-start" disabled="@_busy">Save your name</button>
+                @if (_nameNotice is not null)
+                {
+                    <p class="text-small text-status-success-fg" role="status">@_nameNotice</p>
+                }
+            </form>
+        </section>
+
+        @if (_account.CanChangeBrand)
+        {
+            <section class="card grid grid-cols-[minmax(0,1fr)] gap-4" aria-labelledby="emails-heading">
+                <h2 id="emails-heading">How your emails look</h2>
+                <EmailLook Path="api/account" Brand="_account.Brand" />
+            </section>
+        }
+    }
+    else if (_error is null)
+    {
+        <p class="text-text-muted" role="status">Loading…</p>
+    }
+</div>
+
+@code {
+    private AccountView? _account;
+    private string? _name;
+    private string? _nameNotice;
+    private string? _error;
+    private bool _busy;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (Session.Current is null && await Session.RefreshAsync() is null)
+        {
+            Navigation.NavigateTo("sign-in");
+            return;
+        }
+
+        var result = await Api.AccountAsync();
+        if (result.Succeeded) (_account, _name) = (result.Value, result.Value!.YourName);
+        else _error = result.Error;
+    }
+
+    private async Task SaveNameAsync()
+    {
+        (_busy, _error, _nameNotice) = (true, null, null);
+        var result = await Api.SaveYourNameAsync(_name);
+        if (result.Succeeded) _nameNotice = string.IsNullOrWhiteSpace(_name) ? "Saved. Your updates are signed as the team." : "Saved. Your updates from now on are signed with it.";
+        else _error = result.Error;
+        _busy = false;
+    }
+}

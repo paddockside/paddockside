@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+
 namespace Paddockside.Domain;
 
 public enum MediaKind
@@ -105,6 +107,40 @@ public sealed class MediaAsset
 
     /// <summary>The asset this was shared from: an emailed photo staff shared with owners. The same stored file.</summary>
     public Guid? SharedFromId { get; private set; }
+
+    public const int EmailTokenLength = 32;
+
+    /// <summary>
+    /// Set when a small copy of this photo was made to show in owners' emails (David, 25 Nov 2026). The copy is at an
+    /// address nobody can guess but anyone holding the email can open; the original still needs a sign-in.
+    /// </summary>
+    public string? EmailToken { get; private set; }
+
+    /// <summary>The photo types a mail program can show once copied; a phone's HEIC can't be read here.</summary>
+    public bool CanShowInEmail => Kind == MediaKind.Photo && ContentType is "image/jpeg" or "image/png" or "image/webp" or "image/gif";
+
+    /// <summary>
+    /// Saved before the copy is made, so a photo is only ever tried once: if reading it stopped the app, starting again
+    /// would otherwise stop it again.
+    /// </summary>
+    public bool EmailCopyTried { get; private set; }
+
+    public void TryEmailCopy() => EmailCopyTried = true;
+
+    public static string NewEmailToken() => RandomNumberGenerator.GetString(RoutingToken.Alphabet, EmailTokenLength);
+
+    public static bool IsEmailToken(string? token) => token is { Length: EmailTokenLength } && token.All(c => RoutingToken.Alphabet.Contains(c));
+
+    /// <summary>The photo's small copy is stored under this token; the same one is used for every owner.</summary>
+    public void PublishForEmail(string token)
+    {
+        if (!CanShowInEmail) throw new DomainException("Only a photo can be shown in an email.");
+        if (!IsEmailToken(token)) throw new DomainException("That isn't a photo address.");
+        EmailToken ??= token;
+    }
+
+    /// <summary>Where the email copy is kept.</summary>
+    public static string EmailBlobName(Guid tenantId, string token) => $"{tenantId}/email/{token}.jpg";
 
     /// <summary>The same file on a media item staff share with owners; nothing is copied in storage.</summary>
     public MediaAsset ShareOn(StreamItem mediaItem, DateTimeOffset at)

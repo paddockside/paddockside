@@ -93,12 +93,13 @@ public sealed record MessagePrompt(PromptKind Kind, string Question, IReadOnlyLi
     }
 }
 
-/// <summary>How an answer was given: tapped in the portal, read from a reply, or recorded by staff.</summary>
+/// <summary>How an answer was given: tapped in the portal or the email, read from a reply, or recorded by staff.</summary>
 public enum AnswerSource
 {
     Portal,
     ReadFromReply,
     Staff,
+    EmailButton,
 }
 
 /// <summary>

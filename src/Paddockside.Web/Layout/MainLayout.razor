@@ -84,6 +84,7 @@
                     </span>
                 </div>
                 <div class="flex flex-wrap gap-x-4">
+                    <a href="account" class="inline-flex min-h-control items-center text-small text-rail-muted underline underline-offset-4" aria-current="@AccountCurrent">Account</a>
                     @foreach (var other in _otherTenants)
                     {
                         <button type="button" class="min-h-control text-small text-rail-muted underline underline-offset-4" @onclick="() => SwitchTenant(other)">Switch to @other.Name</button>
@@ -119,6 +120,7 @@
                                 <a href="members" class="btn-link">Members</a>
                                 <a href="audit" class="btn-link">Audit log</a>
                             }
+                            <a href="account" class="btn-link">Account</a>
                             @if (Session.Current.IsOperator && Session.Current.SupportUntil is null)
                             {
                                 <a href="ops" class="btn-link">Operator console</a>
@@ -181,6 +183,8 @@
             }
         </a>
     };
+
+    private string? AccountCurrent => IsCurrent("account") ? "page" : null;
 
     private bool IsCurrent(string href)
     {

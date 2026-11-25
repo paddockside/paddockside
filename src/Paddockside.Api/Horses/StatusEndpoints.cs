@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
+using Paddockside.Api.Account;
 using Paddockside.Api.Audit;
 using Paddockside.Api.Events;
 using Paddockside.Api.Formatting;
@@ -73,7 +74,7 @@ public static class StatusEndpoints
         if (horse is null) return Results.NotFound();
 
         var now = clock.GetUtcNow();
-        var author = user.FindFirstValue(ClaimTypes.Email) ?? "Staff";
+        var author = await StaffNames.AuthorAsync(user, db, cancellationToken);
         HorseStatusEntry entry;
         try
         {

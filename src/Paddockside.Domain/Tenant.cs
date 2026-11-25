@@ -28,8 +28,22 @@ public sealed class Tenant
     /// </summary>
     public string Slug { get; private set; }
 
-    /// <summary>The tenant's logo for emails and the app header (design-system.md §2.2). Optional.</summary>
+    /// <summary>
+    /// The tenant's logo for emails and the app header (design-system.md §2.2). Optional. Ours start with "/", on the
+    /// app's own address, and are public: mail programs fetch them with no one signed in.
+    /// </summary>
     public string? LogoUrl { get; private set; }
+
+    /// <summary>The size to show the logo at, in pixels; the stored picture has up to twice as many, for sharp screens.</summary>
+    public int? LogoWidth { get; private set; }
+
+    public int? LogoHeight { get; private set; }
+
+    /// <summary>
+    /// The colour of the band and buttons in the tenant's emails, as six hex digits after a #, or null for Paddockside's green (David, 25 Nov
+    /// 2026). Emails only: the portal and console keep one look (P48).
+    /// </summary>
+    public string? BrandColour { get; private set; }
 
     /// <summary>Business details for every email footer: the Spam Act requires the sender be identified (§7).</summary>
     public string? FooterDetails { get; private set; }
@@ -65,6 +79,28 @@ public sealed class Tenant
         Slug = NormaliseSlug(slug);
         LogoUrl = string.IsNullOrWhiteSpace(logoUrl) ? null : logoUrl.Trim();
         FooterDetails = string.IsNullOrWhiteSpace(footerDetails) ? null : footerDetails.Trim();
+    }
+
+    /// <summary>A logo uploaded on the Account page, and the size to show it at.</summary>
+    public void SetLogo(string url, int width, int height)
+    {
+        if (string.IsNullOrWhiteSpace(url) || width < 1 || height < 1) throw new DomainException("A logo needs a picture.");
+        (LogoUrl, LogoWidth, LogoHeight) = (url, width, height);
+    }
+
+    public void RemoveLogo() => (LogoUrl, LogoWidth, LogoHeight) = (null, null, null);
+
+    public const int FooterLength = 500;
+
+    /// <summary>The details at the foot of every email, and the emails' colour (empty for Paddockside's green).</summary>
+    public void SetEmailLook(string? colour, string? footerDetails)
+    {
+        var footer = string.IsNullOrWhiteSpace(footerDetails) ? null : footerDetails.Trim();
+        if (footer?.Length > FooterLength) throw new DomainException($"Keep the business details under {FooterLength} characters.");
+        var hex = string.IsNullOrWhiteSpace(colour) ? null : colour.Trim().ToLowerInvariant();
+        if (hex is not null && (hex.Length != 7 || hex[0] != '#' || !hex.Skip(1).All(char.IsAsciiHexDigitLower)))
+            throw new DomainException("Choose the colour from the picker, or type a # and six letters or digits.");
+        (BrandColour, FooterDetails) = (hex, footer);
     }
 
     private static string NormaliseSlug(string value)

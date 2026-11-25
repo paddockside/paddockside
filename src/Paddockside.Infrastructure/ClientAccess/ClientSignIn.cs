@@ -73,7 +73,7 @@ public sealed class ClientSignIn(
         await identity.SaveChangesAsync(cancellationToken);
 
         var sender = await SenderAsync(parties, cancellationToken);
-        var rendered = renderer.RenderSignIn(sender.Name, sender.LogoUrl, sender.FooterDetails, PortalLink(link), code, (int)EmailLinkLifetime.TotalMinutes);
+        var rendered = renderer.RenderSignIn(sender, PortalLink(link), code, (int)EmailLinkLifetime.TotalMinutes);
         var result = await email.SendAsync(new OutboundEmail(emailOptions.Value.FromAddress, Senders.For(sender.Name), normalised, string.Empty, emailOptions.Value.FromAddress,
             rendered.Subject, rendered.Html, rendered.Text, new Dictionary<string, string> { ["purpose"] = "sign-in" }, TrackOpens: false), cancellationToken);
         if (!result.Accepted) logger.LogWarning("Sign-in email to a known address was not accepted: {Error}", result.Error);
@@ -302,15 +302,15 @@ public sealed class ClientSignIn(
     }
 
     /// <summary>Sign-in mail comes from the tenant when the address is one tenant's owner; otherwise from the product.</summary>
-    private async Task<(string Name, string? LogoUrl, string? FooterDetails)> SenderAsync(IReadOnlyList<(Guid TenantId, Guid PartyId, Guid? PersonId)> parties, CancellationToken cancellationToken)
+    private async Task<EmailBrand> SenderAsync(IReadOnlyList<(Guid TenantId, Guid PartyId, Guid? PersonId)> parties, CancellationToken cancellationToken)
     {
         if (parties.Select(p => p.TenantId).Distinct().ToList() is [var only])
         {
             await using var db = tenants.For(only);
-            if (await db.Tenants.SingleOrDefaultAsync(cancellationToken) is { } tenant) return (tenant.Name, tenant.LogoUrl, tenant.FooterDetails);
+            if (await db.Tenants.SingleOrDefaultAsync(cancellationToken) is { } tenant) return EmailBrand.Of(tenant);
         }
 
-        return ("Paddockside", null, null);
+        return EmailBrand.Product;
     }
 
     private string PortalLink(string token) => $"{emailOptions.Value.PortalBaseUrl?.TrimEnd('/')}/my/link#{token}";

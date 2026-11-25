@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
+using Paddockside.Api.Account;
 using Paddockside.Api.Audit;
 using Paddockside.Api.Security;
 using Paddockside.Domain;
@@ -57,7 +58,7 @@ public static class ReplyToSenderEndpoints
         var horse = await db.Horses.SingleAsync(h => h.Id == item.HorseId, cancellationToken);
         var e = item.EventId is { } eventId ? await db.Events.SingleAsync(x => x.Id == eventId, cancellationToken) : null;
         var now = clock.GetUtcNow();
-        var author = user.FindFirstValue(ClaimTypes.Email) ?? "Staff";
+        var author = await StaffNames.AuthorAsync(user, db, cancellationToken);
         var subject = item.Title is { Length: > 0 } title
             ? title.StartsWith("Re:", StringComparison.OrdinalIgnoreCase) ? title : $"Re: {title}"
             : $"Re: {horse.Name}";
