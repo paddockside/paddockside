@@ -161,6 +161,9 @@ Also decided:
 **P66. In the portal an owner sees only the social events they were invited to or are down for, and answers there as from the email.** Never who else is coming, how many, or staff's notes. Proposed default, built 25 Nov 2026; the alternative is every upcoming event.
 **P67. Everything a business's clients are sent can come from the address they already know (office@…), as the business alone, without "via Paddockside".** Amends messaging-channels.md §2.1, which kept the main domain out of it: the familiar address matters more. Verified in Postmark, tested, seen to pass DMARC and turned on by an operator; if it's ever refused, emails go from Paddockside's address at once. Reply addresses stay per recipient.
 **P68. A reply to a mailout or invitation is a conversation on that mailout or social event, answered from there, and on Today until it's answered or set aside.** Mail sent straight to the business's own mailbox isn't caught yet.
+**P69. Sending an update from a phone has a page of its own, opened from the horse or its event: voice recorded there, video and photos by the phone's own camera, anything from the phone.** Files go up in pieces while it's written and are kept on the phone until it's sent; sent twice after a dropout, it's one update.
+**P70. Each horse has a standing "General updates" event for updates not about one event.** Started by the first one; incoming mail is never filed on it automatically.
+**P71. A member of staff's own phone stays signed in for 7 days unused, 30 days at most, if they say it's theirs.** Amends identity-access.md §4.2 (12 hours idle), which still holds everywhere else. They or an admin can sign it out; the operator console is never open to it.
 
 ---
 

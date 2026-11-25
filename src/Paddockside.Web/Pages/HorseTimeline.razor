@@ -13,7 +13,7 @@
     trainer, vet and clubs and the horse's email address alongside; past events folded away. On a phone: now, then
     owners and contacts, then past events.
 *@
-<div class="grid grid-cols-[minmax(0,1fr)] gap-6">
+<div class="grid grid-cols-[minmax(0,1fr)] gap-6 @(CanSend ? "pb-[96px] lg:pb-0" : null)">
     <a href="horses" class="btn-link justify-self-start">← All horses</a>
 
     @if (_error is not null)
@@ -26,6 +26,10 @@
     }
     else
     {
+        @if (CanSend)
+        {
+            <SendUpdateBar HorseId="Id" />
+        }
         <div class="flex flex-wrap items-center justify-between gap-3">
             <div class="grid min-w-0 gap-1">
                 <h1>@_horse.Name</h1>
@@ -444,6 +448,9 @@
 
 @code {
     [Parameter] public Guid Id { get; set; }
+
+    /// <summary>On a phone, the way to send an update is always in reach (David, 25 Nov 2026).</summary>
+    private bool CanSend => _horse is { Managed: true } && Session.Current?.Role is "Coordinator" or "Manager" or "TenantAdmin";
 
     private HorseDetail? _horse;
     private List<EventSummary>? _events;

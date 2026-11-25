@@ -82,6 +82,18 @@
                             }
                             <span class="ml-auto text-small text-text-muted">since @member.Since</span>
                         </div>
+                        @if (member.Phones is { Count: > 0 } phones)
+                        {
+                            <ul class="grid gap-2" aria-label="@member.Email's phones">
+                                @foreach (var p in phones)
+                                {
+                                    <li class="flex flex-wrap items-center gap-3 text-small">
+                                        <span class="text-text-muted">@p.Label, signed in @p.SignedIn, last used @p.LastUsed.ToLowerInvariant()</span>
+                                        <button type="button" class="font-strong underline underline-offset-4" disabled="@_busy" @onclick="() => SignOutPhoneAsync(member, p)">Sign out this phone</button>
+                                    </li>
+                                }
+                            </ul>
+                        }
                         @if (member.IsYou)
                         {
                             <p class="text-small text-text-muted">@member.RoleLabel. Another tenant admin can change your role.</p>
@@ -155,6 +167,17 @@
 </div>
 
 @code {
+    private async Task SignOutPhoneAsync(MemberView member, PhoneView phone)
+    {
+        (_busy, _error, _notice) = (true, null, null);
+        var result = await Api.SignOutMembersPhoneAsync(phone.Id);
+        if (result.Succeeded) _notice = $"{member.Email}'s {phone.Label} is signed out, within a minute.";
+        else _error = result.Error;
+        var page = await Api.MembersAsync();
+        if (page.Succeeded) _page = page.Value;
+        _busy = false;
+    }
+
     private MembersPage? _page;
     private List<SupportView>? _support;
     private string? _error;

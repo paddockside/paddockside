@@ -2,6 +2,7 @@
 @inject PaddocksideApi Api
 @inject SessionState Session
 @inject NavigationManager Navigation
+@inject IJSRuntime JS
 
 <PageTitle>Sign in · Paddockside</PageTitle>
 
@@ -34,6 +35,13 @@
                     <label class="field-label" for="code">6-digit code</label>
                     <InputText id="code" class="input-code" inputmode="numeric" autocomplete="one-time-code" maxlength="7" @bind-Value="_form.Code" required />
                 </div>
+                @if (_phone)
+                {
+                    <label class="flex items-start gap-3">
+                        <input type="checkbox" class="mt-1 size-[22px] accent-action-primary-bg" @bind="_keep" />
+                        <span>This is my own phone, and it locks. <span class="text-text-muted">Stay signed in unless I don't use it for a week.</span></span>
+                    </label>
+                }
                 <Error Message="@_error" />
                 <button type="submit" class="btn-primary w-full" disabled="@_busy">Sign in</button>
             </EditForm>
@@ -115,11 +123,15 @@
     private string? _error;
     private bool _busy;
 
+    /// <summary>Offered on a phone or tablet only; never ticked for them.</summary>
+    private bool _phone, _keep;
+
     /// <summary>Set by an accepted invitation (/join): the password step is done; go straight to the second factor.</summary>
     [SupplyParameterFromQuery(Name = "continue")] public string? Continue { get; set; }
 
     protected override async Task OnInitializedAsync()
     {
+        _phone = await JS.InvokeAsync<bool>("paddockside.isTouch");
         if (Continue == "totp")
         {
             Go(Step.AuthenticatorCode);
@@ -161,7 +173,7 @@
 
     private Task SubmitCode() => Run(async () =>
     {
-        var result = await Api.SubmitAuthenticatorCodeAsync(_form.Code);
+        var result = await Api.SubmitAuthenticatorCodeAsync(_form.Code, _phone && _keep);
         if (result.Succeeded) await Finish();
         else _error = result.Error;
     });

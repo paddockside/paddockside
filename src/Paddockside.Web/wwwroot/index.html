@@ -3,7 +3,7 @@
 
 <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="color-scheme" content="light dark" />
     <title>Paddockside</title>
     <base href="/" />
@@ -32,6 +32,8 @@
                 if (theme === 'light' || theme === 'dark') document.documentElement.dataset.theme = theme;
                 else delete document.documentElement.dataset.theme;
             },
+            // A phone or tablet: staff can say it's their own when they sign in.
+            isTouch() { return matchMedia('(pointer: coarse)').matches; },
             // Owner portal: a notification link lands on the exact item (identity-access.md §4.1).
             scrollToItem(id) {
                 const item = document.getElementById(id);

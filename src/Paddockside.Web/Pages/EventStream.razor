@@ -28,7 +28,11 @@ else if (_page is null)
 else
 {
     var ev = _page.Event;
-    <div class="grid min-h-screen grid-cols-[minmax(0,1fr)] xl:grid-cols-[minmax(0,1fr)_320px]">
+    @if (PhoneSend && !_writing)
+    {
+        <SendUpdateBar HorseId="_page.HorseId" EventId="Id" />
+    }
+    <div class="@(PhoneSend && !_writing ? "pb-[96px] lg:pb-0" : null) grid min-h-screen grid-cols-[minmax(0,1fr)] xl:grid-cols-[minmax(0,1fr)_320px]">
         <div class="flex min-w-0 flex-col">
             <header class="grid gap-4 border-b border-border-subtle bg-surface-raised px-4 pb-4 pt-[20px] sm:px-8">
                 <div class="flex flex-wrap items-start justify-between gap-4">
@@ -231,7 +235,8 @@ else
                 </section>
             </div>
 
-            <section id="write" class="z-10 grid gap-3 border-t lg:sticky lg:bottom-0 border-border-subtle bg-surface-raised px-4 pb-[20px] pt-4 sm:px-8" aria-label="Write an update">
+            @* On a phone, an open event's updates have a page of their own; the box opens here only to send on a trainer's words. *@
+            <section id="write" class="@(PhoneSend && !_writing ? "hidden lg:grid" : "grid") z-10 gap-3 border-t lg:sticky lg:bottom-0 border-border-subtle bg-surface-raised px-4 pb-[20px] pt-4 sm:px-8" aria-label="Write an update">
                 @if (_saved is not null)
                 {
                     <p class="rounded-control bg-status-success-bg px-4 py-3 text-status-success-fg" role="status">@_saved</p>
@@ -695,6 +700,9 @@ else
     }
 
     private ComposeBox? _compose;
+    private bool _writing;
+
+    private bool PhoneSend => _page?.Event.Status == "Open" && Session.Current?.Role is "Coordinator" or "Manager" or "TenantAdmin";
     private bool _closing;
     private string? _closeReason, _closeError;
 
@@ -721,6 +729,7 @@ else
     private void SendOn(ItemView item)
     {
         var step = item.SendOnStep is { Length: > 0 } s ? s : null;
+        _writing = true;
         _compose?.StartFrom(item.Body, step);
         var where = step is null ? "" : ", on " + step;
         (_error, _saved) = (null, $"The trainer's words are in the message box{where}. Take out anything owners shouldn't see, then send.");

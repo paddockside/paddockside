@@ -1,0 +1,46 @@
+@implements IDisposable
+@inject UpdateOutbox Outbox
+@inject SessionState Session
+
+@*
+    An update on its way while staff are on another page: how far it's got, or what it's waiting for. Gone when it's sent.
+*@
+@if (Going.Count > 0)
+{
+    <div class="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-border-subtle bg-surface-raised px-4 py-2 text-small sm:px-6" role="status">
+        @foreach (var u in Going)
+        {
+            <a href="horses/@u.HorseId/update" class="font-strong underline underline-offset-4 @(u.State == "failed" ? "text-status-danger-fg" : null)">@Words(u)</a>
+        }
+    </div>
+}
+
+@code {
+    private List<OutboxUpdate> Going => Outbox.State.Updates.Where(u => u.State is "sending" or "failed").ToList();
+
+    private string Words(OutboxUpdate u) => u.State == "failed" ? $"{u.Horse}: the update wasn't sent. See why."
+        : Outbox.State.NeedsSignIn ? $"{u.Horse}: sign in to send the update"
+        : !Outbox.State.Online ? $"{u.Horse}: update waiting for signal"
+        : $"{u.Horse}: sending update, {u.Percent}%";
+
+    protected override async Task OnInitializedAsync()
+    {
+        Outbox.Changed += Refresh;
+        Session.Changed += SessionChanged;
+        if (Session.Current is not null) await Outbox.StartAsync();
+    }
+
+    private void SessionChanged() => InvokeAsync(async () =>
+    {
+        if (Session.Current is null) Outbox.SignedOut();
+        else await Outbox.StartAsync();
+    });
+
+    private void Refresh() => InvokeAsync(StateHasChanged);
+
+    public void Dispose()
+    {
+        Outbox.Changed -= Refresh;
+        Session.Changed -= SessionChanged;
+    }
+}

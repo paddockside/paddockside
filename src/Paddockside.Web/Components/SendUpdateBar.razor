@@ -1,0 +1,28 @@
+@implements IDisposable
+@inject UpdateOutbox Outbox
+
+@* On a phone, the way to send an update on this horse, always in reach at the foot of the screen (David, 25 Nov 2026). *@
+<div class="fixed inset-x-0 bottom-0 z-20 border-t border-border-subtle bg-surface-raised p-4 pb-[max(16px,env(safe-area-inset-bottom))] lg:hidden">
+    <a href="@Href" class="btn-primary min-h-[52px] w-full">@Words</a>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public Guid HorseId { get; set; }
+
+    /// <summary>Opened from this event: it's chosen.</summary>
+    [Parameter] public Guid? EventId { get; set; }
+
+    private string Href => $"horses/{HorseId}/update{(EventId is { } e ? $"?event={e}" : "")}";
+
+    private string Words => Outbox.State.Updates.Any(u => u.HorseId == HorseId && u.State == "draft" && u.HasContent) ? "Finish your update" : "Send update";
+
+    protected override async Task OnInitializedAsync()
+    {
+        Outbox.Changed += Refresh;
+        await Outbox.StartAsync();
+    }
+
+    private void Refresh() => InvokeAsync(StateHasChanged);
+
+    public void Dispose() => Outbox.Changed -= Refresh;
+}

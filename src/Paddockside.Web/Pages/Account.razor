@@ -30,6 +30,26 @@
             </form>
         </section>
 
+        @if (_phones is { Count: > 0 })
+        {
+            <section class="card grid gap-3" aria-labelledby="phones-heading">
+                <h2 id="phones-heading">Your phones</h2>
+                <p class="text-small text-text-muted">Signed in until they've gone unused for a week. Lost one? Sign it out here.</p>
+                <ul class="grid gap-3">
+                    @foreach (var p in _phones)
+                    {
+                        <li class="flex flex-wrap items-center gap-3">
+                            <span class="grid"><span class="font-strong">@p.Label@(p.ThisOne ? " (this one)" : null)</span><span class="text-small text-text-muted">Signed in @p.SignedIn · last used @p.LastUsed.ToLowerInvariant()</span></span>
+                            @if (!p.ThisOne)
+                            {
+                                <button type="button" class="btn-secondary ml-auto" disabled="@_busy" @onclick="() => SignOutPhoneAsync(p)">Sign it out</button>
+                            }
+                        </li>
+                    }
+                </ul>
+            </section>
+        }
+
         @if (_account.CanChangeBrand)
         {
             <section class="card grid grid-cols-[minmax(0,1fr)] gap-4" aria-labelledby="emails-heading">
@@ -46,6 +66,7 @@
 
 @code {
     private AccountView? _account;
+    private List<PhoneView>? _phones;
     private string? _name;
     private string? _nameNotice;
     private string? _error;
@@ -62,6 +83,16 @@
         var result = await Api.AccountAsync();
         if (result.Succeeded) (_account, _name) = (result.Value, result.Value!.YourName);
         else _error = result.Error;
+        _phones = (await Api.MyPhonesAsync()).Value;
+    }
+
+    private async Task SignOutPhoneAsync(PhoneView phone)
+    {
+        (_busy, _error) = (true, null);
+        var result = await Api.SignOutMyPhoneAsync(phone.Id);
+        if (!result.Succeeded) _error = result.Error;
+        _phones = (await Api.MyPhonesAsync()).Value;
+        _busy = false;
     }
 
     private async Task SaveNameAsync()

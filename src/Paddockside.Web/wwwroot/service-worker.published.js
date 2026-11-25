@@ -9,7 +9,8 @@
 self.importScripts('./service-worker-assets.js');
 self.addEventListener('install', event => event.waitUntil(onInstall(event)));
 self.addEventListener('activate', event => event.waitUntil(onActivate(event)));
-self.addEventListener('fetch', event => event.respondWith(onFetch(event)));
+// Uploads and other writes go straight to the server: passed through here, a phone can't see how far they've got.
+self.addEventListener('fetch', event => { if (event.request.method === 'GET') event.respondWith(onFetch(event)); });
 
 const cacheNamePrefix = 'offline-cache-';
 const cacheName = `${cacheNamePrefix}${self.assetsManifest.version}`;

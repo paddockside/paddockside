@@ -345,7 +345,18 @@ public sealed record TenantCreated(Guid Id, string Slug, bool InvitationSent, st
 
 // ---- Members (tenant admins) and joining ------------------------------------------------------------------------
 
-public sealed record MemberView(Guid Id, string Email, string Role, string RoleLabel, string Status, string? Since, bool IsYou);
+/// <summary>A phone that stays signed in for a week, because its owner said it's their own.</summary>
+public sealed record PhoneView(Guid Id, string Label, string SignedIn, string LastUsed, bool ThisOne);
+
+/// <param name="Id">Null for General updates on a horse that hasn't had one yet.</param>
+public sealed record UpdateChoice(Guid? Id, string Title, string When, List<string> Steps, Dictionary<string, PromptRequest> StepPrompts);
+
+public sealed record UpdateOwner(Guid Id, string Name);
+
+/// <param name="Events">What an update could be about, the likeliest first.</param>
+public sealed record UpdateChoices(string Horse, bool Managed, List<UpdateChoice> Events, List<UpdateOwner> Owners);
+
+public sealed record MemberView(Guid Id, string Email, string Role, string RoleLabel, string Status, string? Since, bool IsYou, List<PhoneView>? Phones = null);
 
 public sealed record InvitationView(Guid Id, string Email, string Role, string RoleLabel, string InvitedBy, string Sent, string Expires);
 
@@ -421,7 +432,20 @@ public sealed class PaddocksideApi(HttpClient http)
     public Task<ApiResult<NextStep>> SubmitPasswordAsync(string email, string password) =>
         PostAsync<NextStep>("api/auth/password", new { email, password });
 
-    public Task<ApiResult<object>> SubmitAuthenticatorCodeAsync(string code) => PostAsync<object>("api/auth/totp", new { code });
+    /// <param name="keepSignedIn">This phone is their own: signed in for a week unused.</param>
+    public Task<ApiResult<object>> SubmitAuthenticatorCodeAsync(string code, bool keepSignedIn = false) => PostAsync<object>("api/auth/totp", new { code, keepSignedIn });
+
+    public Task<ApiResult<List<PhoneView>>> MyPhonesAsync() => GetAsync<List<PhoneView>>("api/account/phones");
+
+    public Task<ApiResult<object>> SignOutMyPhoneAsync(Guid id) => PostAsync<object>($"api/account/phones/{id}/sign-out", new { });
+
+    public Task<ApiResult<object>> SignOutMembersPhoneAsync(Guid id) => PostAsync<object>($"api/members/phones/{id}/sign-out", new { });
+
+    public Task<ApiResult<UpdateChoices>> UpdateChoicesAsync(Guid horseId) => GetAsync<UpdateChoices>($"api/horses/{horseId}/updates/options");
+
+    /// <summary>Who an update would go to, and who it won't reach. Nothing is saved.</summary>
+    public Task<ApiResult<RecipientsView>> UpdateRecipientsAsync(Guid horseId, Guid? eventId, string scope, string? step, string channel, IEnumerable<Guid> namedParties, bool media) =>
+        PostAsync<RecipientsView>($"api/horses/{horseId}/updates/recipients", new { eventId, scope, step, channel, namedParties, media });
 
     public Task<ApiResult<object>> SubmitRecoveryCodeAsync(string code) => PostAsync<object>("api/auth/recovery-code", new { code });
 
