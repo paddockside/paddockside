@@ -230,12 +230,22 @@ public sealed class EmailDispatcher(
             else if (result.PermanentFailure) { recipient.Skip($"Not sent: {result.Error}", now); party.MarkUndeliverable(contact.Value, now); }
         }
 
+        // Someone an invitation never went to isn't invited: they go back to waiting for one, where staff can see it.
+        var unsent = queued.Where(r => r.Status == MailoutRecipientStatus.Skipped && mailouts[r.MailoutId].SocialEventId is not null).ToList();
+        if (unsent.Count > 0)
+        {
+            var unsentParties = unsent.Select(r => r.PartyId).ToList();
+            var lines = await db.SocialAttendees.Where(a => socialIds.Contains(a.SocialEventId) && unsentParties.Contains(a.PartyId)).ToListAsync(cancellationToken);
+            foreach (var line in lines)
+                foreach (var r in unsent.Where(r => r.PartyId == line.PartyId)) line.InvitationNotSent(r.MailoutId);
+        }
+
         await db.SaveChangesAsync(cancellationToken);
         return accepted;
     }
 
     /// <summary>A social event invitation's details and this recipient's own reply links (Rsvp.Link).</summary>
-    private static RsvpBlock Invitation(SocialEvent social, string baseUrl, string slug, string token)
+    internal static RsvpBlock Invitation(SocialEvent social, string baseUrl, string slug, string token)
     {
         var zone = TimeZoneInfo.FindSystemTimeZoneById("Australia/Sydney");
         var culture = System.Globalization.CultureInfo.GetCultureInfo("en-AU");

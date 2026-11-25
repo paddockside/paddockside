@@ -13,21 +13,8 @@
     bouncing), updates as you choose; sending asks once more with the number.
 *@
 <div class="grid max-w-3xl gap-6">
-    @if (_social is { } invite)
-    {
-        @* Invitation mode (David, 22 Nov 2026): the same mailout, linked to a social event; each email carries its reply buttons. *@
-        <a href="social/@invite.Event.Id" class="btn-link justify-self-start">← @invite.Event.Title</a>
-        <h1>Invite people to @invite.Event.Title</h1>
-        <p class="rounded-control bg-surface-sunken px-4 py-3">
-            @invite.Event.When@(invite.Event.Venue is null ? null : $" · {invite.Event.Venue}"). Each invitation has buttons to reply with: I'll come (with how many places), maybe,
-            or can't make it, and their answer goes straight onto the event's list. Anyone already invited, or who has answered, is left out of this round.
-        </p>
-    }
-    else
-    {
-        <a href="mailouts" class="btn-link justify-self-start">← Mailouts</a>
-        <h1>New mailout</h1>
-    }
+    <a href="mailouts" class="btn-link justify-self-start">← Mailouts</a>
+    <h1>New mailout</h1>
 
     <section class="card grid gap-4" aria-labelledby="who-heading">
         <h2 id="who-heading" class="text-title">Who it goes to</h2>
@@ -62,25 +49,9 @@
                 </ul>
             </fieldset>
         }
-        else if (_social is null)
+        else
         {
             <p class="text-small text-text-muted">To pick people one by one, tick them on the <a href="clients" class="underline underline-offset-4">Clients</a> page and choose "Email these".</p>
-        }
-        @if (_social is not null)
-        {
-            <div class="field max-w-md">
-                <label class="field-label" for="invite-person">Add people one by one</label>
-                <input id="invite-person" class="input" @bind="_personSearch" @bind:event="oninput" placeholder="Type a name or email" />
-                @if (!string.IsNullOrWhiteSpace(_personSearch))
-                {
-                    <ul class="grid gap-1 rounded-control border border-border-subtle p-2">
-                        @foreach (var c in PersonMatches)
-                        {
-                            <li><button type="button" class="w-full rounded-control px-2 py-1 text-left hover:bg-surface-sunken" @onclick="() => AddPersonAsync(c)">@c.Name <span class="text-small text-text-muted">@c.Email</span></button></li>
-                        }
-                    </ul>
-                }
-            </div>
         }
 
         @if (_preview is { } preview)
@@ -141,7 +112,7 @@
                 <p class="text-small text-status-danger-fg" role="alert">@_fileError</p>
             }
         </fieldset>
-        <div class="field max-w-md @(_social is null ? null : "hidden")">
+        <div class="field max-w-md">
             <label class="field-label" for="mailout-horse">About a horse (optional)</label>
             <select id="mailout-horse" class="input" @bind="_horse">
                 <option value="">Not about one horse</option>
@@ -175,33 +146,6 @@
 </div>
 
 @code {
-    /// <summary>Invitation mode: the social event this invites people to.</summary>
-    [SupplyParameterFromQuery(Name = "social")] public Guid? Social { get; set; }
-
-    /// <summary>Start with the people on that event's list who haven't been invited yet.</summary>
-    [SupplyParameterFromQuery(Name = "waiting")] public bool Waiting { get; set; }
-
-    private SocialDetail? _social;
-    private List<ClientRow> _clients = [];
-    private string? _personSearch;
-
-    private IEnumerable<ClientRow> PersonMatches
-    {
-        get
-        {
-            var q = _personSearch?.Trim() ?? "";
-            var picked = _people.Select(p => p.Id).ToHashSet();
-            return _clients.Where(c => !picked.Contains(c.Id) && (c.Name.Contains(q, StringComparison.OrdinalIgnoreCase) || (c.Email?.Contains(q, StringComparison.OrdinalIgnoreCase) ?? false))).Take(8);
-        }
-    }
-
-    private async Task AddPersonAsync(ClientRow client)
-    {
-        _people = [.. _people, (client.Id, client.Name)];
-        _personSearch = null;
-        await ChangedAsync();
-    }
-
     private static readonly (string Status, string Label)[] Kinds = [("Current owner", "Current owner"), ("Past owner", "Past owner"), ("Prospect", "Prospect")];
 
     private List<ClientListView>? _lists;
@@ -228,16 +172,6 @@
         }
 
         _people = Selection.Take();
-        if (Social is { } socialId)
-        {
-            _social = (await Api.SocialEventAsync(socialId)).Value;
-            if (_social is not null)
-            {
-                _subject = $"Invitation: {_social.Event.Title}";
-                _clients = (await Api.ClientsAsync(null, null, null)).Value ?? [];
-                if (Waiting) _people = [.. _people, .. _social.Attendees.Where(a => a.Unsent && _people.All(p => p.Id != a.PartyId)).Select(a => (a.PartyId, a.Name))];
-            }
-        }
         _lists = (await Api.ClientListsAsync()).Value ?? [];
         _horses = (await Api.HorsesAsync()).Value ?? [];
         _savedSignature = (await Api.SignatureAsync()).Value?.Text ?? "";
@@ -315,9 +249,7 @@
     private async Task PreviewAsync()
     {
         if (_listIds.Count == 0 && _statuses.Count == 0 && _people.Count == 0) { _preview = null; return; }
-        var result = _social is { } invite
-            ? await Api.PreviewInvitationAsync(invite.Event.Id, _listIds, _statuses, _people.Select(p => p.Id))
-            : await Api.PreviewMailoutAsync(_listIds, _statuses, _people.Select(p => p.Id));
+        var result = await Api.PreviewMailoutAsync(_listIds, _statuses, _people.Select(p => p.Id));
         _preview = result.Value;
     }
 
@@ -332,12 +264,10 @@
         (_busy, _error) = (true, null);
         try
         {
-            var result = _social is { } invite
-                ? await Api.SendInvitationAsync(invite.Event.Id, _subject ?? "", _body ?? "", _listIds, _statuses, _people.Select(p => p.Id), _signature, _files.Select(f => f.Id))
-                : await Api.SendMailoutAsync(_subject ?? "", _body ?? "", _listIds, _statuses, _people.Select(p => p.Id), Guid.TryParse(_horse, out var h) ? h : null,
+            var result = await Api.SendMailoutAsync(_subject ?? "", _body ?? "", _listIds, _statuses, _people.Select(p => p.Id), Guid.TryParse(_horse, out var h) ? h : null,
                     _signature, _files.Select(f => f.Id));
             if (!result.Succeeded) { (_error, _confirming) = (result.Error, false); return; }
-            Navigation.NavigateTo(_social is { } sent ? $"social/{sent.Event.Id}" : $"mailouts/{result.Value!.Id}");
+            Navigation.NavigateTo($"mailouts/{result.Value!.Id}");
         }
         finally
         {

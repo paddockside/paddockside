@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using Paddockside.Api.Audit;
 using Paddockside.Api.Clients;
 using Paddockside.Api.Formatting;
@@ -17,9 +18,9 @@ namespace Paddockside.Api.Social;
 
 /// <summary>
 /// Social events (David, 22 Nov 2026): a Christmas lunch, a Sydney golf day, a stable visit, a Melbourne Cup Carnival
-/// tour, with a list of who's coming counted like owners tickets. Invitations go out as mailouts linked to the event,
-/// to a list ("Sydney Social"), a kind of client or people picked, and a later round to another group skips anyone
-/// already invited. Each invitation's buttons open a page of the recipient's own where they confirm, with how many
+/// tour, with a list of who's coming counted like owners tickets. Staff put people on the list, one by one or a client
+/// list at a time, which sends nothing; then send the invitation to everyone on it who hasn't had one (David, 25 Nov
+/// 2026). Adding more later, or the same list again, never invites anyone twice. Each invitation's buttons open a page of the recipient's own where they confirm, with how many
 /// places; a yes once the places are gone goes on the waiting list. Staff can add people and set answers by hand.
 /// </summary>
 public static class SocialEndpoints
@@ -33,16 +34,33 @@ public static class SocialEndpoints
     public sealed record SocialSummary(Guid Id, string Title, string Kind, string KindLabel, string When, string Date, string? Venue, int? Places, int Coming,
         int Invited, int Waiting, string Status, bool Past, int Unsent = 0);
 
-    /// <param name="Unsent">Put on the list by hand and not invited yet: nothing has been sent to them.</param>
+    /// <param name="Unsent">On the list and not invited yet: nothing has been sent to them.</param>
+    /// <param name="CantEmail">Not invited yet, and why an invitation can't be emailed to them.</param>
+    /// <param name="Delivery">Where their invitation got to: "Sending", "Sent", "Delivered", "Opened", "Bounced".</param>
     public sealed record AttendeeLine(Guid PartyId, string Name, string? Email, string Status, string StatusLabel, int Places, string? Note, string? AnsweredBy,
-        string Updated, bool Unsent = false);
+        string Updated, bool Unsent = false, string? CantEmail = null, string? Delivery = null);
 
     public sealed record InvitationLine(Guid MailoutId, string Subject, string Sent, int Recipients);
 
     public sealed record SocialDetail(SocialSummary Event, string? Time, string? EndDate, string? Notes, IReadOnlyList<AttendeeLine> Attendees,
         IReadOnlyList<InvitationLine> Invitations, int Maybe, int NotComing);
 
-    public sealed record AddRequest(IReadOnlyList<Guid> ClientIds);
+    public sealed record AddRequest(IReadOnlyList<Guid>? ClientIds, IReadOnlyList<Guid>? ListIds = null);
+
+    /// <param name="Already">Chosen, but on the event's list before.</param>
+    public sealed record Added(int Count, int Already);
+
+    public sealed record Guest(Guid PartyId, string Name, string Email);
+
+    public sealed record LeftOut(string Name, string Why);
+
+    /// <summary>The invitation, ready to check and send: its words, who it goes to and who it can't reach.</summary>
+    /// <param name="Problem">Why nothing can be sent at the moment, if so.</param>
+    public sealed record InvitationDraft(string Subject, string Body, string Signature, IReadOnlyList<Guest> Going, IReadOnlyList<LeftOut> LeftOut, string? Problem);
+
+    public sealed record WordingRequest(string? Subject, string? Body, string? Signature);
+
+    public sealed record InvitationSample(string Html);
 
     /// <param name="Status">Invited, Coming, Maybe, NotComing or Waiting.</param>
     public sealed record AttendeeRequest(string Status, int Places, string? Note);
@@ -69,7 +87,8 @@ public static class SocialEndpoints
         social.MapPost("/{id:guid}/attendees", Add);
         social.MapPut("/{id:guid}/attendees/{partyId:guid}", SetAttendee);
         social.MapPost("/{id:guid}/attendees/{partyId:guid}/remove", Remove);
-        social.MapPost("/{id:guid}/invite/preview", (Guid id, AudienceRequest request, PaddocksideDbContext db, CancellationToken ct) => InvitePreview(id, request, db, ct));
+        social.MapGet("/{id:guid}/invitation", Draft);
+        social.MapPost("/{id:guid}/invitation/sample", Sample);
         social.MapPost("/{id:guid}/invite", Invite);
 
         // The invitation's buttons: no sign-in (the recipient's token is the key); a page that asks, then a POST that records.
@@ -98,6 +117,10 @@ public static class SocialEndpoints
         var mailoutIds = mailouts.Select(m => m.Id).ToList();
         var counts = (await db.MailoutRecipients.AsNoTracking().Where(r => mailoutIds.Contains(r.MailoutId) && r.Status != MailoutRecipientStatus.Skipped)
             .GroupBy(r => r.MailoutId).Select(g => new { g.Key, Count = g.Count() }).ToListAsync(cancellationToken)).ToDictionary(x => x.Key, x => x.Count);
+        var deliveries = (await db.MailoutRecipients.AsNoTracking().Where(r => mailoutIds.Contains(r.MailoutId)).ToListAsync(cancellationToken))
+            .ToDictionary(r => (r.MailoutId, r.PartyId), r => r.Status);
+        string? Delivery(SocialAttendee a) =>
+            a.MailoutId is { } sent && deliveries.TryGetValue((sent, a.PartyId), out var status) ? status == MailoutRecipientStatus.Queued ? "Sending" : status.ToString() : null;
         var now = clock.GetUtcNow();
         var local = Words.Local(e.StartsAt);
 
@@ -108,7 +131,7 @@ public static class SocialEndpoints
             attendees.OrderBy(a => Rank(a.Status)).ThenBy(a => parties.GetValueOrDefault(a.PartyId)?.DisplayName)
                 .Select(a => new AttendeeLine(a.PartyId, parties.GetValueOrDefault(a.PartyId)?.DisplayName ?? "Unknown", parties.GetValueOrDefault(a.PartyId)?.PrimaryEmail?.Value,
                     a.Status.ToString(), a.NotInvitedYet ? "Not invited yet" : SocialAttendee.Label(a.Status), a.Places, a.Note, a.AnsweredBy, Words.Recently(a.UpdatedAt, now),
-                    a.NotInvitedYet))
+                    a.NotInvitedYet, a.NotInvitedYet && parties.TryGetValue(a.PartyId, out var p) ? Excluded(p) : null, Delivery(a)))
                 .ToList(),
             mailouts.Select(m => new InvitationLine(m.Id, m.Subject, Words.DayAndTime(m.CreatedAt, now), counts.GetValueOrDefault(m.Id))).ToList(),
             attendees.Count(a => a.Status == AttendeeStatus.Maybe), attendees.Count(a => a.Status == AttendeeStatus.NotComing)));
@@ -176,20 +199,25 @@ public static class SocialEndpoints
         return Results.NoContent();
     }
 
-    /// <summary>Staff put people on the list by hand (a tour, a phone call): nothing is sent, and they show as not invited yet.</summary>
+    /// <summary>
+    /// Staff put people on the list, one by one or everyone on a client list. Nothing is sent: they show as not invited yet,
+    /// until the invitation goes or staff record an answer. Anyone already on it stays as they are.
+    /// </summary>
     private static async Task<IResult> Add(Guid id, AddRequest request, ClaimsPrincipal user, PaddocksideDbContext db, TimeProvider clock, CancellationToken cancellationToken)
     {
         if (!CanEdit.Contains(user.FindFirstValue(SessionClaims.Role))) return Forbidden();
         var e = await db.SocialEvents.SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
         if (e is null) return Results.NotFound();
+        var ids = (request.ClientIds ?? []).Distinct().ToList();
+        if (ids.Count > 0 && await db.Parties.CountAsync(p => ids.Contains(p.Id), cancellationToken) != ids.Count) return Problem("Choose from your clients.");
+        var chosen = await ChooseAsync(db, new AudienceRequest(request.ListIds, null, ids), cancellationToken);
+        if (chosen.Count == 0) return Problem((request.ListIds ?? []).Count > 0 ? "There's nobody on that list." : "Choose people or a list to add.");
         var already = (await db.SocialAttendees.Where(a => a.SocialEventId == id).Select(a => a.PartyId).ToListAsync(cancellationToken)).ToHashSet();
-        var ids = (request.ClientIds ?? []).Where(c => !already.Contains(c)).Distinct().ToList();
-        var parties = await db.Parties.Where(p => ids.Contains(p.Id)).ToListAsync(cancellationToken);
-        if (parties.Count != ids.Count) return Problem("Choose from your clients.");
+        var adding = chosen.Where(p => !already.Contains(p.Id)).ToList();
         var now = clock.GetUtcNow();
-        db.SocialAttendees.AddRange(parties.Select(p => new SocialAttendee(e, p, now)));
+        db.SocialAttendees.AddRange(adding.Select(p => new SocialAttendee(e, p, now)));
         await db.SaveChangesAsync(cancellationToken);
-        return Results.NoContent();
+        return Results.Ok(new Added(adding.Count, chosen.Count - adding.Count));
     }
 
     /// <summary>Staff set someone's answer, places and note exactly (taking them off the waiting list, say).</summary>
@@ -223,10 +251,58 @@ public static class SocialEndpoints
         return Results.NoContent();
     }
 
-    private static async Task<IResult> InvitePreview(Guid id, AudienceRequest request, PaddocksideDbContext db, CancellationToken cancellationToken)
+    /// <summary>
+    /// What Send invitations shows before anything goes: everyone on the list not invited yet, with the last invitation's
+    /// words, or ones made from the event the first time.
+    /// </summary>
+    private static async Task<IResult> Draft(Guid id, ClaimsPrincipal user, PaddocksideDbContext db, IEmailSender email, CancellationToken cancellationToken)
     {
-        if (!await db.SocialEvents.AnyAsync(x => x.Id == id, cancellationToken)) return Results.NotFound();
-        return Results.Ok(await PreviewForAsync(request, db, await AlreadyInvitedAsync(db, id, cancellationToken), cancellationToken));
+        if (!CanEdit.Contains(user.FindFirstValue(SessionClaims.Role))) return Forbidden();
+        var e = await db.SocialEvents.AsNoTracking().SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
+        if (e is null) return Results.NotFound();
+
+        var waiting = await db.SocialAttendees.AsNoTracking().Where(a => a.SocialEventId == id && a.MailoutId == null && a.Status == AttendeeStatus.Invited)
+            .Select(a => a.PartyId).ToListAsync(cancellationToken);
+        var parties = (await db.Parties.AsNoTracking().Where(p => waiting.Contains(p.Id)).ToListAsync(cancellationToken)).OrderBy(p => p.DisplayName).ToList();
+        var last = await db.Mailouts.AsNoTracking().Where(m => m.SocialEventId == id).OrderByDescending(m => m.CreatedAt).FirstOrDefaultAsync(cancellationToken);
+        var tenant = await db.Tenants.AsNoTracking().SingleAsync(cancellationToken);
+        var mine = Guid.TryParse(user.FindFirstValue(ClaimTypes.NameIdentifier), out var person)
+            ? await db.StaffSignatures.AsNoTracking().SingleOrDefaultAsync(s => s.PersonId == person, cancellationToken)
+            : null;
+        var signature = last?.Signature ?? (mine is { Text.Length: > 0 } ? mine.Text : $"Kind regards,\n{(mine?.Name is { } name ? $"{name}\n" : "")}{tenant.Name}");
+
+        return Results.Ok(new InvitationDraft(
+            last?.Subject ?? $"Invitation: {e.Title}",
+            last?.Body ?? $"We'd love you to join us for {e.Title}.\n\nPlease use the buttons below to let us know if you can come, and how many places you'd like.",
+            signature,
+            parties.Where(p => Excluded(p) is null).Select(p => new Guest(p.Id, p.DisplayName, p.PrimaryEmail!.Value)).ToList(),
+            parties.Where(p => Excluded(p) is not null).Select(p => new LeftOut(p.DisplayName, Excluded(p)!)).ToList(),
+            e.Status != SocialStatus.Open ? "This event isn't open. Open it again to send invitations."
+            : !email.CanBroadcast ? "Invitations can't be sent yet: Postmark's broadcast stream needs setting up first." : null));
+    }
+
+    /// <summary>The email as the first person it goes to would get it. Nothing is saved or sent, and its buttons do nothing.</summary>
+    private static async Task<IResult> Sample(Guid id, WordingRequest request, ClaimsPrincipal user, PaddocksideDbContext db, OwnerEmailRenderer renderer,
+        IOptions<EmailOptions> options, HttpRequest http, TimeProvider clock, CancellationToken cancellationToken)
+    {
+        if (!CanEdit.Contains(user.FindFirstValue(SessionClaims.Role))) return Forbidden();
+        var e = await db.SocialEvents.AsNoTracking().SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
+        if (e is null) return Results.NotFound();
+        var tenant = await db.Tenants.AsNoTracking().SingleAsync(cancellationToken);
+        var first = await db.SocialAttendees.AsNoTracking().Where(a => a.SocialEventId == id && a.MailoutId == null && a.Status == AttendeeStatus.Invited)
+            .Join(db.Parties, a => a.PartyId, p => p.Id, (a, p) => p).OrderBy(p => p.DisplayName).FirstOrDefaultAsync(cancellationToken);
+        var link = $"{Account.Branding.BaseUrl(options.Value, http)}/email-preview";
+        string Or(string? text, string instead) => string.IsNullOrWhiteSpace(text) ? instead : text;
+        try
+        {
+            var mailout = new Mailout(tenant.Id, Or(request.Subject, e.Title), Or(request.Body, "(No message yet.)"), "", "", clock.GetUtcNow(), null, request.Signature);
+            return Results.Ok(new InvitationSample(renderer.RenderMailout(tenant, mailout, first ?? new Party(tenant.Id, "Guest"), link,
+                new RsvpBlock(e.Title, When(e), e.Venue, link, link, link)).Html));
+        }
+        catch (DomainException ex)
+        {
+            return Problem(ex.Message);
+        }
     }
 
     private static async Task<IResult> Invite(Guid id, MailoutRequest request, ClaimsPrincipal user, PaddocksideDbContext db, IEmailSender email, AuditLog audit,

@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.RegularExpressions;
+using Microsoft.EntityFrameworkCore;
 using Paddockside.Domain;
 
 namespace Paddockside.Isolation.Tests.Api;
@@ -63,9 +64,6 @@ public sealed partial class OwnerSignInTests
         // A second round to people picked: Ann is already on the list, so she's left out of it.
         var second = new { invitation.subject, invitation.body, listIds = Array.Empty<Guid>(), statuses = Array.Empty<string>(), clientIds = new[] { seed.AnnId },
             horseId = (Guid?)null, signature = (string?)null, attachmentIds = Array.Empty<Guid>() };
-        var preview = (await (await staff.PostApiAsync($"/api/social/{id}/invite/preview", new { listIds = Array.Empty<Guid>(), statuses = Array.Empty<string>(), clientIds = new[] { seed.AnnId } }))
-            .Content.ReadFromJsonAsync<MailoutPreview>())!;
-        Assert.Equal(0, preview.Sending);
         Assert.Equal(HttpStatusCode.BadRequest, (await staff.PostApiAsync($"/api/social/{id}/invite", second)).StatusCode);
 
         // Staff take Bob off the waiting list; the calendar shows the lunch with its count.
@@ -96,7 +94,7 @@ public sealed partial class OwnerSignInTests
         using var staff = await Api.SignedInAsync(seed.TenantId, MemberRole.Coordinator);
         var day = DateTime.Today.AddDays(30).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
         var id = (await (await staff.PostApiAsync("/api/social", new { title = "Golf Day", kind = "Golf", date = day })).Content.ReadFromJsonAsync<SocialMade>())!.Id;
-        Assert.Equal(HttpStatusCode.NoContent, (await staff.PostApiAsync($"/api/social/{id}/attendees", new { clientIds = new[] { seed.AnnId, seed.BobId } })).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await staff.PostApiAsync($"/api/social/{id}/attendees", new { clientIds = new[] { seed.AnnId, seed.BobId } })).StatusCode);
 
         var page = (await staff.GetFromJsonAsync<UnsentPage>($"/api/social/{id}"))!;
         Assert.Equal((0, 2), (page.Event.Invited, page.Event.Unsent));
@@ -105,7 +103,7 @@ public sealed partial class OwnerSignInTests
         // Bob rings to say yes: he has answered, so an invitation to both goes to Ann only.
         await staff.PutApiAsync($"/api/social/{id}/attendees/{seed.BobId}", new { status = "Coming", places = 1, note = "" });
         var both = new { listIds = Array.Empty<Guid>(), statuses = Array.Empty<string>(), clientIds = new[] { seed.AnnId, seed.BobId } };
-        Assert.Equal(1, (await (await staff.PostApiAsync($"/api/social/{id}/invite/preview", both)).Content.ReadFromJsonAsync<MailoutPreview>())!.Sending);
+        Assert.Equal([seed.AnnId], (await staff.GetFromJsonAsync<InviteDraft>($"/api/social/{id}/invitation"))!.Going.Select(g => g.PartyId));
         var invitation = new { subject = "Golf Day", body = "Join us.", both.listIds, both.statuses, both.clientIds };
         Assert.Equal(HttpStatusCode.Created, (await staff.PostApiAsync($"/api/social/{id}/invite", invitation)).StatusCode);
         await DispatchAsync();
@@ -122,5 +120,110 @@ public sealed partial class OwnerSignInTests
         // Adding someone already on the list still doesn't put them on twice.
         await staff.PostApiAsync($"/api/social/{id}/attendees", new { clientIds = new[] { seed.AnnId } });
         Assert.Equal(2, (await staff.GetFromJsonAsync<UnsentPage>($"/api/social/{id}"))!.Attendees.Count);
+    }
+
+    private sealed record GuestLine(Guid PartyId, string Name, string Email);
+
+    private sealed record NotReached(string Name, string Why);
+
+    private sealed record InviteDraft(string Subject, string Body, string Signature, List<GuestLine> Going, List<NotReached> LeftOut, string? Problem);
+
+    private sealed record AddedPeople(int Count, int Already);
+
+    private sealed record Line(Guid PartyId, string Status, bool Unsent, string? CantEmail, string? Delivery);
+
+    private sealed record ListPage(List<Line> Attendees);
+
+    private sealed record InviteHtml(string Html);
+
+    [Fact]
+    public async Task A_list_is_added_checked_sent_and_topped_up_without_anyone_being_invited_twice()
+    {
+        // David, 25 Nov 2026: add clients or a client list, then Send invitations shows what's going and sends it; later,
+        // add more, and the same list again doesn't send anyone a second one.
+        var seed = await SeedAsync();
+        using var staff = await Api.SignedInAsync(seed.TenantId, MemberRole.Coordinator);
+        var day = DateTime.Today.AddDays(30).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+        var title = $"Stable Visit {Guid.NewGuid():N}"[..24];
+        var id = (await (await staff.PostApiAsync("/api/social", new { title, kind = "StableVisit", date = day, time = "10:00", venue = "Randwick" })).Content.ReadFromJsonAsync<SocialMade>())!.Id;
+        var list = (await (await staff.PostApiAsync("/api/client-lists", new { name = $"Visit {title}" })).Content.ReadFromJsonAsync<ListCreated>())!.Id;
+        await staff.PostApiAsync($"/api/client-lists/{list}/add", new { clientIds = new[] { seed.AnnId } });
+
+        async Task<AddedPeople> Add(object who) => (await (await staff.PostApiAsync($"/api/social/{id}/attendees", who)).Content.ReadFromJsonAsync<AddedPeople>())!;
+        async Task<InviteDraft> Draft() => (await staff.GetFromJsonAsync<InviteDraft>($"/api/social/{id}/invitation"))!;
+        async Task<List<Line>> Lines() => (await staff.GetFromJsonAsync<ListPage>($"/api/social/{id}"))!.Attendees;
+        Task<HttpResponseMessage> Send(InviteDraft d) => staff.PostApiAsync($"/api/social/{id}/invite", new { subject = d.Subject, body = d.Body, signature = d.Signature, clientIds = d.Going.Select(g => g.PartyId) });
+        int Emails(string to) => Api.Emails.Sent.Count(e => e.Email.Subject.Contains(title) && e.Email.ToAddress == to);
+
+        // The list goes on; nobody is emailed by that.
+        Assert.Equal(new AddedPeople(1, 0), await Add(new { listIds = new[] { list } }));
+        await DispatchAsync();
+        Assert.Equal(0, Emails(seed.AnnEmail));
+
+        // What Send invitations shows: who, the words made from the event, and the email itself.
+        var draft = await Draft();
+        Assert.Null(draft.Problem);
+        Assert.Equal([seed.AnnEmail], draft.Going.Select(g => g.Email));
+        Assert.Equal($"Invitation: {title}", draft.Subject);
+        Assert.Contains(title, draft.Body);
+        Assert.Contains(seed.TenantName, draft.Signature);
+        var html = (await (await staff.PostApiAsync($"/api/social/{id}/invitation/sample", new { subject = draft.Subject, body = "Come and see her <now>.", signature = "" })).Content.ReadFromJsonAsync<InviteHtml>())!.Html;
+        Assert.Contains("Hi Ann,", html);
+        Assert.Contains("Come and see her &lt;now&gt;.", html);
+        Assert.Contains("I&#39;ll come", html);
+        Assert.Contains("/email-preview", html);
+
+        Assert.Equal(HttpStatusCode.Created, (await Send(draft)).StatusCode);
+        await DispatchAsync();
+        Assert.Equal(1, Emails(seed.AnnEmail));
+        var ann = Assert.Single(await Lines());
+        Assert.Equal((false, "Sent"), (ann.Unsent, ann.Delivery));
+
+        // The same list, now with Bob on it: only Bob is new, and only Bob is sent it, with the same words ready.
+        await staff.PostApiAsync($"/api/client-lists/{list}/add", new { clientIds = new[] { seed.BobId } });
+        Assert.Equal(new AddedPeople(1, 1), await Add(new { listIds = new[] { list }, clientIds = new[] { seed.AnnId } }));
+        Assert.DoesNotContain((await Draft()).Going, g => g.PartyId == seed.AnnId);
+        Assert.Equal(HttpStatusCode.Created, (await Send(await Draft())).StatusCode);
+        await DispatchAsync();
+        Assert.Equal(1, Emails(seed.AnnEmail));
+        Assert.Single(Api.Emails.Sent, e => e.Email.Subject.Contains(title) && e.Email.ToName == "Bob Owner");
+        Assert.Empty((await Draft()).Going);
+
+        // Nothing to add, not their business's list, or a viewer.
+        Assert.Equal(HttpStatusCode.BadRequest, (await staff.PostApiAsync($"/api/social/{id}/attendees", new { listIds = Array.Empty<Guid>() })).StatusCode);
+        using var otherStaff = await Api.SignedInAsync(db.A.TenantId, MemberRole.Coordinator);
+        Assert.Equal(HttpStatusCode.NotFound, (await otherStaff.GetAsync($"/api/social/{id}/invitation")).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await otherStaff.PostApiAsync($"/api/social/{id}/attendees", new { listIds = new[] { list } })).StatusCode);
+        using var viewer = await Api.SignedInAsync(seed.TenantId, MemberRole.Viewer);
+        Assert.Equal(HttpStatusCode.Forbidden, (await viewer.GetAsync($"/api/social/{id}/invitation")).StatusCode);
+    }
+
+    [Fact]
+    public async Task Someone_an_invitation_could_not_go_to_is_shown_as_not_invited_and_why()
+    {
+        var seed = await SeedAsync();
+        using var staff = await Api.SignedInAsync(seed.TenantId, MemberRole.Coordinator);
+        var day = DateTime.Today.AddDays(30).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+        var id = (await (await staff.PostApiAsync("/api/social", new { title = "Tour", kind = "Tour", date = day })).Content.ReadFromJsonAsync<SocialMade>())!.Id;
+        await staff.PostApiAsync($"/api/social/{id}/attendees", new { clientIds = new[] { seed.AnnId, seed.BobId } });
+
+        // Bob unsubscribes between the invitation being sent and it going out: he's not invited after all.
+        await staff.PostApiAsync($"/api/social/{id}/invite", new { subject = "Tour", body = "Join us.", clientIds = new[] { seed.AnnId, seed.BobId } });
+        await using (var context = db.ContextFor(seed.TenantId))
+        {
+            (await context.Parties.SingleAsync(p => p.Id == seed.BobId)).Unsubscribe(DateTimeOffset.UtcNow);
+            await context.SaveChangesAsync();
+        }
+
+        await DispatchAsync();
+        var lines = (await staff.GetFromJsonAsync<ListPage>($"/api/social/{id}"))!.Attendees;
+        var bob = lines.Single(a => a.PartyId == seed.BobId);
+        Assert.Equal((true, "Unsubscribed", null), (bob.Unsent, bob.CantEmail, bob.Delivery));
+        Assert.Equal("Sent", lines.Single(a => a.PartyId == seed.AnnId).Delivery);
+
+        // Send invitations says so, rather than leaving him out quietly.
+        var draft = (await staff.GetFromJsonAsync<InviteDraft>($"/api/social/{id}/invitation"))!;
+        Assert.Empty(draft.Going);
+        Assert.Equal(["Unsubscribed"], draft.LeftOut.Select(l => l.Why));
     }
 }

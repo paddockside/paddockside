@@ -96,18 +96,11 @@ public static class MailoutEndpoints
     }
 
     /// <summary>Who the choice comes to, before anything is sent: how many will get it, and who is left out and why.</summary>
-    private static async Task<IResult> PreviewAsync(AudienceRequest request, PaddocksideDbContext db, CancellationToken cancellationToken) =>
-        Results.Ok(await PreviewForAsync(request, db, null, cancellationToken));
-
-    /// <summary>Who a mailout would reach; for an invitation, people already on the event's list are left out, and counted.</summary>
-    internal static async Task<Preview> PreviewForAsync(AudienceRequest request, PaddocksideDbContext db, ISet<Guid>? alreadyInvited, CancellationToken cancellationToken)
+    private static async Task<IResult> PreviewAsync(AudienceRequest request, PaddocksideDbContext db, CancellationToken cancellationToken)
     {
         var chosen = await ChooseAsync(db, request, cancellationToken);
-        var already = alreadyInvited is null ? 0 : chosen.Count(p => alreadyInvited.Contains(p.Id));
-        var leftOut = chosen.Where(p => alreadyInvited?.Contains(p.Id) != true).Select(Excluded).OfType<string>()
-            .Concat(Enumerable.Repeat("Already invited", already))
-            .GroupBy(w => w).Select(g => new Reason(g.Key, g.Count())).OrderByDescending(r => r.Count).ToList();
-        return new Preview(chosen.Count, chosen.Count - leftOut.Sum(r => r.Count), leftOut);
+        var leftOut = chosen.Select(Excluded).OfType<string>().GroupBy(w => w).Select(g => new Reason(g.Key, g.Count())).OrderByDescending(r => r.Count).ToList();
+        return Results.Ok(new Preview(chosen.Count, chosen.Count - leftOut.Sum(r => r.Count), leftOut));
     }
 
     private static Task<IResult> Send(MailoutRequest request, ClaimsPrincipal user, PaddocksideDbContext db, IEmailSender email, AuditLog audit, TimeProvider clock,
@@ -355,11 +348,11 @@ public static class MailoutEndpoints
 
     internal static string E(string text) => WebUtility.HtmlEncode(text);
 
-    private static Task<List<Party>> ChooseAsync(PaddocksideDbContext db, AudienceRequest request, CancellationToken cancellationToken) =>
+    internal static Task<List<Party>> ChooseAsync(PaddocksideDbContext db, AudienceRequest request, CancellationToken cancellationToken) =>
         ClientEndpoints.ChooseAsync(db, request.ListIds ?? [], (request.Statuses ?? []).Where(Kinds.Contains).ToList(), request.ClientIds ?? [], cancellationToken);
 
     /// <summary>Why someone chosen won't be sent it, or null if they will (MailoutRecipient decides the same way).</summary>
-    private static string? Excluded(Party p) =>
+    internal static string? Excluded(Party p) =>
         p.UnsubscribedAt is not null ? "Unsubscribed" : p.PrimaryEmail is not { } email ? "No email address" : !email.IsDeliverable ? "Email bounces" : null;
 
     /// <summary>"2026 prospective · Past owners · 3 people picked".</summary>

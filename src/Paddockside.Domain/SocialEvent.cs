@@ -162,8 +162,17 @@ public sealed class SocialAttendee
     /// <summary>Put on the list by hand and neither sent an invitation nor answered: an invitation can still go to them.</summary>
     public bool NotInvitedYet => MailoutId is null && Status == AttendeeStatus.Invited;
 
-    /// <summary>An invitation went to someone already on the list by hand; only the first counts.</summary>
+    /// <summary>An invitation went to someone already on the list; only the first counts.</summary>
     public void InvitedBy(Guid mailoutId) => MailoutId ??= mailoutId;
+
+    /// <summary>
+    /// Their invitation never left (they unsubscribed, or their address was refused, before it went): they're not invited
+    /// after all, and can be.
+    /// </summary>
+    public void InvitationNotSent(Guid mailoutId)
+    {
+        if (MailoutId == mailoutId) MailoutId = null;
+    }
 
     /// <summary>
     /// An answer, from the invitation's buttons or from staff. A yes that needs more places than are left goes on the

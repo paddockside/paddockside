@@ -37,7 +37,7 @@ public sealed record SocialSummary(Guid Id, string Title, string Kind, string Ki
 
 /// <param name="Status">Invited, Coming, Maybe, NotComing or Waiting.</param>
 public sealed record SocialAttendeeLine(Guid PartyId, string Name, string? Email, string Status, string StatusLabel, int Places, string? Note, string? AnsweredBy,
-    string Updated, bool Unsent = false);
+    string Updated, bool Unsent = false, string? CantEmail = null, string? Delivery = null);
 
 public sealed record SocialInvitationLine(Guid MailoutId, string Subject, string Sent, int Recipients);
 
@@ -47,6 +47,16 @@ public sealed record SocialDetail(SocialSummary Event, string? Time, string? End
 public sealed record SocialRequest(string Title, string Kind, string Date, string? Time, string? EndDate, string? Venue, int? Places, string? Notes);
 
 public sealed record SocialCreated(Guid Id);
+
+public sealed record SocialAdded(int Count, int Already);
+
+public sealed record SocialGuest(Guid PartyId, string Name, string Email);
+
+public sealed record SocialLeftOut(string Name, string Why);
+
+public sealed record SocialInvitationDraft(string Subject, string Body, string Signature, List<SocialGuest> Going, List<SocialLeftOut> LeftOut, string? Problem);
+
+public sealed record SocialInvitationSample(string Html);
 
 public sealed record HorseStatusPage(HorseStatusView? Current, List<HorseStatusView> History);
 
@@ -590,19 +600,24 @@ public sealed class PaddocksideApi(HttpClient http)
 
     public Task<ApiResult<object>> SetSocialStatusAsync(Guid id, string status) => PostAsync<object>($"api/social/{id}/status", new { status });
 
-    public Task<ApiResult<object>> AddSocialAttendeesAsync(Guid id, IEnumerable<Guid> clientIds) => PostAsync<object>($"api/social/{id}/attendees", new { clientIds });
+    /// <summary>People, and everyone on these client lists, onto the event's list. Nothing is sent.</summary>
+    public Task<ApiResult<SocialAdded>> AddSocialAttendeesAsync(Guid id, IEnumerable<Guid> clientIds, IEnumerable<Guid> listIds) =>
+        PostAsync<SocialAdded>($"api/social/{id}/attendees", new { clientIds, listIds });
 
     public Task<ApiResult<object>> SetSocialAttendeeAsync(Guid id, Guid partyId, string status, int places, string? note) =>
         PutAsync<object>($"api/social/{id}/attendees/{partyId}", new { status, places, note });
 
     public Task<ApiResult<object>> RemoveSocialAttendeeAsync(Guid id, Guid partyId) => PostAsync<object>($"api/social/{id}/attendees/{partyId}/remove", new { });
 
-    public Task<ApiResult<MailoutPreview>> PreviewInvitationAsync(Guid id, IEnumerable<Guid> listIds, IEnumerable<string> statuses, IEnumerable<Guid> clientIds) =>
-        PostAsync<MailoutPreview>($"api/social/{id}/invite/preview", new { listIds, statuses, clientIds });
+    public Task<ApiResult<SocialInvitationDraft>> InvitationDraftAsync(Guid id) => GetAsync<SocialInvitationDraft>($"api/social/{id}/invitation");
 
-    public Task<ApiResult<MailoutCreated>> SendInvitationAsync(Guid id, string subject, string body, IEnumerable<Guid> listIds, IEnumerable<string> statuses,
-        IEnumerable<Guid> clientIds, string? signature, IEnumerable<Guid> attachmentIds) =>
-        PostAsync<MailoutCreated>($"api/social/{id}/invite", new { subject, body, listIds, statuses, clientIds, horseId = (Guid?)null, signature, attachmentIds });
+    public Task<ApiResult<SocialInvitationSample>> InvitationSampleAsync(Guid id, string? subject, string? body, string? signature) =>
+        PostAsync<SocialInvitationSample>($"api/social/{id}/invitation/sample", new { subject, body, signature });
+
+    /// <summary>The invitation, to exactly these people; anyone invited in the meantime is left out.</summary>
+    public Task<ApiResult<MailoutCreated>> SendInvitationAsync(Guid id, string subject, string body, IEnumerable<Guid> clientIds, string? signature, IEnumerable<Guid> attachmentIds) =>
+        PostAsync<MailoutCreated>($"api/social/{id}/invite",
+            new { subject, body, listIds = Array.Empty<Guid>(), statuses = Array.Empty<string>(), clientIds, horseId = (Guid?)null, signature, attachmentIds });
 
     public Task<ApiResult<List<CalendarEntry>>> CalendarAsync(DateOnly from, DateOnly to) =>
         GetAsync<List<CalendarEntry>>($"api/calendar?from={from:yyyy-MM-dd}&to={to:yyyy-MM-dd}");

@@ -1,0 +1,206 @@
+@using Microsoft.AspNetCore.Components.Forms
+@inject PaddocksideApi Api
+
+@*
+    Send invitations (David, 25 Nov 2026): one box that says who it goes to and who it can't reach, the words (filled in
+    from the event, or from the last round), and the email as they'll get it. Nothing goes until Send; Escape or "Not yet"
+    closes it with the words kept.
+*@
+<div class="fixed inset-0 z-50 grid place-items-center bg-[rgb(0_0_0/0.45)] p-3 sm:p-6" @onkeydown="Key">
+    <div @ref="_dialog" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="send-title"
+         class="grid max-h-full w-full max-w-5xl grid-rows-[auto_minmax(0,1fr)_auto] gap-4 overflow-hidden rounded-card border border-border-subtle bg-surface-raised p-card shadow-overlay outline-none">
+        <h2 id="send-title" class="text-title">@Title</h2>
+
+        <div class="grid content-start gap-6 overflow-y-auto lg:grid-cols-[minmax(0,1fr)_391px]">
+            <div class="grid content-start gap-4">
+                @if (Draft.Problem is { } problem)
+                {
+                    <p class="alert-danger" role="alert">@problem</p>
+                }
+                <details class="rounded-control bg-surface-sunken px-4 py-3" open="@(Draft.Going.Count <= 6)">
+                    <summary class="cursor-pointer font-strong">Goes to @People(Draft.Going.Count)</summary>
+                    <ul class="mt-2 grid max-h-[12rem] gap-1 overflow-y-auto text-small">
+                        @foreach (var p in Draft.Going)
+                        {
+                            <li>@p.Name <span class="text-text-muted">@p.Email</span></li>
+                        }
+                    </ul>
+                </details>
+                @if (Draft.LeftOut.Count > 0)
+                {
+                    <div class="rounded-control bg-status-warning-bg px-4 py-3 text-status-warning-fg">
+                        <p class="font-strong">Can't be emailed to @People(Draft.LeftOut.Count)</p>
+                        <ul class="mt-1 grid gap-1 text-small">
+                            @foreach (var p in Draft.LeftOut)
+                            {
+                                <li>@p.Name: @p.Why.ToLowerInvariant()</li>
+                            }
+                        </ul>
+                    </div>
+                }
+                <div class="field">
+                    <label class="field-label" for="send-subject">Subject</label>
+                    <input id="send-subject" class="input" maxlength="150" value="@Subject" @onchange="SubjectAsync" />
+                </div>
+                <div class="field">
+                    <label class="field-label" for="send-body">Message</label>
+                    <textarea id="send-body" class="input min-h-[10rem] py-3" value="@Body" @onchange="BodyAsync"></textarea>
+                    <span class="field-hint">It starts "Hi {first name},". The date, place and reply buttons are added for you.</span>
+                </div>
+                <div class="field">
+                    <label class="field-label" for="send-signature">Signed</label>
+                    <textarea id="send-signature" class="input min-h-[5rem] py-3" maxlength="1000" value="@Signature" @onchange="SignatureAsync"></textarea>
+                </div>
+                <div class="grid gap-2">
+                    @foreach (var file in _files)
+                    {
+                        <div class="flex flex-wrap items-center gap-x-3 rounded-control border border-border-subtle px-3 py-2">
+                            <span class="min-w-0 flex-1 truncate font-strong">@file.FileName</span>
+                            <span class="text-small text-text-muted">@file.Size</span>
+                            <button type="button" class="text-small font-strong underline underline-offset-4" aria-label="Take @file.FileName off" @onclick="() => _files.Remove(file)">Remove</button>
+                        </div>
+                    }
+                    <label class="btn-secondary min-h-[36px] cursor-pointer justify-self-start px-3 focus-within:outline focus-within:outline-2 focus-within:outline-offset-2 @(_uploading ? "opacity-70" : null)">
+                        @(_uploading ? "Attaching…" : "Attach a file (optional)")
+                        <InputFile class="sr-only" multiple accept="@Accept" OnChange="AttachAsync" disabled="@_uploading" />
+                    </label>
+                </div>
+            </div>
+
+            <div class="grid content-start gap-2">
+                <span class="text-small font-strong text-text-muted">What they'll get</span>
+                <div class="overflow-hidden rounded-card border border-border-subtle bg-surface-sunken">
+                    @if (_html is not null)
+                    {
+                        @* No scripts, no forms, nowhere to go: a picture of the email. (Same origin, or it cannot load the logo.) *@
+                        <iframe sandbox="allow-same-origin" title="The invitation email" srcdoc="@_html" class="mx-auto block h-[520px] w-full max-w-[375px] border-0"></iframe>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <div class="grid gap-3">
+            @if (_error is not null)
+            {
+                <p class="alert-danger" role="alert">@_error</p>
+            }
+            <div class="flex flex-wrap gap-3">
+                <button type="button" class="btn-primary" disabled="@(_busy || _uploading || Draft.Problem is not null || Draft.Going.Count == 0)" @onclick="SendAsync">
+                    @(_busy ? "Sending…" : $"Send to {People(Draft.Going.Count)}")
+                </button>
+                <button type="button" class="btn-secondary" disabled="@_busy" @onclick="() => OnClose.InvokeAsync(null)">Not yet</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private const long MaxTotalBytes = 7L * 1024 * 1024;
+    private const string Accept = ".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.csv,.txt,.jpg,.jpeg,.png,.gif";
+
+    private ElementReference _dialog;
+    private string? _html, _error;
+    private bool _busy, _uploading;
+    private readonly List<MailoutAttachmentView> _files = [];
+
+    [Parameter, EditorRequired] public Guid EventId { get; set; }
+
+    [Parameter, EditorRequired] public string EventTitle { get; set; } = "";
+
+    [Parameter, EditorRequired] public SocialInvitationDraft Draft { get; set; } = null!;
+
+    /// <summary>The words, the page's to keep so closing the box doesn't lose them.</summary>
+    [Parameter, EditorRequired] public string Subject { get; set; } = "";
+
+    [Parameter] public EventCallback<string> SubjectChanged { get; set; }
+
+    [Parameter, EditorRequired] public string Body { get; set; } = "";
+
+    [Parameter] public EventCallback<string> BodyChanged { get; set; }
+
+    [Parameter, EditorRequired] public string Signature { get; set; } = "";
+
+    [Parameter] public EventCallback<string> SignatureChanged { get; set; }
+
+    /// <summary>How many it went to, or null when closed without sending.</summary>
+    [Parameter] public EventCallback<int?> OnClose { get; set; }
+
+    private string Title => Draft.Going.Count == 0 ? "Nobody to send to" : $"Send the {EventTitle} invitation to {People(Draft.Going.Count)}?";
+
+    private static string People(int n) => n == 1 ? "1 person" : $"{n} people";
+
+    protected override async Task OnInitializedAsync() => await ShowAsync();
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender) await _dialog.FocusAsync();
+    }
+
+    private async Task ShowAsync()
+    {
+        var result = await Api.InvitationSampleAsync(EventId, Subject, Body, Signature);
+        if (result.Succeeded) _html = result.Value!.Html;
+        else _error = result.Error;
+    }
+
+    private async Task SubjectAsync(ChangeEventArgs e)
+    {
+        await SubjectChanged.InvokeAsync(e.Value?.ToString() ?? "");
+        await ShowAsync();
+    }
+
+    private async Task BodyAsync(ChangeEventArgs e)
+    {
+        await BodyChanged.InvokeAsync(e.Value?.ToString() ?? "");
+        await ShowAsync();
+    }
+
+    private async Task SignatureAsync(ChangeEventArgs e)
+    {
+        await SignatureChanged.InvokeAsync(e.Value?.ToString() ?? "");
+        await ShowAsync();
+    }
+
+    private async Task AttachAsync(InputFileChangeEventArgs e)
+    {
+        (_uploading, _error) = (true, null);
+        try
+        {
+            foreach (var file in e.GetMultipleFiles(10))
+            {
+                if (_files.Sum(f => f.Bytes) + file.Size > MaxTotalBytes)
+                {
+                    _error = $"{file.Name} would take the attachments over 7 MB, more than email can carry.";
+                    continue;
+                }
+
+                var result = await Api.AttachToMailoutAsync(file, MaxTotalBytes);
+                if (result.Succeeded) _files.Add(result.Value!);
+                else _error = result.Error;
+            }
+        }
+        finally
+        {
+            _uploading = false;
+        }
+    }
+
+    private async Task SendAsync()
+    {
+        _error = string.IsNullOrWhiteSpace(Subject) ? "Give it a subject." : string.IsNullOrWhiteSpace(Body) ? "Write a message." : null;
+        if (_error is not null) return;
+        _busy = true;
+        try
+        {
+            var result = await Api.SendInvitationAsync(EventId, Subject, Body, Draft.Going.Select(g => g.PartyId), Signature, _files.Select(f => f.Id));
+            if (result.Succeeded) await OnClose.InvokeAsync(result.Value!.Sending);
+            else _error = result.Error;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private Task Key(KeyboardEventArgs e) => e.Key == "Escape" && !_busy ? OnClose.InvokeAsync(null) : Task.CompletedTask;
+}

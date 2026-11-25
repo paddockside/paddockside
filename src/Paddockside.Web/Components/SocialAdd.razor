@@ -1,0 +1,141 @@
+@inject PaddocksideApi Api
+
+@*
+    Putting people on a social event's list (David, 25 Nov 2026): one box that finds client lists and people together.
+    Choose any mix, then add them. Nothing is emailed; anyone already on the list is left as they are.
+*@
+<div class="card grid gap-3" role="group" aria-labelledby="add-heading">
+    <h3 id="add-heading" class="font-strong">Add people to invite</h3>
+
+    @if (_lists.Count + _people.Count > 0)
+    {
+        <ul class="flex flex-wrap gap-2" aria-label="Chosen">
+            @foreach (var l in _lists)
+            {
+                <li class="inline-flex min-h-[36px] items-center gap-2 rounded-pill border border-border-strong bg-surface-sunken pl-3 pr-1 text-small">
+                    @l.Name <span class="text-text-muted">(list, @l.Count)</span>
+                    <button type="button" class="grid size-[28px] place-items-center rounded-pill hover:bg-surface-raised" aria-label="Take @l.Name off" @onclick="() => _lists.Remove(l)">✕</button>
+                </li>
+            }
+            @foreach (var c in _people)
+            {
+                <li class="inline-flex min-h-[36px] items-center gap-2 rounded-pill border border-border-strong bg-surface-sunken pl-3 pr-1 text-small">
+                    @c.Name
+                    <button type="button" class="grid size-[28px] place-items-center rounded-pill hover:bg-surface-raised" aria-label="Take @c.Name off" @onclick="() => _people.Remove(c)">✕</button>
+                </li>
+            }
+        </ul>
+    }
+
+    <div class="field">
+        <label class="field-label" for="add-search">Find a client list or a person</label>
+        <input id="add-search" class="input" autocomplete="off" @bind="_search" @bind:event="oninput" placeholder="Type a list name, a person's name or an email" />
+    </div>
+    @if (_loading)
+    {
+        <p class="text-small text-text-muted" role="status">Loading…</p>
+    }
+    else
+    {
+        <div class="grid max-h-[18rem] gap-3 overflow-y-auto">
+            @if (Lists.Count > 0)
+            {
+                <div class="grid gap-1">
+                    <span class="text-small font-strong text-text-muted">Client lists</span>
+                    <ul class="grid">
+                        @foreach (var l in Lists)
+                        {
+                            <li><button type="button" class="min-h-[36px] w-full rounded-control px-2 py-1 text-left hover:bg-surface-sunken" @onclick="() => Choose(l)">@l.Name <span class="text-small text-text-muted">@(l.Count == 1 ? "1 person" : $"{l.Count} people")</span></button></li>
+                        }
+                    </ul>
+                </div>
+            }
+            @if (People.Count > 0)
+            {
+                <div class="grid gap-1">
+                    <span class="text-small font-strong text-text-muted">People</span>
+                    <ul class="grid">
+                        @foreach (var c in People)
+                        {
+                            <li><button type="button" class="min-h-[36px] w-full rounded-control px-2 py-1 text-left hover:bg-surface-sunken" @onclick="() => Choose(c)">@c.Name <span class="text-small text-text-muted">@(c.Email ?? "no email address")</span></button></li>
+                        }
+                    </ul>
+                </div>
+            }
+            @if (Lists.Count + People.Count == 0)
+            {
+                <p class="text-small text-text-muted" role="status">@(Query.Length == 0 ? "Start typing to find people." : "Nothing matches. People already on the list aren't shown.")</p>
+            }
+        </div>
+    }
+
+    @if (_error is not null)
+    {
+        <p class="alert-danger" role="alert">@_error</p>
+    }
+    <div class="flex flex-wrap items-center gap-3">
+        <button type="button" class="btn-primary" disabled="@(_busy || _lists.Count + _people.Count == 0)" @onclick="AddAsync">Add to the list</button>
+        <button type="button" class="btn-secondary" @onclick="() => OnDone.InvokeAsync(null)">Cancel</button>
+        <span class="text-small text-text-muted">Nothing is emailed yet.</span>
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public Guid EventId { get; set; }
+
+    /// <summary>Already on the event's list, so not offered.</summary>
+    [Parameter, EditorRequired] public IReadOnlySet<Guid> On { get; set; } = new HashSet<Guid>();
+
+    /// <summary>What was added, or null when cancelled.</summary>
+    [Parameter] public EventCallback<SocialAdded?> OnDone { get; set; }
+
+    private List<ClientListView> _allLists = [];
+    private List<ClientRow> _allPeople = [];
+    private readonly List<ClientListView> _lists = [];
+    private readonly List<ClientRow> _people = [];
+    private string? _search, _error;
+    private bool _busy, _loading = true;
+
+    private string Query => _search?.Trim() ?? "";
+
+    private List<ClientListView> Lists => _allLists.Where(l => !_lists.Contains(l) && l.Name.Contains(Query, StringComparison.OrdinalIgnoreCase)).OrderBy(l => l.Name).Take(12).ToList();
+
+    private List<ClientRow> People => Query.Length == 0 ? [] : _allPeople
+        .Where(c => !On.Contains(c.Id) && !_people.Contains(c) && (c.Name.Contains(Query, StringComparison.OrdinalIgnoreCase) || (c.Email?.Contains(Query, StringComparison.OrdinalIgnoreCase) ?? false)))
+        .Take(12).ToList();
+
+    protected override async Task OnInitializedAsync()
+    {
+        var lists = await Api.ClientListsAsync();
+        var people = await Api.ClientsAsync(null, null, null);
+        (_allLists, _allPeople, _error) = (lists.Value ?? [], people.Value ?? [], lists.Error ?? people.Error);
+        _loading = false;
+    }
+
+    private void Choose(ClientListView list)
+    {
+        _lists.Add(list);
+        _search = null;
+    }
+
+    private void Choose(ClientRow person)
+    {
+        _people.Add(person);
+        _search = null;
+    }
+
+    private async Task AddAsync()
+    {
+        (_busy, _error) = (true, null);
+        try
+        {
+            var result = await Api.AddSocialAttendeesAsync(EventId, _people.Select(p => p.Id), _lists.Select(l => l.Id));
+            if (result.Succeeded) await OnDone.InvokeAsync(result.Value);
+            else _error = result.Error;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}

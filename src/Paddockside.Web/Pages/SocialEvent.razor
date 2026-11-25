@@ -6,10 +6,10 @@
 <PageTitle>@(_event?.Event.Title ?? "Social event") · Paddockside</PageTitle>
 
 @*
-    One social event (David, 22 Nov 2026): when and where, the places taken and who's coming, like owners tickets.
-    Invitations go out from here as mailouts to lists or people (anyone already on the list is skipped), and replies
-    from the invitation's buttons land on the list by themselves. Staff can add people and change anyone's answer,
-    places or note: taking someone off the waiting list, say.
+    One social event (David, 22 and 25 Nov 2026): when and where, the places taken, and one list of people in the order
+    things happen to them. "Add people" puts clients or a whole client list on it, which emails nobody; "Send invitations"
+    shows the email and who it goes to, and sends it to everyone not invited yet; they move to "Invited", with where their
+    email got to, and their answer from its buttons. Adding more later never invites anyone twice.
 *@
 <div class="grid grid-cols-[minmax(0,1fr)] gap-6">
     <a href="social" class="btn-link justify-self-start">← Social</a>
@@ -38,10 +38,6 @@
                 @if (CanEdit && !_editing)
                 {
                     <button type="button" class="btn-secondary min-h-[36px] px-4" @onclick="() => _editing = true">Change details</button>
-                    @if (e.Status == "Open")
-                    {
-                        <a href="mailouts/new?social=@e.Id" class="btn-primary min-h-[36px] px-4">Send invitations</a>
-                    }
                 }
             </div>
         </div>
@@ -75,122 +71,61 @@
             </div>
         </section>
 
-        @if (e.Unsent > 0)
-        {
-            @* Put on by hand and never sent anything (David, 25 Nov 2026): say so, and offer to invite them. *@
-            <div class="flex flex-wrap items-center gap-3 rounded-control bg-status-warning-bg px-4 py-3 text-status-warning-fg">
-                <p class="flex-1"><strong>@(e.Unsent == 1 ? "1 person hasn't" : $"{e.Unsent} people haven't") been invited yet.</strong> They're on the list, but no email has been sent to them.</p>
-                @if (CanEdit && e.Status == "Open")
-                {
-                    <a href="mailouts/new?social=@e.Id&waiting=true" class="btn-secondary min-h-[36px] px-4">Invite @(e.Unsent == 1 ? "them" : $"these {e.Unsent}")</a>
-                }
-            </div>
-        }
-
-        <section class="grid grid-cols-[minmax(0,1fr)] gap-3" aria-labelledby="who-heading">
+        <section class="grid grid-cols-[minmax(0,1fr)] gap-3" aria-labelledby="to-invite-heading">
             <div class="flex flex-wrap items-center justify-between gap-3">
-                <h2 id="who-heading">Who's on the list (@_event.Attendees.Count)</h2>
-                @if (CanEdit && !_adding)
+                <h2 id="to-invite-heading">Not invited yet (@Waiting.Count)</h2>
+                @if (CanEdit)
                 {
-                    <button type="button" class="btn-secondary min-h-[36px] px-4" @onclick="StartAddingAsync">Add people</button>
+                    <div class="flex flex-wrap gap-3">
+                        @if (!_adding)
+                        {
+                            <button type="button" class="@(Waiting.Count == 0 ? "btn-primary" : "btn-secondary") min-h-[40px] px-4" @onclick="() => _adding = true">@(_event.Attendees.Count == 0 ? "Add people" : "Add more people")</button>
+                        }
+                        @if (e.Status == "Open" && Waiting.Any(a => a.CantEmail is null))
+                        {
+                            <button type="button" class="btn-primary min-h-[40px] px-4" disabled="@_busy" @onclick="OpenInvitationAsync">Send invitations…</button>
+                        }
+                    </div>
                 }
             </div>
 
             @if (_adding)
             {
-                <div class="card grid gap-3">
-                    <label class="field-label" for="add-search">Find clients to put on the list</label>
-                    <p class="field-hint">This doesn't email anyone. To email an invitation with reply buttons, use Send invitations.</p>
-                    <input id="add-search" class="input" @bind="_search" @bind:event="oninput" placeholder="Type a name or email" />
-                    <ul class="grid max-h-[16rem] gap-1 overflow-y-auto">
-                        @foreach (var c in Matches)
-                        {
-                            <li>
-                                <label class="flex items-center gap-2">
-                                    <input type="checkbox" class="size-[18px] accent-action-primary-bg" checked="@_picked.Contains(c.Id)" @onchange="() => Toggle(c.Id)" />
-                                    <span>@c.Name</span><span class="text-small text-text-muted">@c.Email</span>
-                                </label>
-                            </li>
-                        }
-                    </ul>
-                    <div class="flex flex-wrap gap-3">
-                        <button type="button" class="btn-primary" disabled="@(_busy || _picked.Count == 0)" @onclick="AddAsync">Add @(_picked.Count == 1 ? "1 person" : $"{_picked.Count} people")</button>
-                        <button type="button" class="btn-secondary" @onclick="() => _adding = false">Cancel</button>
-                    </div>
-                </div>
+                <SocialAdd EventId="Id" On="_event.Attendees.Select(a => a.PartyId).ToHashSet()" OnDone="AddedAsync" />
             }
 
-            @if (_event.Attendees.Count == 0)
+            @if (Waiting.Count > 0)
             {
-                <p class="text-text-muted">Nobody yet. Send invitations, or add people by hand.</p>
+                @Rows(Waiting)
             }
-            else
+            else if (!_adding)
             {
-                <ul class="card grid !p-0">
-                    @foreach (var a in _event.Attendees)
-                    {
-                        <li class="grid gap-1 border-b border-border-subtle px-4 py-3 last:border-b-0">
-                            <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
-                                <a href="clients/@a.PartyId" class="font-strong underline-offset-4 hover:underline">@a.Name</a>
-                                <span class="badge @Badge(a.Status)">@a.StatusLabel</span>
-                                @if (a.Status is "Coming" or "Waiting")
-                                {
-                                    <span class="text-small tabular-nums">@(a.Places == 1 ? "1 place" : $"{a.Places} places")</span>
-                                }
-                                <span class="text-small text-text-muted sm:ml-auto">@(a.AnsweredBy == "them" ? "replied" : a.AnsweredBy is null ? "added" : "set by staff") @Since(a.Updated)</span>
-                            </div>
-                            @if (a.Note is not null)
-                            {
-                                <p class="text-small text-text-muted">@a.Note</p>
-                            }
-                            @if (_changing == a.PartyId)
-                            {
-                                <form class="flex flex-wrap items-end gap-2" @onsubmit="() => SetAsync(a)" @onsubmit:preventDefault aria-label="@($"{a.Name}'s answer")">
-                                    <div class="field">
-                                        <label class="field-label" for="st-@a.PartyId">Answer</label>
-                                        <select id="st-@a.PartyId" class="input min-h-[36px] w-auto" @bind="_status">
-                                            @foreach (var (answer, label) in Answers)
-                                            {
-                                                <option value="@answer">@label</option>
-                                            }
-                                        </select>
-                                    </div>
-                                    <div class="field w-[6rem]">
-                                        <label class="field-label" for="pl-@a.PartyId">Places</label>
-                                        <input id="pl-@a.PartyId" class="input min-h-[36px]" type="number" min="1" max="20" @bind="_places" />
-                                    </div>
-                                    <div class="field min-w-0 flex-[1_1_12rem]">
-                                        <label class="field-label" for="nt-@a.PartyId">Note</label>
-                                        <input id="nt-@a.PartyId" class="input min-h-[36px]" maxlength="300" @bind="_note" />
-                                    </div>
-                                    <button type="submit" class="btn-secondary min-h-[36px] px-3" disabled="@_busy">Save</button>
-                                    <button type="button" class="min-h-[36px] text-small underline underline-offset-4" disabled="@_busy" @onclick="() => RemoveAsync(a)">Take off the list</button>
-                                    <button type="button" class="min-h-[36px] text-small underline underline-offset-4" @onclick="() => _changing = null">Cancel</button>
-                                </form>
-                            }
-                            else if (CanEdit)
-                            {
-                                <button type="button" class="justify-self-start text-small font-strong underline underline-offset-4" @onclick="() => StartChanging(a)">
-                                    Change<span class="sr-only"> @a.Name's answer</span>
-                                </button>
-                            }
-                        </li>
-                    }
-                </ul>
+                <p class="text-text-muted">@(_event.Attendees.Count == 0 ? "Nobody on the list yet. Add people or a client list, then send them the invitation." : "Everyone on the list has been invited or has answered.")</p>
             }
         </section>
 
-        @if (_event.Invitations.Count > 0)
+        @if (Invited.Count > 0)
         {
-            <section class="grid gap-2" aria-labelledby="sent-heading">
-                <h2 id="sent-heading">Invitations sent</h2>
-                <ul class="card grid gap-2">
-                    @foreach (var i in _event.Invitations)
-                    {
-                        <li><a href="mailouts/@i.MailoutId" class="underline-offset-4 hover:underline">@i.Subject</a> <span class="text-small text-text-muted">· @i.Sent · to @i.Recipients</span></li>
-                    }
-                </ul>
-                <p class="text-small text-text-muted">Each mailout's page shows who it reached and any replies by email.</p>
+            <section class="grid grid-cols-[minmax(0,1fr)] gap-3" aria-labelledby="invited-heading">
+                <h2 id="invited-heading">Invited (@Invited.Count)</h2>
+                @if (_event.Invitations.Count > 0)
+                {
+                    <p class="text-small text-text-muted">
+                        @foreach (var i in _event.Invitations)
+                        {
+                            <a href="mailouts/@i.MailoutId" class="mr-4 inline-block underline underline-offset-4">Sent to @(i.Recipients == 1 ? "1 person" : $"{i.Recipients} people"), @Since(i.Sent)</a>
+                        }
+                    </p>
+                }
+                @Rows(Invited)
+            </section>
+        }
+
+        @if (Others.Count > 0)
+        {
+            <section class="grid grid-cols-[minmax(0,1fr)] gap-3" aria-labelledby="others-heading">
+                <h2 id="others-heading">Answered without an invitation (@Others.Count)</h2>
+                @Rows(Others)
             </section>
         }
 
@@ -219,17 +154,113 @@
     }
 </div>
 
+@if (_draft is { } draft && _event is { } shown)
+{
+    <SocialInvitation EventId="Id" EventTitle="@shown.Event.Title" Draft="draft" @bind-Subject="_subject" @bind-Body="_body" @bind-Signature="_signature" OnClose="SentAsync" />
+}
+
 @code {
     [Parameter] public Guid Id { get; set; }
 
     private SocialDetail? _event;
-    private string? _error, _saved, _search, _note;
+    private string? _error, _saved, _note;
     private bool _editing, _adding, _busy;
     private Guid? _changing;
     private string _status = "Coming";
     private int _places = 1;
-    private List<ClientRow> _clients = [];
-    private readonly HashSet<Guid> _picked = [];
+    private SocialInvitationDraft? _draft;
+    private string _subject = "", _body = "", _signature = "";
+    private bool _worded;
+
+    private List<SocialAttendeeLine> Waiting => _event!.Attendees.Where(a => a.Unsent).ToList();
+
+    private List<SocialAttendeeLine> Invited => _event!.Attendees.Where(a => !a.Unsent && a.Delivery is not null).ToList();
+
+    /// <summary>On the list by hand, with an answer staff took down.</summary>
+    private List<SocialAttendeeLine> Others => _event!.Attendees.Where(a => !a.Unsent && a.Delivery is null).ToList();
+
+    private RenderFragment Rows(List<SocialAttendeeLine> people) => __builder =>
+    {
+        <ul class="card grid !p-0">
+            @foreach (var a in people)
+            {
+                <li class="grid gap-1 border-b border-border-subtle px-4 py-3 last:border-b-0">
+                    <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
+                        <a href="clients/@a.PartyId" class="font-strong underline-offset-4 hover:underline">@a.Name</a>
+                        @if (a.CantEmail is { } why)
+                        {
+                            <span class="badge bg-status-warning-bg text-status-warning-fg">Can't be emailed: @why.ToLowerInvariant()</span>
+                        }
+                        else if (!a.Unsent)
+                        {
+                            <span class="badge @Badge(a.Status)">@(a.Status == "Invited" ? "No answer yet" : a.StatusLabel)</span>
+                        }
+                        @if (a.Status is "Coming" or "Waiting")
+                        {
+                            <span class="text-small tabular-nums">@(a.Places == 1 ? "1 place" : $"{a.Places} places")</span>
+                        }
+                        <span class="text-small sm:ml-auto @(a.Delivery == "Bounced" ? "font-strong text-status-danger-fg" : "text-text-muted")">@Happened(a)</span>
+                    </div>
+                    @if (a.Note is not null)
+                    {
+                        <p class="text-small text-text-muted">@a.Note</p>
+                    }
+                    @if (_changing == a.PartyId)
+                    {
+                        <form class="flex flex-wrap items-end gap-2" @onsubmit="() => SetAsync(a)" @onsubmit:preventDefault aria-label="@AnswerOf(a)">
+                            <div class="field">
+                                <label class="field-label" for="st-@a.PartyId">Answer</label>
+                                <select id="st-@a.PartyId" class="input min-h-[36px] w-auto" @bind="_status">
+                                    @foreach (var (answer, label) in Answers)
+                                    {
+                                        <option value="@answer">@label</option>
+                                    }
+                                </select>
+                            </div>
+                            <div class="field w-[6rem]">
+                                <label class="field-label" for="pl-@a.PartyId">Places</label>
+                                <input id="pl-@a.PartyId" class="input min-h-[36px]" type="number" min="1" max="20" @bind="_places" />
+                            </div>
+                            <div class="field min-w-0 flex-[1_1_12rem]">
+                                <label class="field-label" for="nt-@a.PartyId">Note</label>
+                                <input id="nt-@a.PartyId" class="input min-h-[36px]" maxlength="300" @bind="_note" />
+                            </div>
+                            <button type="submit" class="btn-secondary min-h-[36px] px-3" disabled="@_busy">Save</button>
+                            <button type="button" class="min-h-[36px] text-small underline underline-offset-4" @onclick="() => _changing = null">Cancel</button>
+                        </form>
+                    }
+                    else if (CanEdit)
+                    {
+                        <div class="flex flex-wrap gap-4">
+                            <button type="button" class="text-small font-strong underline underline-offset-4" @onclick="() => StartChanging(a)">
+                                @(a.Unsent ? "Record an answer" : "Change")<span class="sr-only"> for @a.Name</span>
+                            </button>
+                            <button type="button" class="text-small underline underline-offset-4" disabled="@_busy" @onclick="() => RemoveAsync(a)">
+                                Take off<span class="sr-only"> @a.Name</span>
+                            </button>
+                        </div>
+                    }
+                </li>
+            }
+        </ul>
+    };
+
+    private static string AnswerOf(SocialAttendeeLine a) => $"{a.Name}'s answer";
+
+    /// <summary>"replied today, 9:40 am", "set by staff…", or where the invitation got to.</summary>
+    private static string Happened(SocialAttendeeLine a) =>
+        a.AnsweredBy == "them" ? $"replied {Since(a.Updated)}"
+        : a.AnsweredBy is not null ? $"set by staff {Since(a.Updated)}"
+        : a.Unsent ? $"added {Since(a.Updated)}"
+        : a.Delivery switch
+        {
+            "Sending" => "sending now",
+            "Sent" => "email sent",
+            "Delivered" => "email delivered",
+            "Opened" => "email opened",
+            "Bounced" => "email bounced",
+            _ => "",
+        };
 
     private static readonly (string, string)[] Answers =
         [("Coming", "Coming"), ("Maybe", "Maybe"), ("NotComing", "Not coming"), ("Waiting", "Waiting list"), ("Invited", "No answer yet")];
@@ -238,18 +269,6 @@
 
     /// <summary>"today, 9:40 am" reads on after "replied"; a day name keeps its capital.</summary>
     private static string Since(string at) => at.StartsWith("Today") || at.StartsWith("Yesterday") ? char.ToLowerInvariant(at[0]) + at[1..] : at;
-
-    private IEnumerable<ClientRow> Matches
-    {
-        get
-        {
-            var on = _event?.Attendees.Select(a => a.PartyId).ToHashSet() ?? [];
-            var q = _search?.Trim();
-            return _clients.Where(c => !on.Contains(c.Id))
-                .Where(c => string.IsNullOrEmpty(q) || c.Name.Contains(q, StringComparison.OrdinalIgnoreCase) || (c.Email?.Contains(q, StringComparison.OrdinalIgnoreCase) ?? false))
-                .Take(50);
-        }
-    }
 
     private static string Badge(string status) => status switch
     {
@@ -284,32 +303,39 @@
         await LoadAsync();
     }
 
-    private async Task StartAddingAsync()
+    private async Task AddedAsync(SocialAdded? added)
     {
-        if (_clients.Count == 0) _clients = (await Api.ClientsAsync(null, null, null)).Value ?? [];
-        (_adding, _search) = (true, null);
-        _picked.Clear();
+        _adding = false;
+        if (added is null) return;
+        var people = added.Count == 1 ? "1 person" : $"{added.Count} people";
+        _saved = added.Count == 0 ? "Everyone you chose was already on the list."
+            : $"Added {people}.{(added.Already > 0 ? $" {added.Already} already on the list." : "")} Nothing is emailed until you send the invitations.";
+        await LoadAsync();
     }
 
-    private void Toggle(Guid id)
+    private async Task OpenInvitationAsync()
     {
-        if (!_picked.Remove(id)) _picked.Add(id);
-    }
-
-    private async Task AddAsync()
-    {
-        _busy = true;
+        (_busy, _error, _saved) = (true, null, null);
         try
         {
-            var result = await Api.AddSocialAttendeesAsync(Id, _picked);
+            var result = await Api.InvitationDraftAsync(Id);
             if (!result.Succeeded) { _error = result.Error; return; }
-            (_adding, _saved) = (false, $"Added {(_picked.Count == 1 ? "1 person" : $"{_picked.Count} people")} to the list. Nothing has been emailed to them.");
-            await LoadAsync();
+            // Words typed and then "Not yet" are still there; who it goes to is always fresh.
+            if (!_worded) (_subject, _body, _signature, _worded) = (result.Value!.Subject, result.Value.Body, result.Value.Signature, true);
+            _draft = result.Value;
         }
         finally
         {
             _busy = false;
         }
+    }
+
+    private async Task SentAsync(int? sent)
+    {
+        _draft = null;
+        if (sent is not { } count) return;
+        (_worded, _saved) = (false, $"Invitation sent to {(count == 1 ? "1 person" : $"{count} people")}. Their answers will show here.");
+        await LoadAsync();
     }
 
     private void StartChanging(SocialAttendeeLine a) =>
