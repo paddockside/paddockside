@@ -14,5 +14,6 @@ builder.Services.AddScoped<StaffRail>();
 builder.Services.AddScoped<MailoutSelection>();
 builder.Services.AddScoped<OwnerSessionState>();
 builder.Services.AddScoped<UpdateOutbox>();
+builder.Services.AddScoped<BuildCheck>();
 
 await builder.Build().RunAsync();

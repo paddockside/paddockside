@@ -1,0 +1,17 @@
+@inherits LayoutComponentBase
+@inject IJSRuntime JS
+
+@* A page about Paddockside itself, for anyone, signed in or not: back goes where they came from. *@
+<UpdateBar />
+<div class="grid min-h-screen grid-cols-[minmax(0,1fr)] grid-rows-[auto_1fr_auto]">
+    <header class="flex items-center justify-between gap-4 border-b border-border-subtle bg-surface-default px-4 py-2 sm:px-6">
+        <span class="text-title font-heading">Paddockside</span>
+        <button type="button" class="btn-secondary" @onclick="BackAsync">Back</button>
+    </header>
+    <main class="mx-auto w-full max-w-3xl px-4 py-6 sm:px-6 sm:py-8">@Body</main>
+    <SiteFooter Class="border-t border-border-subtle px-4 py-1 sm:px-6" />
+</div>
+
+@code {
+    private async Task BackAsync() => await JS.InvokeVoidAsync("paddockside.back");
+}

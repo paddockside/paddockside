@@ -7,9 +7,10 @@
     The owner portal's frame (design-system.md §2.0, §2.2): the tenant's logo and name at the top, one thing per
     screen, 18 px text, and three labelled destinations — My horses, Updates, Me: a bottom bar on a phone, beside the
     tenant's name at the top on a wide screen (the owner mockup), with their own name at the right. No hamburger
-    menu, no icon-only controls. The product's name is small in the footer, never in the owner's way. An event page
+    menu, no icon-only controls. The product's name, about it and its build are small in the footer, never in the owner's way. An event page
     is wider, for its side panel.
 *@
+<UpdateBar />
 <div class="grid min-h-screen grid-cols-[minmax(0,1fr)] grid-rows-[auto_1fr_auto] bg-surface-default text-body-owner">
     <AppHeader Side="Side.Owner" TenantName="@Session.Current?.TenantName" LogoUrl="@Session.Current?.TenantLogoUrl" SquareLogoUrl="@Session.Current?.TenantSquareLogoUrl"
                OtherTenants="OtherTenants" OnSwitchTenant="Switch">
@@ -38,7 +39,7 @@
 
     <main class="mx-auto w-full @(Wide ? "max-w-xl lg:max-w-6xl" : "max-w-xl") px-4 pb-[8rem] pt-6 lg:pb-12 lg:pt-8">
         @Body
-        <p class="mt-12 text-center text-small text-text-muted">Paddockside</p>
+        <SiteFooter Class="mt-12 border-t border-border-subtle pt-1" />
     </main>
 
     @if (Session.Current is not null)

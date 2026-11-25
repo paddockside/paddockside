@@ -11,6 +11,7 @@
     in at the bottom. On phones and tablets the rail folds into one row at the top (StaffMenu). The event page runs edge to edge (it
     has its own right-hand panel); every other page sits in a centred column.
 *@
+<UpdateBar />
 <div class="min-h-screen lg:grid lg:grid-cols-[264px_minmax(0,1fr)]">
     @if (Session.Current is { } me)
     {
@@ -97,7 +98,7 @@
         <div class="hidden lg:block"></div>
     }
 
-    <div class="grid min-h-screen grid-cols-[minmax(0,1fr)] grid-rows-[auto_auto_auto_1fr]">
+    <div class="flex min-h-screen min-w-0 flex-col">
         @* Phones and tablets: one row at the top instead of the rail. *@
         <div class="lg:hidden">
             @if (Session.Current is { } staff)
@@ -131,12 +132,15 @@
 
         @if (FullBleed)
         {
-            <main class="min-w-0">@Body</main>
+            <main class="min-w-0 flex-1">@Body</main>
         }
         else
         {
-            <main class="mx-auto w-full min-w-0 max-w-5xl px-4 py-6 sm:px-6 sm:py-8">@Body</main>
+            <main class="mx-auto w-full min-w-0 max-w-5xl flex-1 px-4 py-6 sm:px-6 sm:py-8">@Body</main>
         }
+
+        @* Room on a phone for the Send update bar, where a page has one. *@
+        <SiteFooter Class="@($"border-t border-border-subtle px-4 pt-1 sm:px-6 {(HasSendBar ? "pb-[112px] lg:pb-1" : "pb-[max(4px,env(safe-area-inset-bottom))]")}")" />
     </div>
 </div>
 
@@ -168,6 +172,16 @@
             }
         </a>
     };
+
+    /// <summary>A horse's page or an event's: the ones with Send update at the foot of a phone.</summary>
+    private bool HasSendBar
+    {
+        get
+        {
+            var path = Navigation.ToBaseRelativePath(Navigation.Uri).Split('?', '#')[0].Split('/');
+            return path is ["horses" or "events", _] && Guid.TryParse(path[1], out _);
+        }
+    }
 
     private string? AccountCurrent => IsCurrent("account") ? "page" : null;
 

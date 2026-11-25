@@ -1,0 +1,11 @@
+@* The bar at the foot of every page: whose product it is, about it, and which build this is (David, 26 Nov 2026). *@
+<footer class="flex flex-wrap items-center gap-x-4 text-small text-text-muted @Class">
+    <span class="font-strong">Paddockside</span>
+    <a href="about" class="inline-flex min-h-control items-center underline underline-offset-4">About us</a>
+    <span class="ml-auto whitespace-nowrap">Build @BuildInfo.Number@(BuildInfo.Date is { } date ? $" · {date}" : null)</span>
+</footer>
+
+@code {
+    /// <summary>Where it sits: the space around it differs between staff and owner pages.</summary>
+    [Parameter] public string? Class { get; set; }
+}

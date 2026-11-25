@@ -34,6 +34,24 @@
             },
             // A phone or tablet: staff can say it's their own when they sign in.
             isTouch() { return matchMedia('(pointer: coarse)').matches; },
+            // Back to this tab (or the app, on a phone): has Paddockside been updated since? (BuildCheck)
+            onReturn(check) {
+                const look = () => { if (document.visibilityState === 'visible') check.invokeMethodAsync('LookAsync'); };
+                document.addEventListener('visibilitychange', look);
+                window.addEventListener('pageshow', look);
+            },
+            // Refreshed once for each new build, so a copy kept somewhere in between can't ask for ever.
+            refreshFor(build) {
+                try { sessionStorage.setItem('refreshed-for', build); } catch { /* private window: it may ask again */ }
+                location.reload();
+            },
+            refreshedFor() {
+                try { return sessionStorage.getItem('refreshed-for'); } catch { return null; }
+            },
+            back() {
+                if (history.length > 1) history.back();
+                else location.assign('./');
+            },
             // Owner portal: a notification link lands on the exact item (identity-access.md §4.1).
             scrollToItem(id) {
                 const item = document.getElementById(id);

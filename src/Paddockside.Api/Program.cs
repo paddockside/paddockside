@@ -137,6 +137,14 @@ var revalidate = new StaticFileOptions
 };
 app.UseStaticFiles(revalidate);
 
+// Which build is being served, for open tabs to see there's a newer one. Before sign-in is looked at, so asking never wakes
+// the database.
+app.Map("/version.json", version => version.Run(context =>
+{
+    context.Response.Headers.CacheControl = "no-store";
+    return context.Response.WriteAsJsonAsync(new { number = Paddockside.Web.BuildInfo.Number, commit = Paddockside.Web.BuildInfo.Commit });
+}));
+
 app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();

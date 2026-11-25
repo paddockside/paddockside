@@ -19,6 +19,26 @@
   </ItemGroup>
 
   <!--
+    Which build this is (BuildInfo.cs): the number of commits, the latest one and its time. Without git, or outside a
+    checkout, it's build 0.
+  -->
+  <Target Name="StampBuild" BeforeTargets="GetAssemblyAttributes">
+    <Exec Command="git rev-list --count HEAD" WorkingDirectory="$(MSBuildProjectDirectory)" ConsoleToMSBuild="true" StandardOutputImportance="low" StandardErrorImportance="low" IgnoreExitCode="true" IgnoreStandardErrorWarningFormat="true">
+      <Output TaskParameter="ConsoleOutput" PropertyName="_BuildNumber" />
+      <Output TaskParameter="ExitCode" PropertyName="_BuildNumberExit" />
+    </Exec>
+    <Exec Command="git rev-list -1 --timestamp HEAD" WorkingDirectory="$(MSBuildProjectDirectory)" ConsoleToMSBuild="true" StandardOutputImportance="low" StandardErrorImportance="low" IgnoreExitCode="true" IgnoreStandardErrorWarningFormat="true">
+      <Output TaskParameter="ConsoleOutput" PropertyName="_BuildHead" />
+      <Output TaskParameter="ExitCode" PropertyName="_BuildHeadExit" />
+    </Exec>
+    <ItemGroup Condition="'$(_BuildNumberExit)' == '0' And '$(_BuildHeadExit)' == '0'">
+      <AssemblyMetadata Include="BuildNumber" Value="$(_BuildNumber.Trim())" />
+      <AssemblyMetadata Include="BuildTime" Value="$(_BuildHead.Trim().Split(' ')[0])" />
+      <AssemblyMetadata Include="BuildCommit" Value="$(_BuildHead.Trim().Split(' ')[1])" />
+    </ItemGroup>
+  </Target>
+
+  <!--
     Styles: Tailwind builds wwwroot/css/app.css from Styles/app.css with the theme generated from
     Paddockside.Design/tokens.json (Paddockside.Design regenerates tailwind.config.js before this project builds).
     Figtree is self-hosted from npm into wwwroot/fonts. Both outputs are build artefacts, git-ignored.

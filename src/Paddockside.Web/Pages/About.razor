@@ -1,0 +1,44 @@
+@page "/about"
+@layout PlainLayout
+
+<PageTitle>About us · Paddockside</PageTitle>
+
+@* Anyone's, signed in or not. The first page of the footer; the rest of it (privacy, terms, contact) comes as it's written. *@
+<div class="grid gap-8">
+    <header class="grid gap-3">
+        <h1>About Paddockside</h1>
+        <p class="text-title font-heading leading-snug">Everything about a horse, in one place, for the people who own it and the people who look after it.</p>
+    </header>
+
+    <section class="grid gap-3">
+        <p>Owning part of a racehorse should be fun, and most of the fun is in knowing what's going on. Paddockside helps racing managers keep their owners in the picture: trackwork, barrier draws, race day, results, and a photo, video or voice note from the stable.</p>
+        <p>The manager's team sends each update once, from the horse's own page. Owners get it by email, and can reply to it like any other email. Replies come back to the right horse, so nothing is lost in an inbox.</p>
+    </section>
+
+    <section class="grid gap-3">
+        <h2>If you own a horse</h2>
+        <p>Your horse's manager decides what's sent and who sees it. For anything about your horse, your share or your details, contact them: replying to any of their emails is the quickest way.</p>
+        <p>There's no password to remember. The button in each email opens the update, and other owners never see your replies.</p>
+    </section>
+
+    <section class="grid gap-3">
+        <h2>Your information</h2>
+        <p>Each business has its own horses, clients and messages, kept separate from every other business on Paddockside.</p>
+    </section>
+
+    <section class="grid gap-3">
+        <h2>This build</h2>
+        <dl class="grid max-w-sm grid-cols-[auto_minmax(0,1fr)] gap-x-6 gap-y-1">
+            <dt class="text-text-muted">Build</dt>
+            <dd>@BuildInfo.Number</dd>
+            @if (BuildInfo.Date is { } date)
+            {
+                <dt class="text-text-muted">Date</dt>
+                <dd>@date</dd>
+            }
+            <dt class="text-text-muted">Reference</dt>
+            <dd>@BuildInfo.Commit</dd>
+        </dl>
+        <p class="text-small text-text-muted">If something isn't working, this number helps find out why.</p>
+    </section>
+</div>
