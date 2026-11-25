@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
 using Paddockside.Api.Audit;
+using Paddockside.Api.Clients;
 using Paddockside.Api.Formatting;
 using Paddockside.Api.Security;
 using Paddockside.Domain;
@@ -15,12 +16,14 @@ namespace Paddockside.Api.Horses;
 /// management from a date (its management period), optionally with the house share; owners are added with their share
 /// as a percentage, stored as units (ownership-model.md: units survive splitting; one unit is a tenth of a percent, as
 /// the Ops tool has always stored them). An owner's first share sends their portal invitation, as it always has
-/// (OwnerInvitations). Someone already known by their email is the same person, not a duplicate.
+/// (OwnerInvitations). Owners are chosen from the business's clients, never typed in (David, 25 Nov 2026), so nobody is doubled.
 /// </summary>
 public static class HorseAdminEndpoints
 {
     /// <summary>Units per percent: 5% is 50 units, 2.5% is 25.</summary>
     public const int UnitsPerPercent = 10;
+
+    internal const string ChooseAClient = "Choose the owner from your clients. If they aren't there yet, add them in Clients first.";
 
     /// <param name="NameKind">"Registered" for a named horse, "SaleLot" for one known by its lot ("Lot 231").</param>
     /// <param name="ManagedFrom">yyyy-MM-dd: the day Laurel Oak took it on.</param>
@@ -49,8 +52,12 @@ public static class HorseAdminEndpoints
             ? ($"Over-allocated: the shares add up to {Percent(allocated)}. Correct it before owners are told their shares, for example by recording that someone added by mistake has left.", true)
             : ($"{Percent(Horse.WholeUnits - allocated)} has no owner yet.", false);
 
+    /// <param name="ClientId">One of the business's clients; a name alone is never enough.</param>
     /// <param name="Since">yyyy-MM-dd; today if empty.</param>
-    public sealed record NewOwnerRequest(string Name, string? Email, string? Mobile, decimal Percent, string? Since);
+    public sealed record NewOwnerRequest(Guid? ClientId, decimal Percent, string? Since);
+
+    /// <param name="Invited">This is their first share, so their portal invitation is on its way.</param>
+    public sealed record AddedOwner(Guid Id, string Name, bool Invited);
 
     private static readonly string[] CanManage = [nameof(MemberRole.Manager), nameof(MemberRole.TenantAdmin)];
 
@@ -141,8 +148,8 @@ public static class HorseAdminEndpoints
     }
 
     /// <summary>
-    /// A share for someone: an existing person if their email is already known here, otherwise a new one. The horse's
-    /// shares can't add up to more than 100%. Their portal invitation goes out with their first share.
+    /// A share for one of the business's clients. The horse's shares can't add up to more than 100%. Their portal
+    /// invitation goes out with their first share.
     /// </summary>
     private static async Task<IResult> AddOwner(Guid id, NewOwnerRequest request, ClaimsPrincipal user, PaddocksideDbContext db, AuditLog audit,
         TimeProvider clock, CancellationToken cancellationToken)
@@ -153,11 +160,9 @@ public static class HorseAdminEndpoints
         if (horse is null) return Results.NotFound();
         if (horse.CurrentManagementPeriod is not { } period) return Problem($"{horse.Name} isn't under management, so it can't take new owners.");
 
-        var name = request.Name?.Trim() ?? "";
-        if (name.Length == 0) return Problem("Give the owner's name.");
-        var email = Clean(request.Email)?.ToLowerInvariant();
-        var mobile = Clean(request.Mobile);
-        if (email is null && mobile is null) return Problem("Give an email address or a mobile number, so they can be reached.");
+        if (await ClientEndpoints.ClientAsync(db, request.ClientId, cancellationToken) is not { } party) return Problem(ChooseAClient);
+        if (party.PrimaryEmail is null && party.PrimaryMobile is null)
+            return Problem($"{party.DisplayName} has no email address or mobile. Add one on their client page first, so they can be reached.");
         if (!ValidPercent(request.Percent) || request.Percent <= 0) return Problem("The share is a percentage up to 100, to one decimal place, e.g. 2.5.");
         var now = clock.GetUtcNow();
         var since = string.IsNullOrWhiteSpace(request.Since) ? now : Day(request.Since);
@@ -169,13 +174,12 @@ public static class HorseAdminEndpoints
         if (current.Sum(i => i.Units) + units > 100 * UnitsPerPercent)
             return Problem($"That would take {horse.Name} past 100%: {Percent(100 * UnitsPerPercent - current.Sum(i => i.Units))} is left.");
 
-        Party party;
-        bool isNew;
+        if (current.Any(i => i.PartyId == party.Id))
+            return Results.Problem(statusCode: StatusCodes.Status409Conflict, title: $"{party.DisplayName} already owns part of {horse.Name}. To change their share, use Change beside their name.");
+        if (horse.Interests.Any(i => i.PartyId == party.Id && i.ManagementPeriodId == period.Id && i.State == InterestState.Pending))
+            return Results.Problem(statusCode: StatusCodes.Status409Conflict, title: $"{party.DisplayName} is already listed with a share to confirm. Set it beside their name.");
         try
         {
-            (party, isNew) = await FindOrAddPartyAsync(db, horse.TenantId, name, email, mobile, cancellationToken);
-            if (current.Any(i => i.PartyId == party.Id))
-                return Results.Problem(statusCode: StatusCodes.Status409Conflict, title: $"{party.DisplayName} already owns part of {horse.Name}. To change their share, transfer it.");
             horse.AddInterest(party, await HoldingAsync(db, horse, HoldingEntityType.ManagedSyndicate, $"{horse.Name} Syndicate", cancellationToken), units, from);
         }
         catch (DomainException ex)
@@ -184,32 +188,10 @@ public static class HorseAdminEndpoints
         }
 
         await db.SaveChangesAsync(cancellationToken);
-        await audit.RecordAsync(horse.TenantId, "interest.added", $"{party.DisplayName} owns {Percent(units)} of {horse.Name} from {Words.Day(from, now)}{(isNew ? " (new owner)" : "")}",
+        var invited = party.PrimaryEmail is not null && db.ChangeTracker.Entries<OwnerInvitation>().Any(e => e.Entity.PartyId == party.Id); // queued with the save
+        await audit.RecordAsync(horse.TenantId, "interest.added", $"{party.DisplayName} owns {Percent(units)} of {horse.Name} from {Words.Day(from, now)}",
             "Horse", horse.Id, cancellationToken: cancellationToken);
-        return Results.Created($"/api/horses/{id}/owners", new { party.Id, isNew });
-    }
-
-    /// <summary>
-    /// The person with this email if they're already known here, otherwise someone new (with this email or mobile).
-    /// A new mobile is added to someone known. Throws DomainException for an address or number that isn't one.
-    /// </summary>
-    internal static async Task<(Party Party, bool IsNew)> FindOrAddPartyAsync(PaddocksideDbContext db, Guid tenantId, string name, string? email, string? mobile,
-        CancellationToken cancellationToken)
-    {
-        var party = email is null ? null
-            : (await db.Parties.Where(p => p.Contacts.Any(c => c.Kind == ContactKind.Email && c.Value == email)).Take(2).ToListAsync(cancellationToken)) is [var one] ? one : null;
-        if (party is null)
-        {
-            party = new Party(tenantId, name);
-            if (email is not null) party.AddEmail(email);
-            if (mobile is not null) party.AddMobile(mobile);
-            db.Parties.Add(party);
-            return (party, true);
-        }
-
-        if (mobile is not null && !party.Contacts.Any(c => c.Kind == ContactKind.Mobile && c.Value == PhoneNumbers.Normalise(mobile)))
-            party.AddMobile(mobile, primary: party.PrimaryMobile is null);
-        return (party, false);
+        return Results.Created($"/api/horses/{id}/owners", new AddedOwner(party.Id, party.DisplayName, invited));
     }
 
     /// <summary>The horse's holding entity of this type, reused: its syndicate, or the house share.</summary>

@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
 using Paddockside.Api.Audit;
+using Paddockside.Api.Clients;
 using Paddockside.Api.Formatting;
 using Paddockside.Api.Security;
 using Paddockside.Domain;
@@ -12,7 +13,7 @@ namespace Paddockside.Api.Horses;
 
 /// <summary>
 /// Ownership changes (build plan, sprint 4; ownership-model.md scenarios 1–3): an owner passes all or part of their
-/// share on, to anyone (an existing client, someone new, or themselves keeping part); an owner leaves, their share
+/// share on, to other clients (or themselves, keeping part); an owner leaves, their share
 /// going to the house or left unallocated; or the horse leaves management altogether. Whoever stops owning is shut
 /// out of the portal for that horse, or keeps read-only sight of their own time if staff choose (tenant-model.md §3,
 /// "Ownership: lockout"; the default is locked out, D8). Someone new sees the horse's history as owners do, except
@@ -20,8 +21,8 @@ namespace Paddockside.Api.Horses;
 /// </summary>
 public static class OwnershipEndpoints
 {
-    /// <param name="ClientId">An existing client; otherwise Name with Email or Mobile for someone new (or found by email).</param>
-    public sealed record Recipient(Guid? ClientId, string? Name, string? Email, string? Mobile, decimal Percent);
+    /// <param name="ClientId">One of the business's clients, the owner themselves (keeping part), or the house share.</param>
+    public sealed record Recipient(Guid? ClientId, decimal Percent);
 
     /// <param name="On">yyyy-MM-dd; today if empty.</param>
     /// <param name="Access">What someone who stops owning still sees: "LockedOut" (nothing) or "ReadOnly" (their own time).</param>
@@ -64,24 +65,17 @@ public static class OwnershipEndpoints
         if (recipients.Sum(r => Units(r.Percent)) != total)
             return Problem($"The shares must add up to {owner.DisplayName}'s {Percent(total)}: these come to {Percent(recipients.Sum(r => Units(r.Percent)))}.");
 
+        var houseId = (await db.Tenants.SingleAsync(cancellationToken)).HousePartyId;
         var parties = new List<(Party Party, long Units)>();
         try
         {
             foreach (var r in recipients)
             {
-                Party party;
-                if (r.ClientId is { } clientId)
-                {
-                    party = await db.Parties.SingleOrDefaultAsync(p => p.Id == clientId, cancellationToken) ?? throw new DomainException("Choose one of your clients.");
-                }
-                else
-                {
-                    var email = Clean(r.Email)?.ToLowerInvariant();
-                    if (string.IsNullOrWhiteSpace(r.Name)) throw new DomainException("Give the new owner's name.");
-                    if (email is null && Clean(r.Mobile) is null) throw new DomainException($"Give {r.Name}'s email address or mobile, so they can be reached.");
-                    (party, _) = await FindOrAddPartyAsync(db, horse.TenantId, r.Name.Trim(), email, Clean(r.Mobile), cancellationToken);
-                }
-
+                var party = r.ClientId == owner.Id ? owner
+                    : houseId is { } house && r.ClientId == house ? await db.Parties.SingleAsync(p => p.Id == house, cancellationToken)
+                    : await ClientEndpoints.ClientAsync(db, r.ClientId, cancellationToken) ?? throw new DomainException(ChooseAClient);
+                if (party.Id != owner.Id && party.Id != houseId && party.PrimaryEmail is null && party.PrimaryMobile is null)
+                    throw new DomainException($"{party.DisplayName} has no email address or mobile. Add one on their client page first, so they can be reached.");
                 parties.Add((party, Units(r.Percent)));
             }
 

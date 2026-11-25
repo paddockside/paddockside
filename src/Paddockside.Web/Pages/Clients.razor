@@ -245,6 +245,8 @@
 
     /// <summary>Opened from a client's list ("clients?list=…"): that list, filtered.</summary>
     [SupplyParameterFromQuery(Name = "list")] public Guid? ListFromQuery { get; set; }
+    /// <summary>Opened from a horse's owners ("clients?add=true") to add someone who isn't a client yet.</summary>
+    [SupplyParameterFromQuery(Name = "add")] public bool? AddFromQuery { get; set; }
     private string? _rename;
     private bool _adding;
     private string? _name, _email, _mobile, _how, _addError;
@@ -267,6 +269,7 @@
         }
 
         _list = ListFromQuery;
+        _adding = CanEdit && AddFromQuery == true;
         await LoadAsync();
     }
 

@@ -366,6 +366,20 @@ public static class ClientEndpoints
     }
 
     /// <summary>
+    /// The client with this id, to give a share to: the same people the Clients page lists. Null for anyone else: the house
+    /// share, another business's client, or a horse's trainer, vet or club who has never owned a share and isn't on a list.
+    /// </summary>
+    internal static async Task<Party?> ClientAsync(PaddocksideDbContext db, Guid? id, CancellationToken cancellationToken)
+    {
+        if (id is not { } partyId) return null;
+        var houseId = (await db.Tenants.SingleAsync(cancellationToken)).HousePartyId;
+        if (partyId == houseId || await db.Parties.SingleOrDefaultAsync(p => p.Id == partyId, cancellationToken) is not { } party) return null;
+        if (!await db.HorseContacts.AnyAsync(c => c.PartyId == partyId, cancellationToken)) return party;
+        return await db.Horses.AnyAsync(h => h.Interests.Any(i => i.PartyId == partyId), cancellationToken)
+            || await db.ClientLists.AnyAsync(l => l.Members.Any(m => m.PartyId == partyId), cancellationToken) ? party : null;
+    }
+
+    /// <summary>
     /// Who a set of lists, kinds of client and people picked by hand comes to, once each: the people for a mailout.
     /// The house share is never one of them.
     /// </summary>

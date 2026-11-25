@@ -168,10 +168,10 @@ public sealed record OwnersView(List<OwnerLine> Owners, string Allocated, decima
 
 public sealed record CreatedHorse(Guid Id);
 
-public sealed record AddedOwner(Guid Id, bool IsNew);
+/// <param name="Invited">This is their first share, so their portal invitation is on its way.</param>
+public sealed record AddedOwner(Guid Id, string Name, bool Invited);
 
-/// <param name="ClientId">An existing client; otherwise Name with Email or Mobile.</param>
-public sealed record ShareRecipient(Guid? ClientId, string? Name, string? Email, string? Mobile, decimal Percent);
+public sealed record ShareRecipient(Guid ClientId, decimal Percent);
 
 public sealed record ClientRow(Guid Id, string Name, string? Email, string? Mobile, string Status, string? Horses, bool SignedIn, bool EmailBounced, List<string> Lists);
 
@@ -462,8 +462,8 @@ public sealed class PaddocksideApi(HttpClient http)
 
     public Task<ApiResult<OwnersView>> HorseOwnersAsync(Guid horseId) => GetAsync<OwnersView>($"api/horses/{horseId}/owners");
 
-    public Task<ApiResult<AddedOwner>> AddOwnerAsync(Guid horseId, string name, string? email, string? mobile, decimal percent, string? since) =>
-        PostAsync<AddedOwner>($"api/horses/{horseId}/owners", new { name, email, mobile, percent, since });
+    public Task<ApiResult<AddedOwner>> AddOwnerAsync(Guid horseId, Guid clientId, decimal percent, string? since) =>
+        PostAsync<AddedOwner>($"api/horses/{horseId}/owners", new { clientId, percent, since });
 
     public Task<ApiResult<List<ClientRow>>> ClientsAsync(string? status, Guid? list, string? q)
     {

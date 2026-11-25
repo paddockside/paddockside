@@ -18,11 +18,12 @@ public sealed partial class OwnerSignInTests
         using var manager = await Api.SignedInAsync(seed.TenantId, MemberRole.Manager);
         var transfer = $"/api/horses/{seed.HorseId}/owners";
 
-        // Bob keeps half of his share and passes the other half to someone new, who is invited.
+        // Bob keeps half of his share and passes the other half to a client who owns nothing yet, who is invited.
         var cara = $"cara-{Guid.NewGuid():N}@owners.test";
+        var caraId = await ClientAsync(manager, "Cara New", cara);
         Assert.Equal(HttpStatusCode.NoContent, (await manager.PostApiAsync($"{transfer}/{seed.BobId}/transfer", new
         {
-            recipients = new object[] { new { clientId = seed.BobId, percent = 25m }, new { name = "Cara New", email = cara, percent = 25m } },
+            recipients = new object[] { new { clientId = seed.BobId, percent = 25m }, new { clientId = caraId, percent = 25m } },
             on = (string?)null, access = "LockedOut",
         })).StatusCode);
         await DispatchAsync();

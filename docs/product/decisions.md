@@ -152,6 +152,10 @@ Also decided:
 **P60. Owners answer a question from the email's buttons without signing in.** Each owner's own link, for that question only, with a page that asks them to confirm. Whoever holds the email can answer for them.
 **P61. Operators can send themselves every kind of email, with made-up content, in any tenant's look.** Nothing of the tenant's is read or saved; it is in their audit log.
 
+## 25 Nov 2026 — Owners are clients
+
+**P62. An owner is chosen from the tenant's clients, never typed in.** Adding an owner, and passing a share on, look up clients only; someone new is added in Clients first. Stops one person becoming two.
+
 ---
 
 ## Inherited from Laurel Oak unchanged

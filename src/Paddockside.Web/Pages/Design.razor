@@ -113,6 +113,13 @@
         </div>
     </Section>
 
+    <Section Title="ClientPicker" Doc="tenant-model.md">
+        <div class="grid gap-4 lg:grid-cols-2">
+            <Variant Label="Staff: a client chosen"><ClientPicker Label="Client" Chosen="SampleClient" /></Variant>
+            <Variant Label="Staff: type to find one"><ClientPicker Label="Client" /></Variant>
+        </div>
+    </Section>
+
     <Section Title="OwnershipChange" Doc="ownership-model.md">
         <Variant Label="Manager: changing the house share (pass on, or correct a mistake)">
             <OwnershipChange HorseId="Guid.Empty" Owner="SampleOwners[0]" HasHouse />
@@ -192,6 +199,8 @@
     ];
 
     private static readonly List<string> SampleSources = ["Racing NSW", "Racing Victoria"];
+
+    private static readonly ClientRow SampleClient = new(Guid.NewGuid(), "Jordan Example", "jordan@example.test", null, "Prospect", null, false, false, []);
 
     private static readonly List<OwnerLine> SampleOwners =
     [
